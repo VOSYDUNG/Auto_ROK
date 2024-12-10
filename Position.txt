@@ -1,0 +1,33 @@
+màn hình thật 1920x1080
+màn hình game 1280x720
+
+Get_rss_clan(){
+phím 'O'
+tọa độ territory X:1090 Y:590
+tọa độ claim_rss X:1220 Y:400
+phím "ESC" x2
+}
+Position_Which_rss(){
+gold_pit = 1230,860  | Search_click = 1230,760
+stone_pit = 1090,850 | Search_click = 1090,760
+wood_pit = 960,850   | Search_click = 960,760
+corn_pit = 830,860   | Search_click = 830,760
+Gather_click = 1180,640
+new_troop = 1400,400
+march = 1160,750
+}
+pit_click = 960,560
+new_troop = 1400,400
+
+change_character(){
+phím esc
+setting_click = 642,817
+character_click = 515,630
+=> xử lý ảnh lấy tọa độ nhân vật {
+		Vùng chứa nhân vật = 650,330 -> 1400,810
+		XỬ LÝ ĐỌC CHỮ = EASYORC => DETEC CHỮ THÀNH CÔNG VÀ CÓ ĐỘ CHÍNH XÁC CAO
+		
+		
+yes_click = 1080,660
+=> xử lý chờ load game
+}

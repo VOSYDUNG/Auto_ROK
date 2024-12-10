@@ -1,0 +1,30 @@
+                        AUTO FARM RSS FOR ROK
+
+Day 1:
+    Design system
+    draw flowchart
+    function decription
+    handle mouse,keyboard
+    handle text,computer vision
+
+Day 2:
+    Code for some functions:
+        -   Get rss clan
+        -   Do action Farm pit
+        -   Change character using easyORC, counter Characters by computer vision(work progress: 30%)
+
+Day 3:
+    Handle numbering character
+    check markgreen successful
+    check position all star character and numbering
+Day 4:
+    Fix Get rss clan with detect "territory"
+    using OOP with Polymorphism and Inheritance for Find rss and Get rss clan
+Day 5:
+    Get list characters and get position who is nearest check markgreen
+    change location of markgreen and list characters to Real resolution
+Day 6:
+    Done Get list characters and change account
+    Check successful line green for on pit
+    
+
