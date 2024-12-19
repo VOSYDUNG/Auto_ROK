@@ -30,6 +30,8 @@ def Get_near_mark(list,Position_mark):
     done_characters.append(nearest_point)
 
 
+pyautogui.leftClick(1000+ Mouse_key.RandomValue(),550+ Mouse_key.RandomValue(),duration=1)
+
 
 Daily= Mouse_key.Daily_farm()
 
@@ -42,9 +44,10 @@ Position_mark = Avatar.detect_green_checkmark()
 Get_near_mark(list_character,Position_mark)
 print("Done characters",done_characters)
 pyautogui.hotkey('ESC')
-pyautogui.hotkey('ESC')
-pyautogui.hotkey('o')
 time.sleep(1)
+pyautogui.hotkey('ESC')
+time.sleep(1.5)
+
 x,y=Avatar.Territory_position(Territory)
 
 Daily.Get_rss_clan(x,y)

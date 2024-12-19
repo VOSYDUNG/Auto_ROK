@@ -75,7 +75,7 @@ def detect_green_checkmark():
 
 def Territory_position(Possition):
     time.sleep(1)
-    pyautogui.leftClick(960,560,duration=1)
+    #pyautogui.leftClick(960,560,duration=1)
     pyautogui.hotkey('o')
     time.sleep(1)
     screenshot = pyautogui.screenshot(region=(Possition[0], Possition[1], Possition[2] - Possition[0], Possition[3]-Possition[1]))

@@ -46,6 +46,7 @@ class Daily_farm:
         pyautogui.scroll(-110)
         time.sleep(0.1)
         pyautogui.scroll(-110)
+        pyautogui.moveTo(450,600,duration=0.7)
     def Get_vip(self):
         pyautogui.hotkey('v')
 
