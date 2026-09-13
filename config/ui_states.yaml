@@ -1,0 +1,135 @@
+schema_version: 1
+source:
+  type: operator_screenshots
+  observed_at: "2026-09-13"
+
+states:
+  - id: CITY_VIEW
+    status: trained
+    description: "Normal city view with buildings, resource bar and primary HUD visible."
+    positive_evidence:
+      - kind: layout
+        value: "city buildings occupy central world canvas"
+      - kind: hud
+        value: "resource counters across top"
+      - kind: hud
+        value: "primary circular navigation/actions at bottom-right"
+      - kind: hud
+        value: "quest/task list at left"
+    available_semantic_actions:
+      - OPEN_MAIL
+      - OPEN_EVENTS
+      - OPEN_ALLIANCE
+      - OPEN_SEARCH
+      - OPEN_VIP
+      - TOGGLE_CITY_MAP
+
+  - id: SETTINGS_CONTROLS_MOUSE
+    status: trained
+    description: "Settings > Controls > Mouse tab."
+    positive_evidence:
+      - kind: text
+        value: "Settings"
+      - kind: text
+        value: "Controls"
+      - kind: tab
+        value: "Mouse"
+      - kind: text
+        value: "Cursor Size"
+    useful_facts:
+      - "DRAG moves camera"
+      - "SCROLL zooms camera"
+      - "CLICK can issue command"
+      - "CLICK can select target"
+      - "ALT+DRAG multi-select troops is enabled in supplied screenshot"
+
+  - id: SETTINGS_CONTROLS_SHORTCUTS
+    status: trained
+    description: "Settings > Controls > Shortcuts tab."
+    positive_evidence:
+      - kind: text
+        value: "Settings"
+      - kind: text
+        value: "Controls"
+      - kind: tab
+        value: "Shortcuts"
+    outputs:
+      - native_shortcut_table
+
+  - id: GOVERNOR_PROFILE
+    status: trained
+    description: "Governor profile drawer opened on left over city view."
+    positive_evidence:
+      - kind: text
+        value: "Governor"
+      - kind: text
+        value: "Civilization"
+      - kind: text
+        value: "Alliance"
+      - kind: text
+        value: "Power"
+      - kind: text
+        value: "Kill Points"
+    notes:
+      - "This state can provide current-character/account identity facts without navigating to character selection."
+
+  - id: ACCOUNT_CHARACTER_LIST
+    status: trained
+    description: "Settings > Account/Characters list with Star Characters and Normal Characters."
+    positive_evidence:
+      - kind: text
+        value: "Account/Characters"
+      - kind: text
+        value: "STAR CHARACTERS"
+      - kind: text
+        value: "NORMAL CHARACTERS"
+    entities:
+      - CHARACTER_CARD
+      - CURRENT_CHARACTER_CHECKMARK
+      - STAR_MARKER
+    notes:
+      - "Current character is visually indicated by a green checkmark."
+      - "Character card exposes name, kingdom and power text suitable for OCR."
+
+  - id: EVENTS_WINDOW
+    status: trained
+    description: "Events modal with event navigation list on the left and selected event content on the right."
+    positive_evidence:
+      - kind: text
+        value: "Event Calendar"
+      - kind: layout
+        value: "event list on left, event detail on right"
+    outputs:
+      - selected_event_name
+      - event_date_range
+      - available_time_windows
+      - countdowns
+      - notification_badges
+
+  - id: EVENT_CHAMPIONS_OF_OLYMPIA
+    status: trained
+    parent: EVENTS_WINDOW
+    description: "Champions of Olympia event detail."
+    positive_evidence:
+      - kind: text
+        value: "CHAMPIONS OF OLYMPIA"
+      - kind: text
+        value: "UNRANKED"
+      - kind: text
+        value: "RANKED"
+    observed_example:
+      event_date_range_utc: "2026-09-12..2026-09-13"
+      today_windows_utc:
+        - "05:00-08:00"
+        - "12:00-15:00"
+        - "20:30-23:30"
+      event_load: "VACANT"
+    notes:
+      - "Observed values are an example from one frame and must not be promoted to permanent game rules."
+      - "Time-window OCR should produce ephemeral facts with frame/time provenance."
+
+scene_classifier_rules:
+  - "Prefer stable text/layout anchors over absolute coordinates."
+  - "Coordinates/bboxes are evidence-local and expire after UI transitions or scrolling."
+  - "If two states share the Settings shell, classify using selected tab and distinctive text."
+  - "Do not infer hidden labels from visible shortcut keys alone."
