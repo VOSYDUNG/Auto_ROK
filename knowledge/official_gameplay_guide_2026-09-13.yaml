@@ -1,0 +1,148 @@
+schema_version: 1
+source:
+  type: official_in_game_guide
+  title: "Gameplay Guide"
+  observed_at: "2026-09-13"
+  authority: "official game UI"
+  extraction: "operator screenshots interpreted into structured facts"
+
+facts:
+  - id: MAP_HOLD_DRAG_DISPATCHES_TROOP
+    type: capability
+    status: validated_from_guide
+    description: "In map view, pressing and holding the city and dragging to a destination opens the New Troop page, where commanders and units can be selected for dispatch."
+    domain: march
+    preconditions:
+      - "current view is map view"
+      - "city is selectable"
+    outcome:
+      - "NEW_TROOP_SETUP becomes available"
+    notes:
+      - "This is an alternate interaction path; it is not automatically preferred over the trained resource-gather flow."
+
+  - id: TELEPORT_USES_TELEPORT_ITEM
+    type: capability
+    status: validated_from_guide
+    description: "Teleporting a city requires a teleport item; the destination constraints depend on the teleport item type."
+    domain: map
+
+  - id: TELEPORT_BLOCKED_DURING_RALLY_FIGHT
+    type: rule
+    status: validated_from_guide
+    description: "The city cannot teleport while fighting against a rallied army."
+    domain: map
+    precondition_gate:
+      forbidden_when:
+        - "city is fighting against a rallied army"
+
+  - id: TELEPORT_METHOD_OPEN_SPACE
+    type: capability
+    status: validated_from_guide
+    description: "One teleport method is to select an open space on the map, open its interaction bubble, then use Teleport."
+    domain: map
+
+  - id: TELEPORT_METHOD_CITY_MANAGEMENT
+    type: capability
+    status: validated_from_guide
+    description: "A second teleport method is available through the City Management page."
+    domain: city
+
+  - id: ALLIANCE_CONSTRUCTION_ROLE_GATED
+    type: role
+    status: validated_from_guide
+    description: "Alliance construction through the Alliance Territory interface is available to alliance leaders/officers."
+    domain: alliance
+    required_role:
+      any_of:
+        - alliance_leader
+        - alliance_officer
+
+  - id: ALLIANCE_CONSTRUCTION_VIA_TERRITORY
+    type: capability
+    status: validated_from_guide
+    description: "Alliance leaders/officers can open the Territory page through the Alliance interface to manage and construct alliance buildings."
+    domain: alliance
+
+  - id: CONSTRUCTION_ASSISTANCE_USES_TROOPS
+    type: capability
+    status: validated_from_guide
+    description: "Troops can be dispatched to help build unfinished allied strongholds; more troops in the stronghold build it faster."
+    domain: alliance
+    method:
+      - "select an allied stronghold currently under construction"
+      - "use BUILD"
+      - "dispatch a troop"
+
+  - id: BUILDING_COMMANDS_ROLE_GATED
+    type: role
+    status: validated_from_guide
+    description: "Alliance building commands such as demolition/extinguishing are limited to alliance leaders/officers as stated in the guide."
+    domain: alliance
+    required_role:
+      any_of:
+        - alliance_leader
+        - alliance_officer
+
+  - id: BURNING_ALLIANCE_BUILDING_CAN_BE_EXTINGUISHED_AFTER_WAIT
+    type: rule
+    status: validated_from_guide
+    description: "If an alliance building begins burning after a failed defense, alliance leaders/officers can extinguish it after the required waiting period."
+    domain: alliance
+
+  - id: ALLIANCE_BUILDING_CAN_BE_DISMANTLED_BY_LEADER
+    type: capability
+    status: validated_from_guide
+    description: "An alliance leader can dismantle an alliance building through its details page after selecting the building and opening View."
+    domain: alliance
+
+  - id: RESOURCE_ASSISTANCE_REQUIRES_TRADING_POST
+    type: rule
+    status: validated_from_guide
+    description: "Sending resources to allies requires a Trading Post in the city."
+    domain: alliance
+
+  - id: RESOURCE_ASSISTANCE_SELECT_ALLIED_CITY
+    type: capability
+    status: validated_from_guide
+    description: "To send resources to an allied governor, select their city and use Assist."
+    domain: alliance
+
+capability_safety_classification:
+  notes:
+    - "These classifications are harness policy, not claims from the gameplay guide."
+    - "Knowledge can be stored without making an action autonomously available."
+  capabilities:
+    HOLD_DRAG_DISPATCH:
+      default_exposure: disabled_until_mission_requires
+      reason: "Alternate dispatch path; current gathering path is already trained and more directly verifiable."
+    TELEPORT:
+      default_exposure: human_approval_required
+      reputation_risk: medium
+      account_state_impact: high
+      reason: "Relocates the city and may consume an item; not a routine support action."
+    ALLIANCE_CONSTRUCTION:
+      default_exposure: disabled_until_role_verified_and_mission_trained
+      reputation_risk: high
+      reason: "Changes alliance territory/buildings and is role-gated."
+    CONSTRUCTION_ASSISTANCE:
+      default_exposure: disabled_until_mission_trained
+      reputation_risk: medium
+      reason: "Consumes troop/march capacity and affects alliance activity."
+    DEMOLISH_ALLIANCE_BUILDING:
+      default_exposure: never_autonomous_by_default
+      reputation_risk: critical
+      reason: "Destructive alliance action."
+    EXTINGUISH_ALLIANCE_BUILDING:
+      default_exposure: human_approval_required
+      reputation_risk: high
+      reason: "Alliance-level intervention with role and timing constraints."
+    RESOURCE_ASSISTANCE:
+      default_exposure: disabled_until_recipient_amount_policy_trained
+      reputation_risk: high
+      reason: "Transfers player resources to another governor."
+
+agentic_os_implications:
+  - "Official guide knowledge expands the world model without automatically expanding autonomous action scope."
+  - "Role-gated capabilities must require an observed/remembered role fact before they can be exposed as allowed actions."
+  - "Irreversible, destructive, consumptive, or social-resource-transfer actions should remain outside the default daily autonomous surface."
+  - "When multiple game-supported methods exist, mission policy chooses the preferred path; GPT-OSS does not invent the preference at runtime."
