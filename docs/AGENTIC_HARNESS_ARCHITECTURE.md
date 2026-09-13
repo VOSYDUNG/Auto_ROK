@@ -2,55 +2,66 @@
 
 ## Purpose
 
-Auto_ROK is a support-oriented Agentic OS that operates a visually presented game through ordinary computer-use interaction.
+Auto_ROK is an Agentic OS that operates Rise of Kingdoms only through the same visible/input surface available to a human player.
 
-The game is an **external UI environment**. The harness does not read or mutate hidden game state. It only:
+The game is an external visual UI environment. The harness:
 
 - sees visible screen pixels;
-- interprets those pixels with OCR/CV/visual grounding;
+- interprets them with OCR/CV/visual grounding;
 - acts through ordinary mouse and keyboard input;
-- observes the visible result;
-- stores its own memory derived from those observations and actions.
+- learns procedures, layouts and transitions from operator training;
+- verifies outcomes from visible feedback.
 
-The local GPT-OSS model is not asked to invent gameplay logic, reason spatially about raw pixels, or construct long action chains. Its role is a bounded semantic decision service when the harness exposes more than one valid next action.
+It does not read game process memory, call private game APIs, inspect engine objects or manipulate network traffic.
+
+The local GPT-OSS model is a bounded semantic decision service. It is not the visual detector, coordinate finder or long-horizon gameplay planner.
 
 ## Human-interface boundary
 
 Authoritative boundary: `config/human_io_boundary.yaml`.
 
-### Allowed sensing
+### Sensory surface
 
-- visible screen pixels only.
+Only visible screen pixels are game sensing.
 
-### Allowed actuation
+### Motor surface
 
-- mouse;
-- keyboard.
+Only ordinary OS mouse and keyboard input are game actuation.
 
-### Internal support that is not game sensing
+### Compiled knowledge is allowed
 
-- wall/monotonic clock for scheduling;
-- harness-owned memory and task ledger;
-- operator-trained knowledge;
-- facts derived from prior visible observations.
+Once the operator has taught a stable behavior, the harness should not rediscover it from scratch every run.
 
-### Outside the architecture
+Compiled knowledge may include:
 
-- process/game memory reads;
-- process or DLL injection;
-- private/internal game APIs;
-- engine object access;
-- packet sniffing/forging;
-- hidden telemetry channels;
-- anti-cheat interfaces/evasion.
+- game rules and procedures;
+- native shortcuts;
+- known UI transitions;
+- canonical screen layouts;
+- expected target regions;
+- learned cursor destinations;
+- expected transition timing;
+- task graphs and completion signatures.
 
-The harness therefore behaves at the same interaction boundary as a human seated at the computer.
+This is procedural knowledge in the harness, not hidden access to current game state.
 
-## Belief State, not World State
+### Old observations are not current truth
 
-The harness never possesses authoritative internal game state.
+A previous screen or previous counter value must not be reused as proof of the current screen state.
 
-It maintains a **Belief State**:
+The distinction is:
+
+```text
+TRAINED PROCEDURE / PRIOR       allowed
+"after A, button B normally appears here"
+
+STALE EPISODIC OBSERVATION      not current truth
+"button B was here yesterday, therefore it exists now"
+```
+
+## Belief State
+
+The harness does not possess authoritative internal game state. It maintains a current **Belief State** inferred from visible evidence plus compiled rules.
 
 ```text
 BELIEF_STATE
@@ -59,242 +70,296 @@ BELIEF_STATE
 ├── march.*
 ├── alliance.*
 ├── event.*
-├── task.*
-└── system.*
+└── task.*
 ```
 
-Every field must have provenance such as:
-
-- visible OCR/CV evidence;
-- a previously observed visible fact;
-- operator-trained rule;
-- official in-game guide knowledge;
-- a deterministic derivation from those sources.
-
-A belief may be stale, uncertain, or wrong. Confidence and provenance are therefore first-class data.
+Each current-game claim carries confidence/provenance.
 
 ## Architecture is not a sequential pipeline
 
-The runtime is event-driven/reactive. Multiple loops operate around a shared Belief State and task/memory stores.
+The system is reactive and concurrent. Perception, mission control, action eligibility and motor preparation can run in parallel around the current Belief State and compiled procedural knowledge.
 
 ```text
-                              ┌─────────────────────┐
-                              │      GPT-OSS        │
-                              │ semantic selector   │
-                              └─────────▲───────────┘
-                                        │ only when
-                                        │ selection is needed
-                                        │
-                    ┌───────────────────┴───────────────────┐
-                    │                                       │
-          ┌─────────▼─────────┐                   ┌─────────▼─────────┐
-          │  MISSION CONTROL  │                   │ CAPABILITY/POLICY │
-          │ due/priority/task │◄─────────────────►│ action eligibility │
-          └─────────▲─────────┘                   └─────────▲─────────┘
-                    │                                       │
-                    └────────────────┬──────────────────────┘
-                                     │ reads/writes
-                                     ▼
-                         ┌─────────────────────────┐
-                         │      BELIEF STATE       │
-                         │ + memory + task ledger  │
-                         └──────▲─────────▲────────┘
-                                │         │
-                    observations│         │visible feedback
-                                │         │
-                      ┌─────────┘         └─────────┐
-                      │                             │
-             ┌────────▼─────────┐          ┌────────▼─────────┐
-             │ VISUAL PERCEPTION│          │ HUMAN INPUT      │
-             │ OCR/CV/grounding │          │ ACTUATION        │
-             └────────▲─────────┘          │ mouse/keyboard   │
-                      │                    └────────▲─────────┘
-                      │ visible pixels              │ OS input
-                      │                             │
-                      └──────────────┬──────────────┘
-                                     ▼
-                           ┌──────────────────┐
-                           │ GAME UI ENVIRONMENT│
-                           └──────────────────┘
+                         ┌────────────────────┐
+                         │      GPT-OSS       │
+                         │ bounded selector   │
+                         └─────────▲──────────┘
+                                   │ only when a real
+                                   │ choice is required
+                                   │
+             ┌─────────────────────┴──────────────────────┐
+             │                                            │
+     ┌───────▼────────┐                          ┌────────▼────────┐
+     │ MISSION/TASK   │                          │ POLICY /       │
+     │ CONTROL        │                          │ CAPABILITIES   │
+     └───────┬────────┘                          └────────┬────────┘
+             │                                            │
+             └──────────────┬─────────────────────────────┘
+                            │
+                            ▼
+                   ┌───────────────────┐
+                   │   BELIEF STATE    │
+                   └──────▲─────┬──────┘
+                          │     │
+          visible updates │     │ semantic intent
+                          │     │
+                ┌─────────┘     └────────────┐
+                │                            │
+       ┌────────▼────────┐          ┌────────▼──────────┐
+       │ VISUAL          │          │ ANTICIPATORY      │
+       │ PERCEPTION      │          │ MOTOR CONTROL     │
+       │ OCR/CV/ground   │          │ stage/click/drag  │
+       └────────▲────────┘          └────────▲──────────┘
+                │                            │
+                │ pixels                     │ mouse/keyboard
+                │                            │
+                └─────────────┬──────────────┘
+                              ▼
+                    ┌──────────────────┐
+                    │ GAME UI         │
+                    │ ENVIRONMENT     │
+                    └──────────────────┘
+
+            ┌──────────────────────────────────┐
+            │ COMPILED PROCEDURAL KNOWLEDGE    │
+            │ rules / transitions / shortcuts  │
+            │ motor priors / task graphs       │
+            └──────────────┬───────────────────┘
+                           │ feeds every loop
+                           └─────────────────────►
 ```
 
-There is no privileged connection from Belief State to the game internals.
+No subsystem has a privileged path into hidden game internals.
 
 ## Concurrent loops
 
-### 1. Visual perception loop
+### Visual perception loop
+
+Continuously samples the visible screen and publishes current evidence:
 
 ```text
-capture visible frame
-→ detect/OCR/ground
-→ update belief candidates
-→ attach confidence/provenance
-→ publish visible changes
+screen pixels
+→ OCR/CV/templates/grounding
+→ current visual facts
+→ belief update
 ```
 
-This loop does not need to know which mission is active.
+### Mission/task loop
 
-### 2. Mission/task loop
+Determines which responsibilities are active and what they need. It does not need to wait for GPT when the next semantic action is deterministic.
+
+### Capability/policy loop
+
+Filters actions from trained procedures according to the current belief, mission and operator policy.
+
+### Decision loop
+
+- zero eligible actions: wait/recover/reobserve;
+- one eligible action: execute deterministically;
+- multiple meaningful actions: GPT-OSS may select among them.
+
+### Anticipatory motor loop
+
+This loop is deliberately predictive.
+
+A trained human does not wait for every target to finish rendering before moving the mouse. The harness should behave similarly.
+
+Example:
 
 ```text
-read clock + memory + belief
-→ determine READY/BLOCKED/WAITING/COMPLETE tasks
-→ compute current task priorities
-→ request eligible semantic actions
+known transition starts
+      │
+      ├── visual perception keeps watching
+      │
+      └── motor prior predicts next target region
+                 │
+                 ▼
+          move pointer there early
+                 │
+        target/transition becomes ready
+                 │
+                 ▼
+        click immediately or confirm first
+                 │
+                 ▼
+           verify visible result
 ```
 
-A mission may contain independent tasks rather than one fixed sequence.
+The pointer can therefore move before the next target is visually complete.
 
-### 3. Capability/policy loop
+## Motor priors
+
+A `MotorPrior` is learned procedural knowledge tied to a known screen profile/transition.
+
+Typical fields:
 
 ```text
-trained task graph
-+ current belief
-+ role facts
-+ operator policy
-+ guide constraints
-→ eligible actions
+from_state
+expected_next_state
+action_id
+screen_profile
+normalized target point
+confidence
+motor mode
 ```
 
-Game-supported capability does not automatically mean autonomous permission.
+Three motor modes are supported conceptually:
 
-### 4. Decision loop
+### PREPOSITION
 
-If the eligible action set has:
+Move the cursor to the expected point early, but wait for an appropriate trigger before clicking.
 
-- `0` actions: wait/reobserve/block;
-- `1` action: deterministic execution may proceed without GPT-OSS;
-- `N > 1` meaningful actions: GPT-OSS may select among the exposed actions.
+### OPTIMISTIC_ACTUATE
 
-GPT-OSS is therefore a decision node, not the central controller.
+For highly trained, stable, low-risk transitions, act at the learned point without waiting for fresh target grounding, then verify the visible postcondition.
 
-### 5. Motor/feedback loop
+### CONFIRM_THEN_ACTUATE
+
+For variable or higher-risk actions, pre-position if useful but require current-frame visual confirmation before committing the click.
+
+Implementation: `harness/anticipatory_motor.py`.
+
+## Coordinates: motor knowledge, not game state
+
+The previous rule "coordinates are always ephemeral" was too strict.
+
+Correct rule:
+
+- current grounded bounding boxes are ephemeral;
+- learned coordinates/regions may persist as procedural motor priors;
+- a coordinate never proves current game state by itself.
+
+Useful forms:
 
 ```text
-semantic action
-→ shortcut or grounded target
-→ mouse/keyboard input
-→ visible environment changes
-→ perception observes result
+normalized_point_by_screen_profile
+canonical_region_by_ui_state
+frame_scoped_grounded_bbox
 ```
 
-Success is defined by visible postconditions, not by "input was sent".
+V0 coordinates are therefore useful training data rather than something to discard.
+
+A prior is invalidated when its screen/layout profile no longer matches or repeated visible verification fails.
 
 ## Semantic Action Surface
 
-The model should not normally see coordinates.
+GPT-OSS should normally see semantic actions, not coordinates.
 
-Resolution order:
+Resolution can use:
 
 ```text
 semantic action
-  → native keyboard shortcut when available
-  → current-frame visual target
-  → unresolved/reobserve
+  ├─ native shortcut
+  ├─ compiled motor prior
+  ├─ current-frame grounded target
+  └─ unresolved/reobserve
 ```
+
+These are not strictly sequential. For example, the motor controller may stage a prior while the visual system is still confirming the next state.
 
 Examples:
 
-- `OPEN_MAIL` may resolve to `M`;
-- `OPEN_ALLIANCE` may resolve to `O`;
-- `OPEN_SEARCH` may resolve to `F`;
-- a button inside a modal may require visual grounding.
+- `OPEN_MAIL` → native `M`;
+- `OPEN_ALLIANCE` → native `O`;
+- `OPEN_SEARCH` → native `F`;
+- `CONFIRM_CHARACTER_LOGIN` → learned stable region or freshly grounded YES button;
+- `CLAIM_ALLIANCE_TERRITORY_RSS` → learned region plus optional current-frame confirmation.
 
-## Visual grounding
+## Success and verification
 
-Coordinates are transient motor-control output, not game knowledge.
+Sending an input is never the same as proving success.
 
 ```text
-visible screenshot
-→ OCR/template/color/visual model
-→ semantic target
-→ frame-scoped bbox
-→ click/drag point
+input sent
+≠
+task action succeeded
 ```
 
-A target becomes invalid after conditions such as:
+Success comes from a visible postcondition.
 
-- UI transition;
-- scroll;
-- camera movement;
-- window resize;
-- insufficient confidence;
-- any change that makes the old geometry unreliable.
+Examples:
 
-This preserves human-like closed-loop operation: **look again before acting again when the scene has changed**.
+- `MARCH`: queue indicator visibly changes;
+- character switch: normal main game view returns;
+- modal navigation: expected next screen visibly appears.
 
-## Missions and tasks
+Optimistic actuation is compatible with this rule: act early, verify afterward.
 
-### Mission
+## Runtime information vs memory
 
-A mission is an operator-level objective with lifecycle and triggers, for example:
+The architecture should not depend on episodic game memory as a substitute for sensing.
 
-- `DAILY`;
-- `EVENT_COORDINATION`;
-- `CHARACTER_MAINTENANCE`;
-- `RESOURCE_GATHERING`.
+However, two persistent categories are legitimate control-plane data:
 
-### Task
+1. **compiled knowledge** — what the operator already taught the harness;
+2. **mission commitments** — e.g. a future task created from an explicitly extracted clan event date.
 
-A task contains:
+Neither category is evidence that a current hidden game condition is true.
 
-- due condition;
-- observable entry states;
-- required facts;
-- completion condition;
-- retry/recovery policy;
-- persistent status;
-- allowed semantic actions.
+For daily tasks, whenever the current UI can reveal availability directly, prefer checking visible availability over remembering a previous game-state value.
 
-Tasks may be paused/resumed when the visible UI diverges or an interrupting popup appears.
+## Example: Character switch
+
+Trained procedure:
+
+```text
+ACCOUNT_CHARACTER_LIST
+→ choose a different character
+→ CHARACTER_LOGIN_CONFIRM
+→ YES
+→ asynchronous load
+→ MAIN_GAME_VIEW
+→ COMPLETE
+```
+
+The motor controller can predict and stage the pointer over the YES region while the confirmation modal is appearing. Completion still requires the visible main game view to return.
+
+## Example: Gather resource
+
+The learned procedure is represented as task knowledge:
+
+```text
+WORLD_MAP_VIEW
+→ OPEN_SEARCH
+→ choose resource/level
+→ SEARCH
+→ RESOURCE_POINT_DETAIL
+→ GATHER
+→ NEW_TROOP
+→ MARCH
+```
+
+At each trained transition, motor priors may reduce latency. The verifier still checks visible progression such as march queue change.
 
 ## Example: Daily Alliance Territory RSS
 
-Operator-trained insight:
-
-- Alliance Territory RSS accumulates over time;
-- it is operationally worth claiming daily;
-- the task belongs to `DAILY`.
-
-The architecture stores the temporal insight separately from UI mechanics.
+The mission-level rule says this is a daily responsibility. Current availability should be determined from what the UI exposes when the task is inspected.
 
 ```text
-clock/memory says task_due
-      │
-      ▼
-DAILY task becomes READY
-      │
-      ▼
-current belief determines which action is eligible
-      │
-      ├─ main game view → OPEN_ALLIANCE
-      ├─ alliance home → OPEN_ALLIANCE_TERRITORY
-      └─ territory + claim visible → CLAIM
+DAILY mission activates
+→ navigate using trained procedure
+→ visible Territory screen
+→ if CLAIM is visibly/operationally available, claim
+→ verify visible postcondition
 ```
 
-Each action is resolved to keyboard/mouse and verified visually.
+The task does not need stale remembered game state to know whether CLAIM exists now.
 
-## Example: Event coordination from mail
+## Example: Event coordination
 
-This is a cross-feature OS workflow that the game does not provide directly.
+A clan-mail-selected event date can create a future mission commitment:
 
 ```text
-visible event information ─────┐
-                               ├─► belief/memory facts
-visible clan mail ─────────────┘
-                                      │
-                                      ▼
-                            selected event day
-                                      │
-                                      ▼
-                               future scheduler
+visible clan mail
+→ semantic extraction
+→ explicit structured date
+→ scheduler commitment
+→ on that date, inspect current visible game UI again
 ```
 
-The harness does not read hidden event state; it extracts visible information and turns it into future mission triggers.
+The stored date is workflow data, not remembered hidden game state.
 
 ## Knowledge provenance
-
-Different knowledge types have different authorities.
 
 For game mechanics:
 
@@ -306,26 +371,25 @@ official in-game guide
 > derived heuristic
 ```
 
-For operator policy:
+For operator procedure/policy:
 
 ```text
 operator instruction
-> validated operator memory
+> trained repeated procedure
 > derived preference
 ```
 
-A fact can be authoritative about a mechanic without granting autonomous permission to use that capability.
+## GPT-OSS contract
 
-## Local GPT-OSS contract
-
-Input:
+Input may include:
 
 ```json
 {
   "mission": "...",
   "task": "...",
   "belief_state": "...",
-  "facts": {},
+  "visible_facts": {},
+  "compiled_rules": {},
   "last_visible_feedback": {},
   "allowed_actions": []
 }
@@ -342,84 +406,79 @@ Output:
 
 The runtime rejects actions outside `allowed_actions`.
 
-GPT-OSS should not require:
-
-- raw screen coordinates;
-- hidden game state;
-- frame-by-frame spatial reasoning for known targets;
-- rediscovery of trained game rules;
-- long-horizon free-form gameplay planning.
+GPT-OSS should not need raw coordinates, hidden state, frame-by-frame spatial reasoning for trained targets or rediscovery of known procedures.
 
 ## Runtime invariants
 
 1. Game sensing is screen-pixel-only.
 2. Game actuation is mouse/keyboard-only.
-3. Belief State is inferred, never treated as privileged truth.
-4. Every game fact must have visible/trained/derived provenance.
-5. Coordinates are ephemeral motor data.
-6. Visible scene changes invalidate stale target handles when appropriate.
-7. A task completes only after a visible completion condition is observed.
-8. GPT-OSS chooses only among eligible semantic actions.
-9. Zero/one-action states do not require LLM inference.
-10. Unknown rules remain training gaps rather than guesses.
+3. Hidden game state is never read directly.
+4. Current Belief State is inferred from current visible evidence plus compiled rules.
+5. Stale episodic observations are not current truth.
+6. Trained procedures, layouts and motor priors may persist.
+7. Cursor movement may anticipate a target before it fully appears.
+8. Stable low-risk transitions may use optimistic actuation when explicitly trained.
+9. Success requires visible postcondition verification.
+10. GPT-OSS selects only among eligible semantic actions.
+11. Zero/one-action states need no LLM inference.
+12. Unknown rules are training gaps, not invitations to guess.
 
 ## Migration from V0
 
 Reusable V0 assets:
 
-- `Avatar.py`: OCR/CV experiments and visual feature work;
-- `Human.py`: seed for human demonstration/trajectory capture;
-- `Mouse_key.py`: historical mouse/keyboard action primitives;
-- `Position.txt`: historical geometry useful for calibration;
-- `LOG_WORKS.txt`: early decomposition of visible game tasks.
+- `Avatar.py`: OCR/CV and visual feature experiments;
+- `Human.py`: demonstration/trajectory capture seed;
+- `Mouse_key.py`: historical motor procedures;
+- `Position.txt`: valuable motor-prior/bootstrap geometry;
+- `LOG_WORKS.txt`: early decomposition of repeated behavior.
 
-The old code remains useful because it already worked at the visible-input boundary. V1 replaces brittle recognition/execution logic without changing that fundamental interaction philosophy.
+V0 fixed coordinates are no longer classified simply as brittle legacy data. Where the UI is stable, they can seed normalized motor priors that are verified and calibrated against the current screen profile.
 
 ## V1 milestones
 
-### M0 — Knowledge + interaction boundary
-- missions/tasks;
-- official/operator knowledge provenance;
-- Human Interface Boundary;
-- visible-state vocabulary.
+### M0 — Knowledge + Human I/O boundary
+- mission/task vocabulary;
+- operator/guide knowledge;
+- human-only sensor/actuator boundary;
+- trained procedures.
 
-### M1 — Visual perception
-- bounded screen capture;
+### M1 — Visual perception + motor priors
+- screen capture;
 - OCR/CV/grounding;
-- Belief State updates;
-- frame-scoped targets.
+- Belief State;
+- canonical target regions;
+- anticipatory cursor staging.
 
-### M2 — Passive mission runtime
-- task readiness;
-- capability/policy filtering;
-- allowed actions;
-- no autonomous actuation required yet.
+### M2 — Passive/assisted runtime
+- action eligibility;
+- predicted next targets;
+- visible feedback;
+- no requirement for full autonomy.
 
-### M3 — Verified human-input task
-- one low-risk daily task;
-- semantic action resolution;
-- mouse/keyboard only;
-- visible postcondition verifier;
-- persistent ledger.
+### M3 — One verified daily task
+- human-input-only execution;
+- predictive motor control where trained;
+- visible completion verifier.
 
-### M4 — Scheduler + interruption/resume
-- due rules;
-- idempotency;
-- pause/resume;
-- cross-session memory;
-- future tasks generated from visible information.
+### M4 — Mission scheduling
+- recurring responsibilities;
+- interruption/resume;
+- explicit future commitments from visible information;
+- no stale game-state memory dependency.
 
-### M5 — Local GPT-OSS runtime
+### M5 — Local GPT-OSS
 - constrained action selection;
-- model invoked only when meaningful choice exists;
-- telemetry for perception/tool/model latency.
+- model invoked only for meaningful choices;
+- latency telemetry;
+- deterministic fast path for fully trained behavior.
 
 ## Non-goals
 
 - reading game process memory;
 - process/DLL injection;
-- private game/internal APIs;
-- packet inspection or manipulation;
+- private/internal game APIs;
+- packet inspection/manipulation;
 - anti-cheat interaction/evasion;
 - CAPTCHA bypass;
-- hidden-state shortcuts that a normal user cannot perceive through the UI.
+- hidden-state shortcuts unavailable through the normal UI.
