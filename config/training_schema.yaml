@@ -1,21 +1,40 @@
 # Training-first mission knowledge schema.
-# Human explanations are authoritative; unknown rules stay unknown until trained.
+# Human explanations are authoritative for operator policy; official in-game
+# documentation is authoritative for game mechanics/capabilities it explicitly states.
+# Unknown rules stay unknown until trained or observed.
 
-schema_version: 2
+schema_version: 3
 
 game:
   name: "Rise of Kingdoms"
   reset_timezone: null
   supported_window_profiles: []
 
+knowledge_sources:
+  precedence:
+    game_mechanics:
+      - official_in_game_guide
+      - direct_ui_observation
+      - repeated_operator_observation
+      - human_training
+      - derived
+    operator_policy:
+      - human_training
+      - validated_memory
+      - derived
+  notes:
+    - "Source precedence resolves factual/mechanical conflicts; it does not override operator policy."
+    - "OCR is an extraction method, not an authority by itself; retain provenance to the underlying source frame."
+
 facts: []
 # Structured knowledge extracted from the game or taught by the operator.
 # - id: FACT_ID
 #   status: training        # training | validated | retired
-#   type: temporal          # temporal | resource | account | clan | event | ui | other
+#   type: temporal          # temporal | resource | account | clan | event | ui | capability | role | other
 #   description: "..."
 #   value: null
-#   source: human_training  # human_training | game_mail | ocr | cv | memory | derived
+#   source: human_training  # human_training | official_in_game_guide | direct_ui_observation | game_mail | memory | derived
+#   extraction: null        # manual | ocr | cv | parser | null
 #   observed_at: null
 #   valid_until: null
 #   evidence_refs: []
@@ -106,6 +125,7 @@ rules: []
 # - id: RULE_ID
 #   status: training
 #   description: "..."
+#   source: human_training
 #   applies_to_tasks: []
 #   preconditions: []
 #   allowed_actions: []
