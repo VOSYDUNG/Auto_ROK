@@ -1,11 +1,24 @@
-schema_version: 1
+schema_version: 2
 source:
   type: operator_screenshots
   observed_at: "2026-09-13"
 
+state_families:
+  - id: MAIN_GAME_VIEW
+    description: "Normal playable shell after loading a character. City and world-map views are both accepted members."
+    members:
+      - CITY_VIEW
+      - WORLD_MAP_VIEW
+    stable_evidence:
+      - "top resource HUD is visible"
+      - "bottom-right primary navigation is visible"
+    notes:
+      - "Operator explicitly trained that character-switch completion only requires returning to the main game screen; re-reading the character name is not required for task completion."
+
 states:
   - id: CITY_VIEW
     status: trained
+    family: MAIN_GAME_VIEW
     description: "Normal city view with buildings, resource bar and primary HUD visible."
     positive_evidence:
       - kind: layout
@@ -23,6 +36,42 @@ states:
       - OPEN_SEARCH
       - OPEN_VIP
       - TOGGLE_CITY_MAP
+
+  - id: WORLD_MAP_VIEW
+    status: trained
+    family: MAIN_GAME_VIEW
+    description: "Normal local world-map view with city/resource/barbarian objects and gameplay HUD."
+    positive_evidence:
+      - kind: layout
+        value: "map terrain and world objects occupy central canvas"
+      - kind: hud
+        value: "resource counters across top"
+      - kind: hud
+        value: "bottom-right primary navigation is visible"
+    outputs:
+      - current_map_coordinates_when_visible
+      - march_queue_usage_when_visible
+    available_semantic_actions:
+      - OPEN_SEARCH
+      - OPEN_MAIL
+      - OPEN_EVENTS
+      - OPEN_ALLIANCE
+      - TOGGLE_CITY_MAP
+
+  - id: KINGDOM_OVERVIEW
+    status: trained
+    description: "Zoomed strategic kingdom overview with regions, passes/structures and filter panel."
+    positive_evidence:
+      - kind: layout
+        value: "large strategic map with region names and colored territory"
+      - kind: text
+        value: "Battle List"
+      - kind: text
+        value: "Filter"
+    outputs:
+      - visible_region_names
+      - alliance_markers
+      - pass_or_structure_levels
 
   - id: SETTINGS_CONTROLS_MOUSE
     status: trained
@@ -87,9 +136,147 @@ states:
       - CHARACTER_CARD
       - CURRENT_CHARACTER_CHECKMARK
       - STAR_MARKER
+    outputs:
+      - character_cards
+      - current_character_card
     notes:
       - "Current character is visually indicated by a green checkmark."
       - "Character card exposes name, kingdom and power text suitable for OCR."
+
+  - id: CHARACTER_LOGIN_CONFIRM
+    status: trained
+    description: "Confirmation modal after selecting a different character."
+    positive_evidence:
+      - kind: text
+        value: "CHARACTER LOGIN"
+      - kind: text
+        value: "Log in as this character?"
+      - kind: button
+        value: "NO"
+      - kind: button
+        value: "YES"
+    outputs:
+      - target_character_name_when_readable
+    available_semantic_actions:
+      - CONFIRM_CHARACTER_LOGIN
+      - CANCEL_CHARACTER_LOGIN
+
+  - id: ALLIANCE_HOME
+    status: trained
+    description: "Alliance main window showing alliance identity and feature icons."
+    positive_evidence:
+      - kind: text
+        value: "ALLIANCE"
+      - kind: feature
+        value: "War"
+      - kind: feature
+        value: "Holy Sites"
+      - kind: feature
+        value: "Territory"
+      - kind: feature
+        value: "Help"
+      - kind: feature
+        value: "Gifts"
+    entities:
+      - ALLIANCE_TERRITORY_ENTRY
+      - ALLIANCE_STOREHOUSE_ENTRY
+      - ALLIANCE_TECHNOLOGY_ENTRY
+      - ALLIANCE_BOUNTIES_ENTRY
+    available_semantic_actions:
+      - OPEN_ALLIANCE_TERRITORY
+
+  - id: ALLIANCE_TERRITORY
+    status: trained
+    description: "Alliance Territory screen with Territory Resource Earnings and a Claim action."
+    positive_evidence:
+      - kind: text
+        value: "ALLIANCE TERRITORY"
+      - kind: text
+        value: "Territory Resource Earnings"
+      - kind: section
+        value: "Territory Buildings"
+    outputs:
+      - territory_food_earnings
+      - territory_wood_earnings
+      - territory_stone_earnings
+      - territory_gold_earnings
+      - claim_available
+    entities:
+      - TERRITORY_RSS_CLAIM
+    available_semantic_actions:
+      - CLAIM_ALLIANCE_TERRITORY_RSS
+    notes:
+      - "Supplied training frame shows Claim available with non-zero earnings."
+      - "Exact post-claim visual signature is not yet trained; do not invent it."
+
+  - id: MAIL_WINDOW
+    status: trained
+    description: "Mail window shell with category tabs."
+    positive_evidence:
+      - kind: tab
+        value: "PERSONAL"
+      - kind: tab
+        value: "REPORT"
+      - kind: tab
+        value: "ALLIANCE"
+      - kind: tab
+        value: "SYSTEM"
+      - kind: tab
+        value: "SENT"
+      - kind: tab
+        value: "FAVORITES"
+    entities:
+      - MAIL_TAB_PERSONAL
+      - MAIL_TAB_REPORT
+      - MAIL_TAB_ALLIANCE
+      - MAIL_TAB_SYSTEM
+      - MAIL_TAB_SENT
+      - MAIL_TAB_FAVORITES
+      - MAIL_READ_AND_CLAIM_ALL
+    outputs:
+      - selected_mail_tab
+      - unread_badges
+
+  - id: MAIL_SYSTEM
+    status: trained
+    parent: MAIL_WINDOW
+    description: "System-mail category with message list and selected message detail."
+    positive_evidence:
+      - kind: selected_tab
+        value: "SYSTEM"
+    outputs:
+      - message_titles
+      - selected_message_title
+      - selected_message_body
+      - claim_available
+    entities:
+      - MAIL_MESSAGE_ROW
+      - MAIL_MESSAGE_CLAIM
+
+  - id: MAIL_ALLIANCE
+    status: trained
+    parent: MAIL_WINDOW
+    description: "Alliance-mail category with alliance messages such as donation rankings."
+    positive_evidence:
+      - kind: selected_tab
+        value: "ALLIANCE"
+    outputs:
+      - message_titles
+      - selected_message_title
+      - selected_message_body
+      - message_date
+    notes:
+      - "This is the category to inspect for clan/alliance event coordination, but a concrete event-coordination mail has not yet been supplied."
+
+  - id: MAIL_PERSONAL_EMPTY
+    status: trained
+    parent: MAIL_WINDOW
+    description: "Personal-mail category with no messages."
+    positive_evidence:
+      - kind: selected_tab
+        value: "PERSONAL"
+      - kind: text
+        value: "No messages."
 
   - id: EVENTS_WINDOW
     status: trained
@@ -128,8 +315,114 @@ states:
       - "Observed values are an example from one frame and must not be promoted to permanent game rules."
       - "Time-window OCR should produce ephemeral facts with frame/time provenance."
 
+  - id: RESOURCE_SEARCH_PANEL
+    status: trained
+    description: "World-map search panel opened by the native Search action."
+    positive_evidence:
+      - kind: button
+        value: "SEARCH"
+      - kind: category
+        value: "Barbarians"
+      - kind: category
+        value: "Cropland"
+      - kind: category
+        value: "Logging Camp"
+      - kind: category
+        value: "Stone Deposit"
+      - kind: category
+        value: "Gold Deposit"
+      - kind: control
+        value: "Level slider"
+    outputs:
+      - selected_search_category
+      - selected_search_level
+    entities:
+      - SEARCH_CATEGORY_BARBARIANS
+      - SEARCH_CATEGORY_FOOD
+      - SEARCH_CATEGORY_WOOD
+      - SEARCH_CATEGORY_STONE
+      - SEARCH_CATEGORY_GOLD
+      - SEARCH_LEVEL_CONTROL
+      - SEARCH_EXECUTE
+
+  - id: RESOURCE_POINT_DETAIL
+    status: trained
+    description: "Selected resource-node detail card on world map."
+    positive_evidence:
+      - kind: text
+        value: "Resource Point"
+      - kind: button
+        value: "GATHER"
+    outputs:
+      - resource_type
+      - resource_level
+      - reserves
+      - gatherer
+      - owner
+      - node_coordinates_when_visible
+    entities:
+      - RESOURCE_GATHER
+    notes:
+      - "Training example shows a Level 6 Logging Camp with Gatherer=None and Owner=None. Those values are observations, not yet a universal policy."
+
+  - id: TROOP_DISPATCH_DRAWER
+    status: trained
+    description: "Right-side troop dispatch drawer after choosing Gather."
+    positive_evidence:
+      - kind: text
+        value: "Dispatch a new troop from your city"
+      - kind: button
+        value: "New Troop"
+      - kind: text_pattern
+        value: "Queue X/5"
+    outputs:
+      - march_queue_used
+      - march_queue_capacity
+    entities:
+      - NEW_TROOP
+
+  - id: NEW_TROOP_SETUP
+    status: trained
+    description: "New Troop modal with commanders, unit composition and March action."
+    positive_evidence:
+      - kind: text
+        value: "New Troop"
+      - kind: button
+        value: "MARCH"
+      - kind: text
+        value: "Units"
+      - kind: text
+        value: "Total Power"
+    outputs:
+      - selected_commanders_when_detectable
+      - unit_counts
+      - total_units
+      - load
+      - march_time
+    entities:
+      - TROOP_MAX
+      - TROOP_MARCH
+    notes:
+      - "Exact commander/unit-selection policy is not yet trained; the harness must not invent one."
+
+  - id: MARCH_IN_PROGRESS
+    status: trained
+    parent: WORLD_MAP_VIEW
+    description: "World-map view after March with an active troop/march indicator."
+    positive_evidence:
+      - kind: queue
+        value: "used march count is greater than before dispatch"
+      - kind: visual
+        value: "troop/path indicator may be visible on map"
+    outputs:
+      - march_queue_used
+      - march_queue_capacity
+    notes:
+      - "Training example transitions from Queue 0/5 to 1/5 after March."
+
 scene_classifier_rules:
   - "Prefer stable text/layout anchors over absolute coordinates."
   - "Coordinates/bboxes are evidence-local and expire after UI transitions or scrolling."
   - "If two states share the Settings shell, classify using selected tab and distinctive text."
   - "Do not infer hidden labels from visible shortcut keys alone."
+  - "State-family completion may be used when the operator cares about reaching a stable shell rather than re-identifying every detail."
