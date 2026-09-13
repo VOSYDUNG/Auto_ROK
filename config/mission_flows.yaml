@@ -1,0 +1,142 @@
+schema_version: 1
+source:
+  type: operator_training
+  observed_at: "2026-09-13"
+
+flows:
+  - id: CLAIM_ALLIANCE_TERRITORY_RSS
+    mission: DAILY
+    status: training
+    description: "Claim accumulated alliance territory resources as a daily maintenance task."
+    entry_state_family: MAIN_GAME_VIEW
+    transitions:
+      - from: MAIN_GAME_VIEW
+        action: OPEN_ALLIANCE
+        execution: native_shortcut
+        expect: [ALLIANCE_HOME]
+      - from: ALLIANCE_HOME
+        action: OPEN_ALLIANCE_TERRITORY
+        execution: visual_target
+        target: ALLIANCE_TERRITORY_ENTRY
+        expect: [ALLIANCE_TERRITORY]
+      - from: ALLIANCE_TERRITORY
+        when:
+          claim_available: true
+        action: CLAIM_ALLIANCE_TERRITORY_RSS
+        execution: visual_target
+        target: TERRITORY_RSS_CLAIM
+        expect: [ALLIANCE_TERRITORY]
+        verification: post_claim_signature_untrained
+    completion:
+      status: needs_post_claim_training
+      notes:
+        - "A before-claim frame is trained. Supply/replay an after-claim frame to lock the exact completion detector."
+    memory:
+      on_verified_success:
+        - persist: last_alliance_territory_rss_claim_at
+
+  - id: SWITCH_CHARACTER
+    mission: CHARACTER_MAINTENANCE
+    status: trained
+    description: "Switch from the current character to another character and wait for the normal game shell to return."
+    entry_states:
+      - ACCOUNT_CHARACTER_LIST
+    transitions:
+      - from: ACCOUNT_CHARACTER_LIST
+        action: SELECT_DIFFERENT_CHARACTER
+        execution: visual_target
+        target: CHARACTER_CARD
+        constraints:
+          - "target character must not be the card marked by CURRENT_CHARACTER_CHECKMARK"
+        expect: [CHARACTER_LOGIN_CONFIRM]
+      - from: CHARACTER_LOGIN_CONFIRM
+        action: CONFIRM_CHARACTER_LOGIN
+        execution: visual_target
+        target: CHARACTER_LOGIN_YES
+        expect_family: MAIN_GAME_VIEW
+        transition_kind: asynchronous_load
+    completion:
+      success_when:
+        - state_family: MAIN_GAME_VIEW
+      explicitly_not_required:
+        - "OCR the target character name after load"
+        - "re-open Account/Characters"
+      operator_rule: "Choose another character, press YES, then wait until the main screen appears; that is complete."
+    recovery:
+      - "While the UI is loading, WAIT/REOBSERVE rather than issuing unrelated actions."
+
+  - id: GATHER_RESOURCE
+    mission: RESOURCE_GATHERING
+    status: training
+    description: "Search for a requested resource node, create a march and dispatch it."
+    entry_states:
+      - WORLD_MAP_VIEW
+      - CITY_VIEW
+    parameters:
+      - resource_type
+      - resource_level
+    transitions:
+      - from: CITY_VIEW
+        action: TOGGLE_CITY_MAP
+        execution: native_shortcut
+        expect: [WORLD_MAP_VIEW]
+      - from: WORLD_MAP_VIEW
+        action: OPEN_SEARCH
+        execution: native_shortcut
+        expect: [RESOURCE_SEARCH_PANEL]
+      - from: RESOURCE_SEARCH_PANEL
+        action: SELECT_RESOURCE_TYPE
+        execution: visual_target
+        target_by_parameter:
+          FOOD: SEARCH_CATEGORY_FOOD
+          WOOD: SEARCH_CATEGORY_WOOD
+          STONE: SEARCH_CATEGORY_STONE
+          GOLD: SEARCH_CATEGORY_GOLD
+        expect: [RESOURCE_SEARCH_PANEL]
+      - from: RESOURCE_SEARCH_PANEL
+        action: SET_RESOURCE_LEVEL
+        execution: visual_target
+        target: SEARCH_LEVEL_CONTROL
+        optional: true
+        expect: [RESOURCE_SEARCH_PANEL]
+      - from: RESOURCE_SEARCH_PANEL
+        action: SEARCH_RESOURCE_NODE
+        execution: visual_target
+        target: SEARCH_EXECUTE
+        expect: [RESOURCE_POINT_DETAIL]
+      - from: RESOURCE_POINT_DETAIL
+        action: GATHER_RESOURCE_NODE
+        execution: visual_target
+        target: RESOURCE_GATHER
+        expect: [TROOP_DISPATCH_DRAWER]
+      - from: TROOP_DISPATCH_DRAWER
+        action: CREATE_NEW_TROOP
+        execution: visual_target
+        target: NEW_TROOP
+        expect: [NEW_TROOP_SETUP]
+      - from: NEW_TROOP_SETUP
+        action: MARCH_WITH_CURRENT_SELECTION
+        execution: visual_target
+        target: TROOP_MARCH
+        preconditions:
+          - "troop/commander selection policy is valid for this mission"
+        expect: [MARCH_IN_PROGRESS, WORLD_MAP_VIEW]
+    completion:
+      success_when:
+        - "march queue used count increased relative to pre-dispatch observation"
+      supporting_evidence:
+        - "active troop/march indicator appears"
+        - "map returns after March"
+    trained_observation_examples:
+      - "Resource search panel exposes Barbarians, Cropland, Logging Camp, Stone Deposit, Gold Deposit and a level control."
+      - "A selected Level 6 Logging Camp detail frame exposes Reserves=1,260,000, Gatherer=None, Owner=None and GATHER."
+      - "Training sequence shows Queue 0/5 before dispatch and 1/5 after March."
+    unresolved_policy:
+      - "How commanders/troop composition should be selected for gathering."
+      - "Whether Owner/Gatherer values impose a hard selection constraint."
+
+selector_contract:
+  source_of_allowed_actions: "outgoing transitions for the classified current state"
+  local_model_role: constrained_action_selector
+  reject_unknown_actions: true
+  long_horizon_planning_required: false
