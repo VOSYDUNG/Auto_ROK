@@ -1,6 +1,6 @@
-schema_version: 1
+schema_version: 2
 batch_id: operator-training-2026-09-13
-status: training
+status: active_training
 
 facts:
   - id: ALLIANCE_TERRITORY_RSS_ACCUMULATES
@@ -20,11 +20,58 @@ facts:
       - observe claim amount/timer across repeated days
       - confirm whether timing is exact or operationally approximate
 
+  - id: ALLIANCE_TERRITORY_UI_PATH
+    type: ui
+    description: "From the normal game shell, open Alliance, then select Territory, then Territory Resource Earnings exposes Claim when resources are available."
+    source: operator_screenshots
+    status: trained
+
+  - id: MAIL_HAS_SEMANTIC_CATEGORIES
+    type: ui
+    description: "Mail is partitioned into Personal, Report, Alliance, System, Sent and Favorites tabs."
+    source: operator_screenshots
+    status: trained
+
+  - id: ALLIANCE_MAIL_IS_SEMANTIC_SOURCE
+    type: clan
+    description: "Alliance mail contains alliance-originated information and is the mail category relevant to clan/alliance coordination tasks."
+    source: operator_screenshots
+    status: trained
+    notes:
+      - "Concrete event-coordination mail content is still needed before training extraction rules for a specific clan-selected day."
+
   - id: EVENT_PARTICIPATION_DAY_MAY_BE_CLAN_DECIDED
     type: clan
     description: "For some events, the useful participation day is not determined by the event UI alone; the clan may communicate the chosen day through clan mail."
     source: human_training
     status: training
+
+  - id: CHARACTER_SWITCH_COMPLETION_RULE
+    type: ui
+    description: "After selecting a different character and confirming YES in Character Login, wait for the normal main game screen. Reaching the main screen is sufficient to mark the switch task complete."
+    source: human_training
+    status: trained
+    explicitly_not_required:
+      - OCR the loaded character name after login
+      - reopen Account/Characters for confirmation
+
+  - id: RESOURCE_SEARCH_UI_PATH
+    type: ui
+    description: "Search exposes Barbarians, Cropland, Logging Camp, Stone Deposit and Gold Deposit plus a resource level control and Search action."
+    source: operator_screenshots
+    status: trained
+
+  - id: RESOURCE_NODE_DETAIL_FACTS
+    type: ui
+    description: "A found resource point exposes resource type/level, Reserves, Gatherer, Owner and Gather."
+    source: operator_screenshots
+    status: trained
+
+  - id: GATHER_DISPATCH_SEQUENCE
+    type: ui
+    description: "Gather opens troop dispatch; New Troop opens troop setup; March returns to map with an active march."
+    source: operator_screenshots
+    status: trained
 
 missions:
   - id: DAILY
@@ -40,19 +87,73 @@ missions:
       - EXTRACT_CLAN_SELECTED_DAY
       - SCHEDULE_EVENT_PARTICIPATION
 
+  - id: CHARACTER_MAINTENANCE
+    description: "Operate per-character tasks and move between characters when required."
+    tasks:
+      - SWITCH_CHARACTER
+
+  - id: RESOURCE_GATHERING
+    description: "Dispatch resource gathering marches from a requested resource objective."
+    tasks:
+      - GATHER_RESOURCE
+
+
 tasks:
   - id: CLAIM_ALLIANCE_TERRITORY_RSS
     mission: DAILY
     status: training
-    due_when:
-      rule: "last successful claim is old enough that delaying further risks hitting the ~24h full point"
-    known_entry_actions:
+    entry:
+      family: MAIN_GAME_VIEW
+    trained_path:
       - OPEN_ALLIANCE
+      - OPEN_ALLIANCE_TERRITORY
+      - CLAIM_ALLIANCE_TERRITORY_RSS
+    due_when:
+      rule: "last successful claim is old enough that delaying further risks hitting the operator-reported ~24h full point"
     completion_when:
-      - "claim action has a verified success state"
-      - "last_success timestamp is persisted"
+      - "exact post-claim signature still needs training"
+      - "after verification, persist last_success timestamp"
     notes:
-      - "The business insight is the accumulation/full-time rule; the exact UI path remains to be trained and validated."
+      - "UI path is now trained from screenshots."
+      - "Do not call this full PASS until a post-claim observation is captured."
+
+  - id: SWITCH_CHARACTER
+    mission: CHARACTER_MAINTENANCE
+    status: trained
+    entry:
+      state: ACCOUNT_CHARACTER_LIST
+    trained_path:
+      - "select a CHARACTER_CARD that is not marked current"
+      - "observe CHARACTER_LOGIN_CONFIRM"
+      - "press YES"
+      - "WAIT/REOBSERVE during load"
+      - "complete when MAIN_GAME_VIEW returns"
+    completion_when:
+      - state_family: MAIN_GAME_VIEW
+    notes:
+      - "The operator explicitly does not require post-load identity OCR for this task."
+
+  - id: GATHER_RESOURCE
+    mission: RESOURCE_GATHERING
+    status: training
+    parameters:
+      - resource_type
+      - resource_level
+    trained_path:
+      - OPEN_SEARCH
+      - SELECT_RESOURCE_TYPE
+      - SET_RESOURCE_LEVEL
+      - SEARCH_RESOURCE_NODE
+      - GATHER_RESOURCE_NODE
+      - CREATE_NEW_TROOP
+      - MARCH_WITH_CURRENT_SELECTION
+    completion_when:
+      - "march queue used count increased relative to before dispatch"
+    evidence:
+      - "training screenshots show Queue 0/5 before dispatch and 1/5 after March"
+    unresolved_policy:
+      - "commander/unit composition choice for gathering"
+      - "whether Gatherer/Owner fields are selection constraints or only information"
 
   - id: INSPECT_EVENT
     mission: EVENT_COORDINATION
@@ -72,10 +173,11 @@ tasks:
     status: training
     known_entry_actions:
       - OPEN_MAIL
+      - SELECT_ALLIANCE_MAIL
     outputs:
       - relevant_clan_message
     notes:
-      - "Mail navigation/filtering still requires additional operator training screenshots."
+      - "Mail shell/category navigation is now trained. Need a real clan event message to train relevance/extraction examples."
 
   - id: EXTRACT_CLAN_SELECTED_DAY
     mission: EVENT_COORDINATION
@@ -101,7 +203,9 @@ tasks:
 
 runtime_principles:
   - "GPT-OSS selects among tool-exposed actions; it does not invent a gameplay procedure."
+  - "The trained task graph is the source of allowed actions for known states."
   - "Mission/task knowledge persists independently of screen coordinates."
   - "Native shortcuts are preferred when they express the semantic action directly."
   - "Visual grounding resolves only the remaining target-location problem."
   - "Observed event values are facts for that run, not permanent rules."
+  - "Verification should prove only the business success condition; avoid redundant confirmation work."
