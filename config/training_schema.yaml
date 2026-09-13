@@ -1,69 +1,139 @@
-# Training-first knowledge schema.
-#
-# This file is intentionally NOT populated with assumed Rise of Kingdoms rules.
-# Each rule is added only after human training + visual evidence validation.
+# Training-first mission knowledge schema.
+# Human explanations are authoritative; unknown rules stay unknown until trained.
 
-schema_version: 1
+schema_version: 2
 
 game:
   name: "Rise of Kingdoms"
-  reset_timezone: null       # train/confirm before use
+  reset_timezone: null
   supported_window_profiles: []
 
-state_vocabulary: []
-# Example shape only:
+facts: []
+# Structured knowledge extracted from the game or taught by the operator.
+# - id: FACT_ID
+#   status: training        # training | validated | retired
+#   type: temporal          # temporal | resource | account | clan | event | ui | other
+#   description: "..."
+#   value: null
+#   source: human_training  # human_training | game_mail | ocr | cv | memory | derived
+#   observed_at: null
+#   valid_until: null
+#   evidence_refs: []
+
+missions: []
+# User-level objectives. Missions own task lifecycle and scheduling.
+# - id: DAILY
+#   status: training
+#   description: "Daily maintenance mission"
+#   activation:
+#     type: recurring
+#     rule: null
+#   tasks: []
+
+# User-trained example shape; exact timing remains unvalidated until confirmed:
+# - id: DAILY
+#   status: training
+#   tasks:
+#     - CLAIM_ALLIANCE_TERRITORY_RSS
+
+# Another user-trained pattern:
+# EVENT_COORDINATION may inspect clan mail, extract a clan-selected event day,
+# persist it as a fact, and schedule a later participation task.
+
+tasks: []
+# - id: TASK_ID
+#   mission: MISSION_ID
+#   status: training
+#   description: "..."
+#   due_when:
+#     facts: []
+#     memory: []
+#     temporal_rules: []
+#   completion_when:
+#     observable: []
+#     memory: []
+#   tools: []
+#   allowed_action_ids: []
+#   retry_policy:
+#     max_attempts: 0
+#     reobserve_before_retry: true
+#   persistence:
+#     idempotency_key: null
+#     record_last_success: true
+
+states: []
 # - id: CITY
 #   description: "..."
 #   positive_evidence: []
 #   negative_evidence: []
 #   min_confidence: 0.90
 
+tools: []
+# Tools hide screenshots/coordinates from the local decision model.
+# - id: TOOL_ID
+#   task: TASK_ID
+#   observe_returns:
+#     - state
+#     - facts
+#     - targets
+#     - allowed_actions
+#     - last_feedback
+#   actions:
+#     - id: ACTION_ID
+#       requires_target: true
+#       preconditions: []
+#       expected_postconditions: []
+#       risk: low
+
+visual_targets: []
+# Semantic target definitions. Runtime bboxes are frame-scoped and ephemeral.
+# - id: TARGET_ID
+#   label: "..."
+#   detectors:
+#     - template
+#     - ocr
+#     - color_shape
+#     - visual_grounder
+#   min_confidence: 0.90
+#   expires_on:
+#     - ui_transition
+#     - scroll
+#     - window_resize
+#     - new_frame_when_unstable
+
 rules: []
-# Example shape only (not a game rule):
-# - id: RULE_001
-#   status: training        # training | validated | retired
-#   description: "human-readable rule"
-#   goal: "GOAL_ID"
-#   required_states: []
-#   preconditions:
-#     observable: []
-#     memory: []
+# Cross-task invariants / policies.
+# - id: RULE_ID
+#   status: training
+#   description: "..."
+#   applies_to_tasks: []
+#   preconditions: []
 #   allowed_actions: []
 #   forbidden_actions: []
-#   expected_postconditions: []
 #   exceptions: []
-#   failure_modes: []
-#   reputation_risk: none  # none | low | medium | high | critical
+#   reputation_risk: none
 #   account_risk: none
-#   evidence:
-#     screenshots: []
-#     notes: []
 #   validation:
 #     required_successes: 0
 #     observed_successes: 0
 #     last_validated_at: null
 
-skills: []
-# A skill may reference only VALIDATED rules.
-# - id: SKILL_001
-#   goal: "GOAL_ID"
-#   rules: [RULE_001]
-#   entry_state: "STATE_ID"
-#   success_state: "STATE_ID"
-#   max_steps: 0
-#   max_retries: 0
-
-semantic_fallback:
-  enabled: false
+local_decision_model:
   provider: "local-gpt-oss"
-  invoke_when:
-    - unknown_state
-    - contradictory_evidence
-    - deterministic_recovery_exhausted
-  output_contract:
-    - state_hypothesis
-    - confidence
-    - evidence_refs
-    - proposed_next_observation
-    - optional_action_proposal
-  autonomous_execution: false
+  role: "constrained_action_selector"
+  receives:
+    - mission
+    - task
+    - state
+    - facts
+    - last_feedback
+    - allowed_actions
+  must_not_require:
+    - raw_screen_coordinates
+    - long_horizon_gameplay_planning
+    - visual_spatial_reasoning_for_known_targets
+  output:
+    - action
+    - arguments
+  reject_actions_not_in_allowed_actions: true
+  rationale_required: false
