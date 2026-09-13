@@ -1,4 +1,4 @@
-schema_version: 1
+schema_version: 2
 boundary_name: human_interface_only
 status: authoritative
 
@@ -22,11 +22,21 @@ allowed_motor_channels:
   - id: KEYBOARD
     description: "Keyboard key presses/hotkeys through the operating-system input surface."
 
-internal_only_channels:
+control_plane_sources:
   - id: CLOCK
-    description: "Harness wall/monotonic time for scheduling and measuring elapsed time; not a source of hidden game state."
-  - id: MEMORY
-    description: "Persistent harness memory derived from prior visible observations and actions."
+    description: "Harness wall/monotonic time for scheduling and measuring elapsed time; not hidden game state."
+  - id: COMPILED_KNOWLEDGE
+    description: "Rules, UI layouts, transitions, shortcuts and procedures already taught/validated by the operator or official visible guide. This is part of the harness, not episodic memory of the current game session."
+  - id: MOTOR_PRIORS
+    description: "Learned expected target locations/timings tied to a known screen profile and transition. May be used to pre-position the pointer or, for trained low-risk actions, optimistically actuate and verify afterward."
+  - id: MISSION_CONTROL_STATE
+    description: "Scheduler/task bookkeeping such as a future commitment created from a user-approved workflow. It must not be treated as evidence of current hidden game state."
+
+forbidden_as_current_game_truth:
+  - stale_previous_screen_observation
+  - previous_session_ui_state
+  - unverified_previous_counter_value
+  - remembered_target_position_without_matching_screen_profile
 
 forbidden_environment_channels:
   - game_process_memory
@@ -45,23 +55,49 @@ forbidden_environment_channels:
 state_semantics:
   authoritative_environment_state_available: false
   name_for_internal_state: BELIEF_STATE
-  rule: "Every game-state fact must be traceable to visible screen evidence, operator-taught knowledge, harness memory, or a derivation from those sources."
+  rule: "Current game-state claims come from current visible evidence plus compiled game knowledge. Old observations are not reused as current truth."
+
+procedural_learning:
+  principle: "What has been taught may become a fast prior instead of being rediscovered visually every time."
+  examples:
+    - "After a known transition, stage the cursor over the expected next button before it finishes appearing."
+    - "Use a validated native shortcut immediately when the semantic action is known."
+    - "Reuse a canonical target region for a matching window/screen profile."
+  constraints:
+    - "A prior is scoped to a known screen/window profile."
+    - "A prior does not prove that the target currently exists."
+    - "Post-action visible verification remains authoritative for success."
+
+anticipatory_motor_control:
+  modes:
+    - id: PREPOSITION
+      description: "Move pointer to the learned expected target point before the next UI target is fully visible; do not click yet."
+    - id: OPTIMISTIC_ACTUATE
+      description: "For trained, stable, low-risk transitions, allow an expected click/key action without waiting for fresh target grounding; verify the visible postcondition immediately afterward."
+    - id: CONFIRM_THEN_ACTUATE
+      description: "For variable, destructive, social, consumptive or otherwise higher-risk actions, require current-frame visual confirmation before actuation."
 
 interaction_cycle:
-  description: "Human-like closed loop rather than direct environment mutation."
+  description: "Human-like closed loop with prediction, not a mandatory observe-then-act pipeline."
   pattern:
-    - observe_visible_pixels
-    - update_belief
-    - choose_semantic_action
-    - resolve_to_mouse_or_keyboard
-    - perform_os_input
-    - wait_for_visible_feedback
-    - observe_again
+    - "compiled procedure predicts likely next target/action"
+    - "motor system may pre-position while visual transition is occurring"
+    - "visual system continuously samples current pixels"
+    - "action may be committed according to the trained motor mode"
+    - "visible feedback updates belief and verifies outcome"
 
 coordinate_policy:
-  rule: "Coordinates are transient motor-control outputs, never authoritative game knowledge."
-  invalidated_by:
-    - new_ui_layout
+  rule: "Coordinates may exist as learned motor priors, but never as authoritative game state."
+  allowed_forms:
+    - normalized_point_by_screen_profile
+    - canonical_region_by_ui_state
+    - frame_scoped_grounded_bbox
+  invalidate_prior_when:
+    - screen_profile_mismatch
+    - window_resize_or_scale_change
+    - layout_version_mismatch
+    - repeated_postcondition_failure
+  invalidate_grounded_target_when:
     - transition
     - scroll
     - camera_motion
@@ -74,7 +110,7 @@ llm_boundary:
     - task
     - belief_state
     - visible_facts
-    - memory_facts
+    - compiled_rules
     - allowed_actions
     - last_visible_feedback
   local_model_must_not_receive_as_game_truth:
@@ -82,9 +118,12 @@ llm_boundary:
     - internal_game_objects
     - injected_telemetry
     - privileged_game_api_results
+    - stale_observations_presented_as_current
 
 terminology:
-  replace_world_state_with: BELIEF_STATE
+  current_inferred_state: BELIEF_STATE
+  durable_trained_knowledge: COMPILED_KNOWLEDGE
+  learned_cursor_action_expectation: MOTOR_PRIOR
   environment_name: GAME_UI_ENVIRONMENT
   perception_name: VISUAL_PERCEPTION
   execution_name: HUMAN_INPUT_ACTUATION
