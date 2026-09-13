@@ -1,0 +1,69 @@
+# Training-first knowledge schema.
+#
+# This file is intentionally NOT populated with assumed Rise of Kingdoms rules.
+# Each rule is added only after human training + visual evidence validation.
+
+schema_version: 1
+
+game:
+  name: "Rise of Kingdoms"
+  reset_timezone: null       # train/confirm before use
+  supported_window_profiles: []
+
+state_vocabulary: []
+# Example shape only:
+# - id: CITY
+#   description: "..."
+#   positive_evidence: []
+#   negative_evidence: []
+#   min_confidence: 0.90
+
+rules: []
+# Example shape only (not a game rule):
+# - id: RULE_001
+#   status: training        # training | validated | retired
+#   description: "human-readable rule"
+#   goal: "GOAL_ID"
+#   required_states: []
+#   preconditions:
+#     observable: []
+#     memory: []
+#   allowed_actions: []
+#   forbidden_actions: []
+#   expected_postconditions: []
+#   exceptions: []
+#   failure_modes: []
+#   reputation_risk: none  # none | low | medium | high | critical
+#   account_risk: none
+#   evidence:
+#     screenshots: []
+#     notes: []
+#   validation:
+#     required_successes: 0
+#     observed_successes: 0
+#     last_validated_at: null
+
+skills: []
+# A skill may reference only VALIDATED rules.
+# - id: SKILL_001
+#   goal: "GOAL_ID"
+#   rules: [RULE_001]
+#   entry_state: "STATE_ID"
+#   success_state: "STATE_ID"
+#   max_steps: 0
+#   max_retries: 0
+
+semantic_fallback:
+  enabled: false
+  provider: "local-gpt-oss"
+  invoke_when:
+    - unknown_state
+    - contradictory_evidence
+    - deterministic_recovery_exhausted
+  output_contract:
+    - state_hypothesis
+    - confidence
+    - evidence_refs
+    - proposed_next_observation
+    - optional_action_proposal
+  autonomous_execution: false
