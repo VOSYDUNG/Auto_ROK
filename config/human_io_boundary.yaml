@@ -1,0 +1,90 @@
+schema_version: 1
+boundary_name: human_interface_only
+status: authoritative
+
+environment_access:
+  principle: "The harness may interact with the game only through the same visible/input surface available to a human player."
+
+allowed_sensory_channels:
+  - id: SCREEN_PIXELS
+    description: "Captured pixels from the visible game window/screen."
+    allowed_processing:
+      - screenshots
+      - OCR
+      - template_matching
+      - color_shape_detection
+      - visual_grounding
+      - local_vision_models
+
+allowed_motor_channels:
+  - id: MOUSE
+    description: "Pointer movement, click, drag, scroll through the operating-system input surface."
+  - id: KEYBOARD
+    description: "Keyboard key presses/hotkeys through the operating-system input surface."
+
+internal_only_channels:
+  - id: CLOCK
+    description: "Harness wall/monotonic time for scheduling and measuring elapsed time; not a source of hidden game state."
+  - id: MEMORY
+    description: "Persistent harness memory derived from prior visible observations and actions."
+
+forbidden_environment_channels:
+  - game_process_memory
+  - process_injection
+  - dll_injection
+  - game_internal_api
+  - private_network_protocol
+  - packet_sniffing
+  - packet_forging
+  - hidden_window_object_tree
+  - engine_objects
+  - filesystem_state_used_as_hidden_game_state
+  - anti_cheat_interface
+  - anti_cheat_evasion
+
+state_semantics:
+  authoritative_environment_state_available: false
+  name_for_internal_state: BELIEF_STATE
+  rule: "Every game-state fact must be traceable to visible screen evidence, operator-taught knowledge, harness memory, or a derivation from those sources."
+
+interaction_cycle:
+  description: "Human-like closed loop rather than direct environment mutation."
+  pattern:
+    - observe_visible_pixels
+    - update_belief
+    - choose_semantic_action
+    - resolve_to_mouse_or_keyboard
+    - perform_os_input
+    - wait_for_visible_feedback
+    - observe_again
+
+coordinate_policy:
+  rule: "Coordinates are transient motor-control outputs, never authoritative game knowledge."
+  invalidated_by:
+    - new_ui_layout
+    - transition
+    - scroll
+    - camera_motion
+    - resize
+    - insufficient_visual_confidence
+
+llm_boundary:
+  local_model_receives:
+    - mission
+    - task
+    - belief_state
+    - visible_facts
+    - memory_facts
+    - allowed_actions
+    - last_visible_feedback
+  local_model_must_not_receive_as_game_truth:
+    - hidden_process_state
+    - internal_game_objects
+    - injected_telemetry
+    - privileged_game_api_results
+
+terminology:
+  replace_world_state_with: BELIEF_STATE
+  environment_name: GAME_UI_ENVIRONMENT
+  perception_name: VISUAL_PERCEPTION
+  execution_name: HUMAN_INPUT_ACTUATION
