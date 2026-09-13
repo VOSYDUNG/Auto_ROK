@@ -1,0 +1,139 @@
+schema_version: 1
+source:
+  type: operator_screenshots
+  observed_at: "2026-09-13"
+  status: trained
+
+# Native shortcuts are preferred over visual clicking when they express the
+# same semantic action. They reduce visual-grounding latency and coordinate
+# dependence. Unknown/ambiguous entries are kept explicit rather than guessed.
+
+shortcuts:
+  - action: TOGGLE_CHAT_WINDOWS
+    key: ENTER
+    confidence: high
+
+  - action: OPEN_VIP
+    key: V
+    confidence: high
+
+  - action: OPEN_QUESTS
+    key: L
+    confidence: high
+
+  - action: OPEN_BUILD
+    key: B
+    confidence: high
+
+  - action: OPEN_SEARCH
+    key: F
+    confidence: high
+
+  - action: TOGGLE_CITY_MAP
+    key: SPACE
+    confidence: high
+
+  - action: OPEN_MAIL
+    key: M
+    confidence: high
+
+  - action: OPEN_CAMPAIGN
+    key: U
+    confidence: high
+
+  - action: OPEN_ITEMS
+    key: I
+    confidence: high
+
+  - action: OPEN_ALLIANCE
+    key: O
+    confidence: high
+
+  - action: OPEN_COMMANDERS
+    key: P
+    confidence: high
+
+  - action: OPEN_EVENTS
+    key: H
+    confidence: high
+
+  - action: OPEN_TROOPS
+    key: J
+    confidence: high
+
+  - action: OPEN_KINGDOM_OVERVIEW
+    key: G
+    confidence: high
+
+  - action: SELECT_ALL_TROOPS
+    key: CTRL+SHIFT+A
+    confidence: high
+
+  - action: SELECT_ALL_TROOPS_ON_SCREEN
+    key: CTRL+A
+    confidence: high
+
+  - action: FOCUS_TROOP_1
+    key: F1
+    confidence: high
+    note: "UI says double-click focuses on Troop 1"
+
+  - action: FOCUS_TROOP_2
+    key: F2
+    confidence: high
+
+  - action: FOCUS_TROOP_3
+    key: F3
+    confidence: high
+
+  - action: FOCUS_TROOP_4
+    key: F4
+    confidence: high
+
+  - action: FOCUS_TROOP_5
+    key: F5
+    confidence: high
+
+  - action: BOSS_KEY
+    key: ALT+SPACE
+    confidence: high
+
+camera_shortcuts_observed:
+  - key: LEFT
+    label: "Camera Left"
+  - key: RIGHT
+    label: "Camera Right"
+  - key: UP
+    label: "Camera Up"
+  - key: DOWN
+    label: "Camera Down"
+  - key: PGUP
+    label: "Camera Up"
+  - key: PGDN
+    label: "Camera Down"
+
+ambiguous_shortcuts:
+  - key: N
+    action: null
+    reason: "The screenshot shows key N but its left-side label is not visible; do not infer semantics."
+
+mouse_controls_observed:
+  - gesture: DRAG
+    semantic: MOVE_CAMERA
+  - gesture: SCROLL
+    semantic: CAMERA_ZOOM
+  - gesture: CLICK
+    semantic: ISSUE_COMMAND
+  - gesture: CLICK
+    semantic: SELECT_TARGET
+  - gesture: ALT+DRAG
+    semantic: MULTI_SELECT_TROOPS
+    enabled: true
+
+selection_policy:
+  prefer_native_shortcut_when_available: true
+  fallback_order:
+    - native_shortcut
+    - semantic_visual_target
+    - reobserve
+  never_send_unknown_shortcut: true
