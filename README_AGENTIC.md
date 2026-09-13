@@ -1,142 +1,183 @@
 # Auto_ROK — Agentic Harness branch
 
-Branch objective: evolve the old proof-of-concept into a mission-driven support runtime that turns a fixed game environment into structured tools for a local GPT-OSS decision model.
+Branch objective: evolve the old proof-of-concept into a mission-driven support runtime that controls the game strictly through **human-visible pixels + ordinary mouse/keyboard input**.
 
 ## Current stage: M0 / training-first
 
 No gameplay mission is autonomous yet.
 
-The key design correction is:
+The key architecture rules are now:
 
-> GPT-OSS does not invent how to play and does not visually hunt for coordinates. The harness observes the game, exposes a structured state plus a bounded action set, and GPT-OSS selects the next semantic action.
+> The game is an external visual UI environment. The harness does not read hidden game state or modify the game internally.
+
+> GPT-OSS does not invent how to play and does not visually hunt for coordinates. The harness infers a Belief State from visible pixels, exposes bounded semantic actions, and GPT-OSS selects only when a meaningful choice exists.
+
+## Human-interface-only boundary
+
+Allowed game sensing:
+
+- visible screen pixels.
+
+Allowed game actuation:
+
+- mouse;
+- keyboard.
+
+Explicitly outside the architecture:
+
+- process/game memory reads;
+- process or DLL injection;
+- game-internal/private APIs;
+- engine objects;
+- packet sniffing/forging;
+- hidden telemetry;
+- anti-cheat interfaces/evasion.
+
+The authoritative policy is in `config/human_io_boundary.yaml`, with typed contracts in `harness/human_io.py`.
+
+## Belief State instead of World State
+
+The harness never claims to know the game's true internal state. It keeps a **Belief State** inferred from:
+
+- OCR/CV/visual grounding over visible frames;
+- previous visible observations;
+- operator-trained rules;
+- official in-game guide knowledge;
+- harness-owned memory derived from those sources.
+
+Every belief should carry confidence/provenance where useful.
+
+## Runtime is reactive, not one linear pipeline
+
+Several loops cooperate around Belief State, task memory, and policy:
 
 ```text
-Mission / Task
-    ↓
-Harness observe
-    ↓
-state + facts + allowed_actions + last_feedback
-    ↓
-GPT-OSS: select one allowed action
-    ↓
-Semantic Action Surface
-    ├─ native shortcut when available
-    └─ current-frame visual target when needed
-    ↓
-OS input
-    ↓
-reobserve + feedback
+Visual Perception ─────┐
+                       │
+Scheduler/Missions ────┼──► Belief + Memory + Task Ledger
+                       │             ▲
+Capability/Policy ─────┘             │
+                                     │
+GPT-OSS (only if needed) ─► semantic action
+                                     │
+                                     ▼
+                         Human Input Actuation
+                         mouse / keyboard only
+                                     │
+                                     ▼
+                            visible game UI
+                                     │
+                                     └──► Visual Perception
 ```
+
+A state with one valid action does not need GPT-OSS. A state with no valid action waits/reobserves. GPT-OSS is used only when a bounded selection is genuinely needed.
 
 ## Why the old V0 still matters
 
-The original code already contains useful domain discoveries:
+The original code already contains useful discoveries at the same human-interface boundary:
 
 - EasyOCR and OpenCV experiments;
 - character-list and current-character detection;
 - Territory text detection;
-- game-native keyboard actions such as `F`, `O`, `V`, and `Space`;
+- native keyboard actions such as `F`, `O`, `V`, and `Space`;
 - mouse/keyboard trajectory capture experiments.
 
-The supplied in-game Settings screenshots now confirm that several historical keys were native semantic shortcuts, not arbitrary macro constants. V1 therefore promotes them into a shortcut-first action surface rather than discarding them.
+The supplied Settings screenshots confirm that several historical keys were native semantic shortcuts rather than arbitrary macro constants. V1 promotes them into a shortcut-first action surface.
 
 ## Implemented foundation
 
-- mission/task runtime with constrained action selection;
-- typed observation/state/action contracts;
+- strict human-interface-only contract;
+- reactive mission/task runtime with constrained action selection;
+- typed visual observation/action contracts;
 - frame-scoped visual scene graph;
 - semantic action resolver with native-shortcut-first policy;
-- game-rule / mission training schema;
+- capability gate and operator policy separation;
+- game-rule / mission training schema with provenance;
 - trained UI-state vocabulary from operator screenshots;
 - trained shortcut map from Settings > Controls;
-- operator-training knowledge for Daily and Event Coordination mission patterns;
-- conservative rule/policy layer for actions not yet trained.
+- official Gameplay Guide knowledge layer;
+- operator-training knowledge for Daily, Event Coordination, character switching, and resource gathering patterns.
 
-## Human -> Harness distillation loop
+## Human → Harness distillation loop
 
 For each mission/task:
 
 1. Human explains **why** the task exists and how they think about it.
-2. Record the durable game/business insight separately from UI mechanics.
-3. Record observable entry state(s) and facts.
-4. Record the semantic actions that are valid at that state.
-5. Prefer a native game shortcut when it represents the semantic action directly.
-6. Otherwise ground a visual target in the current frame.
-7. Execute one bounded action.
-8. Reobserve and return structured feedback.
-9. Persist task/memory facts that matter across runs.
-10. Promote uncertain rules only after repeated observation/validation.
+2. Record durable game/business insight separately from UI mechanics.
+3. Record visible entry state(s), evidence, and confidence.
+4. Record semantic actions valid from that belief state.
+5. Prefer a native shortcut when it expresses the semantic action directly.
+6. Otherwise ground a visible target in the current frame.
+7. Perform one bounded mouse/keyboard action.
+8. Reobserve the visible result.
+9. Update Belief State and persistent task memory.
+10. Promote uncertain rules only after validation.
 
 ## Local GPT-OSS role
 
-GPT-OSS is a **constrained decision selector**.
+GPT-OSS is a **constrained decision selector**, not a central brain.
 
-It receives:
+It may receive:
 
-- current mission;
-- current task;
-- symbolic state;
-- structured facts;
-- last tool feedback;
+- current mission/task;
+- Belief State;
+- visible/memory facts;
+- last visible feedback;
 - allowed semantic actions.
 
 It returns:
 
-- one action id;
+- one allowed action id;
 - optional bounded arguments.
 
 It should not require:
 
 - raw screen coordinates;
+- hidden game state;
 - frame-by-frame visual reasoning for known targets;
 - long-horizon gameplay planning;
-- rediscovering known game rules every day.
-
-Unknown actions are rejected by the runtime rather than executed speculatively.
+- rediscovery of known game rules.
 
 ## Visual grounding rule
 
-Coordinates are execution data, not knowledge.
-
-A visual target belongs to one captured frame. After a UI transition, scroll, resize, or other invalidating change, the target must be re-grounded before use.
-
-Resolution order:
+Coordinates are motor-control output, not knowledge.
 
 ```text
 semantic action
-  → native shortcut
-  → semantic visual target
-  → reobserve / unresolved
+  → native shortcut when available
+  → semantic visual target in current frame
+  → mouse/keyboard action
+  → reobserve visible feedback
 ```
 
-## Mission examples learned so far
+Target geometry expires when the visible scene changes enough to make it unreliable.
+
+## Trained mission examples so far
 
 ### DAILY
 
-`CLAIM_ALLIANCE_TERRITORY_RSS` belongs to the Daily mission because the operator reports that the reward accumulates and is operationally full at roughly 24 hours. The important knowledge is the temporal rule; the exact claim-screen path is still being trained.
+`CLAIM_ALLIANCE_TERRITORY_RSS` belongs to Daily because the operator reports that Territory RSS accumulates over time and is operationally worth claiming each day. The temporal insight is stored separately from the visual path.
 
 ### EVENT_COORDINATION
 
-Some event participation decisions require combining event UI facts with clan communication. A mission may therefore:
+Visible event information plus visible clan mail can be converted into structured facts and future schedules without any hidden game integration.
 
-```text
-inspect event
-→ read clan mail
-→ extract clan-selected participation day
-→ persist fact
-→ schedule later participation task
-```
+### SWITCH_CHARACTER
 
-That cross-feature workflow is an Agentic-OS capability layered above what the game itself exposes.
+Select another visible character card → confirm `YES` → wait until the normal main-game shell is visibly back → complete.
 
-## Next training/code
+### GATHER_RESOURCE
 
-Priority is no longer to add more blind `click()` sequences. The next useful training batches are:
+The trained visible flow is Search → resource category/level → node detail → Gather → New Troop → March, with queue-count change used as visible completion evidence.
 
-- Alliance/Territory claim path and its success evidence;
-- Mail / clan-mail navigation and message structure;
-- Event list/calendar semantics;
-- Search/resource workflow and march-state feedback;
-- character switching transitions and loading completion evidence.
+## Next code
 
-Only after those states/actions are trained should the corresponding mission tools become executable.
+Priority is to build reliable **visual perception + human-input execution**, not additional hidden integrations or blind click sequences:
+
+- bounded game-window capture;
+- OCR/template/CV target detectors;
+- Belief State updater with confidence/provenance;
+- verified target-handle execution;
+- visible postcondition checks;
+- scheduler/task ledger;
+- local GPT-OSS selector only after the deterministic tool surface is stable.
