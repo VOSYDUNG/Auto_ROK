@@ -45,15 +45,21 @@ if ($bitmap.PixelWidth -ne $capture.frame.width -or $bitmap.PixelHeight -ne $cap
 }
 $result = Await-WinRt ($engine.RecognizeAsync($bitmap)) ([Windows.Media.Ocr.OcrResult])
 $elements = @()
+$lineIndex = 0
 foreach ($line in $result.Lines) {
+    $wordIndex = 0
     foreach ($word in $line.Words) {
         $box = $word.BoundingRect
         $elements += @{
             text = $word.Text
             bbox = @([int]$box.X, [int]$box.Y, [int]$box.Width, [int]$box.Height)
             confidence = $null
+            line_index = $lineIndex
+            word_index = $wordIndex
         }
+        $wordIndex += 1
     }
+    $lineIndex += 1
 }
 @{
     schema_version = 1
