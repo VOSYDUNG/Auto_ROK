@@ -1,0 +1,100 @@
+schema_version: 1
+source:
+  type: operator_training
+  observed_at: "2026-09-14"
+
+flows:
+  - id: RALLY_BARBARIAN_FORT
+    mission: PVE_RALLY
+    status: training
+    description: "Find a Barbarian Fort of the requested level, configure rally preparation, then create a troop and march."
+    entry_states:
+      - WORLD_MAP_VIEW
+      - CITY_VIEW
+    parameters:
+      - fort_level
+      - rally_prep_time
+    transitions:
+      - from: CITY_VIEW
+        action: TOGGLE_CITY_MAP
+        execution: native_shortcut
+        expect: [WORLD_MAP_VIEW]
+
+      - from: WORLD_MAP_VIEW
+        action: OPEN_SEARCH
+        execution: native_shortcut
+        expect: [RESOURCE_SEARCH_PANEL, BARBARIAN_SEARCH_PANEL]
+
+      - from: RESOURCE_SEARCH_PANEL
+        action: SELECT_BARBARIANS_CATEGORY
+        execution: visual_target
+        target: SEARCH_CATEGORY_BARBARIANS
+        expect: [BARBARIAN_SEARCH_PANEL]
+
+      - from: BARBARIAN_SEARCH_PANEL
+        action: SELECT_BARBARIAN_FORT
+        execution: visual_target
+        target: SEARCH_TAB_BARBARIAN_FORT
+        expect: [BARBARIAN_SEARCH_PANEL]
+
+      - from: BARBARIAN_SEARCH_PANEL
+        action: SET_FORT_LEVEL
+        execution: visual_target
+        target: BARBARIAN_LEVEL_CONTROL
+        parameter: fort_level
+        expect: [BARBARIAN_SEARCH_PANEL]
+
+      - from: BARBARIAN_SEARCH_PANEL
+        action: SEARCH_BARBARIAN_FORT
+        execution: visual_target
+        target: BARBARIAN_SEARCH_EXECUTE
+        expect: [BARBARIAN_FORT_DETAIL]
+
+      - from: BARBARIAN_FORT_DETAIL
+        action: OPEN_FORT_RALLY
+        execution: visual_target
+        target: BARBARIAN_FORT_RALLY
+        expect: [RALLY_ATTACK_SETUP]
+
+      - from: RALLY_ATTACK_SETUP
+        action: SET_RALLY_PREP_TIME
+        execution: visual_target
+        target_by_parameter:
+          "5m": RALLY_PREP_5_MINUTES
+          "10m": RALLY_PREP_10_MINUTES
+          "30m": RALLY_PREP_30_MINUTES
+          "8h": RALLY_PREP_8_HOURS
+        expect: [RALLY_ATTACK_SETUP]
+
+      - from: RALLY_ATTACK_SETUP
+        action: CREATE_RALLY
+        execution: visual_target
+        target: RALLY_CREATE
+        expect: [RALLY_NEW_TROOP_SETUP]
+
+      - from: RALLY_NEW_TROOP_SETUP
+        action: MARCH_WITH_CURRENT_SELECTION
+        execution: visual_target
+        target: RALLY_TROOP_MARCH
+        preconditions:
+          - "commander selection recommendation has been resolved for this account and mission"
+          - "troop composition recommendation has been resolved for this account and mission"
+          - "action point cost is acceptable for the mission policy"
+        expect: [WORLD_MAP_VIEW, MARCH_IN_PROGRESS]
+
+    completion:
+      success_when:
+        - "visible march/rally queue usage increases relative to the pre-rally observation"
+        - "or a visible active-rally indicator appears"
+      verification_status: needs_live_training
+
+    unresolved_policy:
+      - "Preferred rally preparation time for each context."
+      - "Primary/secondary commander pair for Barbarian Forts."
+      - "Troop composition and minimum viable unit count."
+      - "Whether fort suggested troop count/tier should be treated as a hard or soft constraint."
+
+selector_contract:
+  local_model_role: constrained_action_selector
+  source_of_allowed_actions: "trained task graph plus commander/troop policy supplied by Operator/Commander Intelligence"
+  long_horizon_planning_required: false
