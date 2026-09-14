@@ -1,4 +1,4 @@
-schema_version: 2
+schema_version: 3
 layer: operator
 
 principles:
@@ -8,6 +8,8 @@ principles:
   historical_values_are_snapshots_not_timeless_truth: true
   native_capabilities_are_account_facts_not_workflow_rules: true
   store_offers_are_time_scoped_observations: true
+  community_market_signals_set_schema_priority_not_truth: true
+  market_value_is_not_runtime_policy: true
 
 operator_profile:
   identity:
@@ -23,6 +25,9 @@ operator_profile:
     civilization:
       type: string
       source: visible_game_ui
+    account_binding_methods:
+      type: list
+      notes: "Record only binding methods visibly exposed by the client/account UI. Never store credentials."
 
   progression:
     power:
@@ -35,6 +40,13 @@ operator_profile:
     highest_power:
       type: integer
       source: visible_game_ui
+    vip_level:
+      type: integer
+    current_kingdom_or_season:
+      type: string
+    t5_readiness:
+      type: mapping
+      notes: "Derived from visible technology/building/troop progression; do not infer from power alone."
     power_breakdown:
       building:
         type: integer
@@ -63,6 +75,9 @@ operator_profile:
       type: integer
     highest_acclaim:
       type: integer
+    kvk_history:
+      type: list
+      notes: "Temporal snapshots when visible; do not collapse multiple KVKs into one timeless statistic."
 
   economy_support:
     resources_gathered:
@@ -71,6 +86,86 @@ operator_profile:
       type: integer
     alliance_help_times:
       type: integer
+
+  reserves_and_liquidity:
+    gems:
+      type: integer
+    legendary_sculptures_gold_heads:
+      type: integer
+    action_point_reserve:
+      type: integer
+    speedups:
+      type: mapping
+      fields:
+        universal_days: number
+        training_days: number
+        healing_days: number
+        building_days: number
+        research_days: number
+      notes: "Preserve category breakdown when visible; total days alone hides operational readiness."
+    resources:
+      type: mapping
+      fields:
+        food: integer
+        wood: integer
+        stone: integer
+        gold: integer
+        selectable_or_combined: integer
+    migration:
+      type: mapping
+      fields:
+        passport_pages: integer
+        alliance_credits: integer
+        migration_ready: boolean
+    seasonal_currency:
+      type: mapping
+      fields:
+        season_coins: integer
+        conquest_coins: integer
+    legendary_materials:
+      type: integer
+
+  equipment_readiness:
+    legendary_equipment_count:
+      type: integer
+    talented_legendary_equipment_count:
+      type: integer
+    legendary_accessory_count:
+      type: integer
+    epic_accessory_count:
+      type: integer
+    iconic_or_awakened_state:
+      type: mapping
+    complete_march_sets:
+      type: list
+      notes: "Represent complete usable sets by troop/role, not just total item count."
+
+  armament_readiness:
+    usable_set_count:
+      type: integer
+    sets:
+      type: list
+      item_schema:
+        role_or_troop_tag: string
+        formation: string
+        approximate_stat_quality: mapping
+        rare_inscription_count: integer
+        legendary_inscription_count: integer
+    total_rare_inscriptions:
+      type: integer
+    total_legendary_inscriptions:
+      type: integer
+    notes:
+      - "Armament quality is role-specific and RNG-sensitive; raw count is insufficient."
+
+  commander_readiness:
+    source_model: commander_intelligence_schema
+    fields:
+      owned_commanders: list
+      expertised_commanders: list
+      partial_skill_states: mapping
+      current_meta_usable_pairs: list
+      role_coverage: mapping
 
   alliance:
     tag_and_name:
@@ -96,6 +191,28 @@ operator_profile:
         - rank_2
         - rank_1
       notes: "Must be observed by locating current governor in Alliance Members UI; do not infer only from rank counts."
+
+  account_ecosystem:
+    farm_accounts:
+      type: list
+      item_schema:
+        label: string
+        power: integer
+        role: string
+      notes: "Farm accounts change operational capacity and should be modeled separately from main-character combat power."
+
+  kingdom_environment:
+    kingdom_id:
+      type: string
+    seed_class:
+      type: string
+    kvk_state:
+      type: string
+    alliance_strength_context:
+      type: mapping
+    gold_chest_frequency_signal:
+      type: string
+      notes: "Community/operator shorthand such as low/medium/high; retain source and confidence."
 
   session_context:
     action_points_current:
@@ -161,6 +278,12 @@ history_snapshot:
     - progression
     - combat
     - economy_support
+    - reserves_and_liquidity
+    - equipment_readiness
+    - armament_readiness
+    - commander_readiness
+    - account_ecosystem
+    - kingdom_environment
     - commerce_and_native_capabilities
     - source_evidence
 
@@ -183,6 +306,21 @@ derived_profile:
     native_automation_coverage:
       evidence_required: true
       notes: "Summarize which routine activity classes are already covered by account-native automation."
+    account_quality_vector:
+      evidence_required: true
+      dimensions:
+        - progression_maturity
+        - combat_history
+        - reserve_optionalilty
+        - equipment_readiness
+        - armament_readiness
+        - commander_depth
+        - migration_mobility
+        - farm_network_capacity
+        - kingdom_environment_fit
+      notes:
+        - "Keep dimensions separate. Do not collapse into one opaque score in V1."
+        - "A future valuation model must be versioned, explainable and separate from mission runtime."
 
 provenance:
   required_fields:
