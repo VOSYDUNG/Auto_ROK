@@ -1,4 +1,4 @@
-schema_version: 1
+schema_version: 2
 layer: operator
 
 principles:
@@ -6,6 +6,8 @@ principles:
   ask_human_only_for_non_game_personalization: true
   derived_fields_require_evidence: true
   historical_values_are_snapshots_not_timeless_truth: true
+  native_capabilities_are_account_facts_not_workflow_rules: true
+  store_offers_are_time_scoped_observations: true
 
 operator_profile:
   identity:
@@ -101,6 +103,52 @@ operator_profile:
     action_points_max:
       type: integer
 
+  commerce_and_native_capabilities:
+    active_offers:
+      type: list
+      item_schema:
+        offer_id:
+          type: string
+        display_name:
+          type: string
+        observed_price_text:
+          type: string
+        validity_text:
+          type: string
+        reward_summary:
+          type: mapping
+        observed_at:
+          type: datetime
+        source_surface:
+          type: string
+      notes:
+        - "Offer price and contents are snapshot observations only; they may vary by region/account/store/update."
+        - "Do not promote one screenshot price into a permanent market rule."
+
+    native_capabilities:
+      type: mapping
+      known_capability_ids:
+        AUTO_PEACEKEEPING:
+          type: boolean
+        AUTO_HELP:
+          type: boolean
+        AUTO_TRANSLATION:
+          type: boolean
+      capability_fact_schema:
+        enabled:
+          type: boolean
+        entitlement_source:
+          type: string
+        observed_at:
+          type: datetime
+        source_surface:
+          type: string
+        confidence:
+          type: number
+      notes:
+        - "A capability may be bundled with a visible subscription/offer, but entitlement must be observed for the current account before runtime treats it as available."
+        - "Native capability availability describes what the account can use; mission policy decides whether it should be used."
+
 history_snapshot:
   required:
     - observed_at
@@ -113,6 +161,7 @@ history_snapshot:
     - progression
     - combat
     - economy_support
+    - commerce_and_native_capabilities
     - source_evidence
 
 derived_profile:
@@ -131,6 +180,9 @@ derived_profile:
       evidence_required: true
     historical_event_signal:
       evidence_required: true
+    native_automation_coverage:
+      evidence_required: true
+      notes: "Summarize which routine activity classes are already covered by account-native automation."
 
 provenance:
   required_fields:
