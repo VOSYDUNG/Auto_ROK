@@ -68,8 +68,6 @@ def _parameter_specs(raw: Any) -> dict[str, Mapping[str, Any]]:
     result: dict[str, Mapping[str, Any]] = {}
     for item in raw:
         if isinstance(item, str):
-            # The training YAML predates typed declarations. Preserve that
-            # syntax while applying the two known GATHER_RESOURCE contracts.
             inferred = "integer" if item == "resource_level" else "string"
             name, spec = item, {"name": item, "type": inferred, "nullable": item == "resource_level"}
         elif isinstance(item, Mapping):
@@ -83,6 +81,23 @@ def _parameter_specs(raw: Any) -> dict[str, Mapping[str, Any]]:
             raise MissionCompileError(f"unsupported type for parameter {name!r}: {typ!r}")
         result[name] = spec
     return result
+
+
+def _transition_arguments(
+    edge: Mapping[str, Any],
+    specs: Mapping[str, Mapping[str, Any]],
+    supplied: Mapping[str, Any],
+    index: int,
+) -> dict[str, Any]:
+    names = edge.get("arguments_from_parameters", []) or []
+    if not isinstance(names, list) or any(not isinstance(name, str) or not name for name in names):
+        raise MissionCompileError(f"invalid arguments_from_parameters in transition {index}")
+    unknown = [name for name in names if name not in specs]
+    if unknown:
+        raise MissionCompileError(
+            f"unknown parameter(s) in transition {index} arguments: {unknown!r}"
+        )
+    return {name: supplied[name] for name in names if name in supplied and supplied[name] is not None}
 
 
 def compile_mission(mission_path: str | Path, states_path: str | Path,
@@ -150,7 +165,7 @@ def compile_mission(mission_path: str | Path, states_path: str | Path,
             requires = True
         if any(not isinstance(t, str) or t not in target_ids for t in targets):
             raise MissionCompileError(f"unknown target in transition {index}")
-        args = {name: supplied[name] for name in specs if name in supplied}
+        args = _transition_arguments(edge, specs, supplied, index)
         transitions.append(Transition(source, edge.get("action"), expects, family, requires, targets, args))
         listed_preconditions = edge.get("preconditions", []) or []
         if not isinstance(listed_preconditions, list) or any(not isinstance(x, str) or not x for x in listed_preconditions):
