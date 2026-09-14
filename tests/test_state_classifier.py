@@ -22,8 +22,8 @@ def test_classifies_each_supported_gather_state() -> None:
         "WORLD_MAP_VIEW": ("map terrain and world objects occupy central canvas", "resource counters across top", "bottom-right primary navigation is visible"),
         "RESOURCE_SEARCH_PANEL": ("SEARCH", "Barbarians", "Cropland"),
         "RESOURCE_POINT_DETAIL": ("Resource Point", "GATHER"),
-        "TROOP_DISPATCH_DRAWER": ("Dispatch a new troop from your city", "New Troop", "Queue X/5"),
-        "NEW_TROOP_SETUP": ("New Troop", "MARCH", "Units", "Load"),
+        "TROOP_DISPATCH_DRAWER": ("Dispatch a new troop from your city", "New Troop", "Queue 0/5"),
+        "NEW_TROOP_SETUP": ("New Troop", "MARCH", "Units", "Total Power"),
         "MARCH_IN_PROGRESS": ("used march count is greater than before dispatch", "troop/path indicator may be visible on map"),
     }
     for expected, values in cases.items():
@@ -31,6 +31,15 @@ def test_classifies_each_supported_gather_state() -> None:
         assert result.state_id == expected
         assert len(result.matching_evidence) == len(values)
         assert result.ambiguity["candidate_states"] == (expected,)
+
+
+def test_queue_pattern_does_not_accept_arbitrary_text() -> None:
+    result = StateClassifier().classify(observed(
+        "Dispatch a new troop from your city",
+        "New Troop",
+        "Queue nope",
+    ))
+    assert result.state_id == UNKNOWN_STATE
 
 
 def test_missing_evidence_is_unknown() -> None:
