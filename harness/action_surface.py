@@ -24,7 +24,7 @@ class ShortcutBinding:
 class ActionRequest:
     """Semantic request produced by MissionRuntime / GPT-OSS.
 
-    The request intentionally contains no screen coordinates.  Typed bounded
+    The request intentionally contains no screen coordinates. Typed bounded
     arguments may be carried when the compiled transition declares them.
     """
 
@@ -49,15 +49,7 @@ class ActionResolutionError(RuntimeError):
 
 
 class SemanticActionSurface:
-    """Resolve symbolic actions into concrete OS input.
-
-    Resolution order is deliberately shortcut-first:
-
-      semantic action -> native game shortcut -> visual target fallback
-
-    Native shortcuts are more stable and cheaper than repeatedly grounding a
-    known menu icon. Visual coordinates remain frame-scoped execution data.
-    """
+    """Resolve symbolic actions into concrete OS input."""
 
     def __init__(
         self,
@@ -89,17 +81,16 @@ class SemanticActionSurface:
             raise ActionResolutionError(
                 f"action {request.action_id!r} has no native shortcut and no target"
             )
-
         if scene is None:
             raise ActionResolutionError(
                 f"action {request.action_id!r} requires a current scene graph"
             )
 
-        target = scene.target(request.target_id, min_confidence=self.min_target_confidence)
-        if target is None and self.allow_unscored_exact_targets:
-            candidate = scene.target(request.target_id, min_confidence=0.0)
-            if candidate is not None and candidate.confidence == 0.0 and candidate.metadata.get("unscored_exact") is True:
-                target = candidate
+        target = scene.target(
+            request.target_id,
+            min_confidence=self.min_target_confidence,
+            allow_unscored_exact=self.allow_unscored_exact_targets,
+        )
         if target is None:
             raise LookupError(
                 f"target {request.target_id!r} is not grounded for the current action surface"
@@ -119,8 +110,6 @@ class SemanticActionSurface:
         )
 
 
-# Trained from the operator-provided in-game Settings > Controls > Shortcuts
-# screenshots. Keep this small and explicit; ambiguous entries are not included.
 TRAINED_NATIVE_SHORTCUTS: Mapping[str, str] = {
     "TOGGLE_CHAT_WINDOWS": "ENTER",
     "OPEN_VIP": "V",
