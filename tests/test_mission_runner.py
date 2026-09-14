@@ -12,12 +12,12 @@ STATES = ROOT / "config" / "ui_states.yaml"
 CONTEXT = MissionContext("GATHER_RESOURCE", "one-character", "run-runner")
 
 
-def compiled():
+def compiled(level=6):
     return compile_mission(
         MISSIONS,
         STATES,
         "GATHER_RESOURCE",
-        {"resource_type": "WOOD", "resource_level": 6},
+        {"resource_type": "WOOD", "resource_level": level},
     )
 
 
@@ -74,11 +74,11 @@ def test_runner_auto_executes_single_action_and_persists_checkpoint(tmp_path):
     assert stored.revision == 1
 
 
-def test_runner_restores_verified_self_loop_and_advances_to_next_setup_step(tmp_path):
+def test_runner_restores_verified_self_loop_then_stops_at_untrained_level_handler(tmp_path):
     store = JsonMissionStore(tmp_path)
     actions = (
         AllowedAction("SELECT_RESOURCE_TYPE", True, ("SEARCH_CATEGORY_WOOD",)),
-        AllowedAction("SET_RESOURCE_LEVEL", True, ("SEARCH_LEVEL_CONTROL",)),
+        AllowedAction("SET_RESOURCE_LEVEL", True, ("SEARCH_LEVEL_CONTROL",), {"resource_level": 6}),
         AllowedAction("SEARCH_RESOURCE_NODE", True, ("SEARCH_EXECUTE",)),
     )
     targets = ("SEARCH_CATEGORY_WOOD", "SEARCH_LEVEL_CONTROL", "SEARCH_EXECUTE")
@@ -94,11 +94,38 @@ def test_runner_restores_verified_self_loop_and_advances_to_next_setup_step(tmp_
 
     second_tool = FakeTool((
         snapshot("f3", "RESOURCE_SEARCH_PANEL", actions=actions, targets=targets),
-        snapshot("f4", "RESOURCE_SEARCH_PANEL"),
     ))
     second = MissionRunner(compiled(), second_tool, store).tick(CONTEXT)
-    assert second_tool.executions[0].action_id == "SET_RESOURCE_LEVEL"
+    assert second.status is CheckpointStatus.NEEDS_DECISION
+    assert second_tool.executions == []
+    assert "typed handler" in second.reason
     assert second.checkpoint.revision == 2
+
+
+def test_runner_without_requested_level_advances_from_type_setup_to_search(tmp_path):
+    context = MissionContext("GATHER_RESOURCE", "one-character", "run-no-level")
+    store = JsonMissionStore(tmp_path)
+    actions = (
+        AllowedAction("SELECT_RESOURCE_TYPE", True, ("SEARCH_CATEGORY_WOOD",)),
+        AllowedAction("SEARCH_RESOURCE_NODE", True, ("SEARCH_EXECUTE",)),
+    )
+    targets = ("SEARCH_CATEGORY_WOOD", "SEARCH_EXECUTE")
+
+    first_tool = FakeTool((
+        snapshot("f1", "RESOURCE_SEARCH_PANEL", actions=actions, targets=targets),
+        snapshot("f2", "RESOURCE_SEARCH_PANEL"),
+    ))
+    first = MissionRunner(compiled(None), first_tool, store).tick(context)
+    assert first.status is CheckpointStatus.RUNNING
+    assert first_tool.executions[0].action_id == "SELECT_RESOURCE_TYPE"
+
+    second_tool = FakeTool((
+        snapshot("f3", "RESOURCE_SEARCH_PANEL", actions=actions, targets=targets),
+        snapshot("f4", "RESOURCE_POINT_DETAIL"),
+    ))
+    second = MissionRunner(compiled(None), second_tool, store).tick(context)
+    assert second.status is CheckpointStatus.RUNNING
+    assert second_tool.executions[0].action_id == "SEARCH_RESOURCE_NODE"
 
 
 def test_runner_blocks_final_march_for_missing_gameplay_precondition(tmp_path):
