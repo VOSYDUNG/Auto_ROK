@@ -124,7 +124,7 @@ class HumanInterfaceActionProvider:
 
         try:
             resolved = self.surface.resolve(
-                ActionRequest(choice.action_id, choice.target_id),
+                ActionRequest(choice.action_id, choice.target_id, dict(choice.arguments)),
                 scene=scene,
             )
         except (LookupError, ValueError, RuntimeError) as exc:
@@ -218,6 +218,7 @@ class HumanInterfaceActionProvider:
             {
                 "input_kind": resolved.kind.value,
                 "input_source": resolved.source,
+                "bounded_arguments": dict(choice.arguments),
             }
         )
         return ActionDispatchReceipt(
@@ -285,6 +286,7 @@ class BoundedMissionTool:
             "before_frame_id": receipt.before_frame_id,
             "target_id": receipt.target_id,
             "non_interference_confirmed": receipt.non_interference_confirmed,
+            "bounded_arguments": dict(choice.arguments),
         }
         character_id = before.facts.get("character_id")
         if isinstance(character_id, str) and character_id:
