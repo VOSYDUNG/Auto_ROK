@@ -33,10 +33,11 @@ class EngineStepResult:
 class MissionEngine:
     """Execute one declared transition, then verify it from fresh evidence.
 
-    The executor may only prove that bounded input was dispatched. It cannot
-    declare the game transition successful because it has not seen the next
-    frame yet. ``DISPATCHED`` is promoted to ``VERIFIED`` only after a fresh
-    observation matches the compiled transition.
+    Dispatch is never success. A fresh observation is mandatory. For a normal
+    transition the post-state must match the compiled edge. For an explicitly
+    compiled completion edge, the typed completion predicate is authoritative:
+    a fresh frame proving the queue increased may complete even if the generic
+    state classifier cannot label that post-frame yet.
     """
 
     def __init__(self, compiled: CompiledMission, tool: MissionTool) -> None:
@@ -153,37 +154,57 @@ class MissionEngine:
         after = self.tool.observe(context)
         if not after.frame_id or after.frame_id == snapshot.frame_id:
             return EngineStepResult(EngineDecision.REOBSERVE, snapshot, choice, feedback, after, "post-observation is not fresh")
-        if not self.compiled.flow.accepts_observation(transition, after.state):
-            return EngineStepResult(EngineDecision.REOBSERVE, snapshot, choice, feedback, after, "post-observation does not match declared transition")
 
         verified_feedback = _promote_verified_feedback(feedback, snapshot, after, choice)
-        if self_loop:
-            self._verified_self_loops.add(loop_key)
-
         completion_requested = transition.completion_edge or feedback.completed
+        state_matches = self.compiled.flow.accepts_observation(transition, after.state)
+
         if completion_requested:
-            if not _completion_matches(
+            completion_matches = _completion_matches(
                 self.compiled.completion,
                 required_preconditions,
                 snapshot,
                 after,
                 verified_feedback,
-            ):
+            )
+            if completion_matches:
+                return EngineStepResult(
+                    EngineDecision.COMPLETE,
+                    snapshot,
+                    choice,
+                    verified_feedback,
+                    after,
+                )
+            if not state_matches:
                 return EngineStepResult(
                     EngineDecision.REOBSERVE,
                     snapshot,
                     choice,
                     verified_feedback,
                     after,
-                    "completion evidence is insufficient",
+                    "post-observation matches neither declared transition nor typed completion predicate",
                 )
             return EngineStepResult(
-                EngineDecision.COMPLETE,
+                EngineDecision.REOBSERVE,
                 snapshot,
                 choice,
                 verified_feedback,
                 after,
+                "completion evidence is insufficient",
             )
+
+        if not state_matches:
+            return EngineStepResult(
+                EngineDecision.REOBSERVE,
+                snapshot,
+                choice,
+                verified_feedback,
+                after,
+                "post-observation does not match declared transition",
+            )
+
+        if self_loop:
+            self._verified_self_loops.add(loop_key)
 
         return EngineStepResult(
             EngineDecision.CONTINUE,
@@ -231,7 +252,7 @@ def _promote_verified_feedback(
     after: ToolSnapshot,
     choice: ActionChoice,
 ) -> ToolFeedback:
-    """Attach post-frame provenance after the compiled transition verifies."""
+    """Attach post-frame provenance after a fresh observation is obtained."""
     facts = dict(feedback.facts)
     receipt = facts.get("receipt")
     if isinstance(receipt, Mapping):
