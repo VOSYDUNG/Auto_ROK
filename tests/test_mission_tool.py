@@ -53,7 +53,7 @@ def bundle(frame, state, *, targets=(), facts=None):
             "resource counters across top",
             "bottom-right primary navigation is visible",
         ),
-        "NEW_TROOP_SETUP": ("New Troop", "MARCH", "Units", "Load"),
+        "NEW_TROOP_SETUP": ("New Troop", "MARCH", "Units", "Total Power"),
         "MARCH_IN_PROGRESS": (
             "used march count is greater than before dispatch",
             "troop/path indicator may be visible on map",
