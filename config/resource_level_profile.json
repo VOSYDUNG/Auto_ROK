@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "status": "untrained",
+  "notes": [
+    "Train from the real RESOURCE_SEARCH_PANEL before enabling SET_RESOURCE_LEVEL.",
+    "The runtime will not guess slider geometry or a level range while this profile is untrained."
+  ]
+}
