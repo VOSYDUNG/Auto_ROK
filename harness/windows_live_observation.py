@@ -99,9 +99,13 @@ class WindowsLiveObservationProvider:
         if projected.observation is None or projected.scene is None:
             raise LiveObservationError("projection returned no observation/scene")
 
-        # Preserve client->screen geometry captured by the passive backend.
+        # Preserve current-frame artifact and client->screen geometry captured by
+        # the passive backend.  Visual detectors may read only this frame path;
+        # it is execution provenance, not persistent game-state memory.
         post = capture.get("post_capture")
         facts = dict(projected.scene.facts)
+        facts["image_path"] = str(image)
+        facts["image_path_source"] = "current_capture_artifact"
         if isinstance(post, dict):
             rect = post.get("client_screen_rect")
             if (
