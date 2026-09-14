@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Mapping
+from typing import Any, Mapping
 
 from harness.scene_graph import SceneGraph
 
@@ -24,11 +24,13 @@ class ShortcutBinding:
 class ActionRequest:
     """Semantic request produced by MissionRuntime / GPT-OSS.
 
-    The request intentionally contains no screen coordinates.
+    The request intentionally contains no screen coordinates.  Typed bounded
+    arguments may be carried when the compiled transition declares them.
     """
 
     action_id: str
     target_id: str | None = None
+    arguments: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -55,11 +57,6 @@ class SemanticActionSurface:
 
     Native shortcuts are more stable and cheaper than repeatedly grounding a
     known menu icon. Visual coordinates remain frame-scoped execution data.
-
-    Some Windows OCR engines do not expose confidence. Such detections are not
-    assigned invented scores. They can be used only if both the target itself
-    carries explicit unique-exact authorization and this surface opts in via
-    ``allow_unscored_exact_targets``.
     """
 
     def __init__(
@@ -69,8 +66,6 @@ class SemanticActionSurface:
         min_target_confidence: float = 0.90,
         allow_unscored_exact_targets: bool = False,
     ) -> None:
-        if not 0.0 <= min_target_confidence <= 1.0:
-            raise ValueError("min_target_confidence must be within [0, 1]")
         self.shortcuts = dict(shortcuts or {})
         self.min_target_confidence = min_target_confidence
         self.allow_unscored_exact_targets = allow_unscored_exact_targets
@@ -100,11 +95,15 @@ class SemanticActionSurface:
                 f"action {request.action_id!r} requires a current scene graph"
             )
 
-        target = scene.require_target(
-            request.target_id,
-            min_confidence=self.min_target_confidence,
-            allow_unscored_exact=self.allow_unscored_exact_targets,
-        )
+        target = scene.target(request.target_id, min_confidence=self.min_target_confidence)
+        if target is None and self.allow_unscored_exact_targets:
+            candidate = scene.target(request.target_id, min_confidence=0.0)
+            if candidate is not None and candidate.confidence == 0.0 and candidate.metadata.get("unscored_exact") is True:
+                target = candidate
+        if target is None:
+            raise LookupError(
+                f"target {request.target_id!r} is not grounded for the current action surface"
+            )
         if not scene.is_current(target):
             raise ActionResolutionError(
                 f"target {request.target_id!r} is stale for frame {scene.frame_id!r}"
