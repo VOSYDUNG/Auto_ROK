@@ -38,6 +38,10 @@ class MissionEngine:
     compiled completion edge, the typed completion predicate is authoritative:
     a fresh frame proving the queue increased may complete even if the generic
     state classifier cannot label that post-frame yet.
+
+    Parameterized UI controls are fail-closed until a typed handler for their
+    semantics is trained; a generic click must never silently consume an
+    argument such as ``resource_level=6``.
     """
 
     def __init__(self, compiled: CompiledMission, tool: MissionTool) -> None:
@@ -119,6 +123,15 @@ class MissionEngine:
                 snapshot,
                 choice,
                 reason="precondition evidence missing: " + "; ".join(missing_preconditions),
+            )
+
+        if choice.arguments:
+            return EngineStepResult(
+                EngineDecision.NEEDS_DECISION,
+                snapshot,
+                choice,
+                reason="parameterized action requires a trained typed handler: "
+                + ", ".join(sorted(choice.arguments)),
             )
 
         execute = getattr(self.tool, "execute", None)
