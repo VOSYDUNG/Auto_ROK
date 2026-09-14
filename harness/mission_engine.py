@@ -33,15 +33,10 @@ class EngineStepResult:
 class MissionEngine:
     """Execute one declared transition, then verify it from fresh evidence.
 
-    Dispatch is never success. A fresh observation is mandatory. For a normal
-    transition the post-state must match the compiled edge. For an explicitly
-    compiled completion edge, the typed completion predicate is authoritative:
-    a fresh frame proving the queue increased may complete even if the generic
-    state classifier cannot label that post-frame yet.
-
-    Parameterized UI controls are fail-closed until a typed handler for their
-    semantics is trained; a generic click must never silently consume an
-    argument such as ``resource_level=6``.
+    Dispatch is never success. A fresh observation is mandatory. Parameterized
+    controls are allowed only when current evidence exposes a typed action
+    contract, and their semantic postcondition must be visible on the fresh
+    post-action frame.
     """
 
     def __init__(self, compiled: CompiledMission, tool: MissionTool) -> None:
@@ -125,7 +120,8 @@ class MissionEngine:
                 reason="precondition evidence missing: " + "; ".join(missing_preconditions),
             )
 
-        if choice.arguments:
+        typed_contract = _typed_action_contract(snapshot, choice.action_id)
+        if choice.arguments and typed_contract is None:
             return EngineStepResult(
                 EngineDecision.NEEDS_DECISION,
                 snapshot,
@@ -133,6 +129,10 @@ class MissionEngine:
                 reason="parameterized action requires a trained typed handler: "
                 + ", ".join(sorted(choice.arguments)),
             )
+        if typed_contract is not None:
+            contract_error = _typed_contract_request_error(typed_contract, choice)
+            if contract_error is not None:
+                return EngineStepResult(EngineDecision.REJECT_CHOICE, snapshot, choice, reason=contract_error)
 
         execute = getattr(self.tool, "execute", None)
         if not callable(execute):
@@ -216,6 +216,17 @@ class MissionEngine:
                 "post-observation does not match declared transition",
             )
 
+        typed_error = _typed_postcondition_error(typed_contract, choice, after)
+        if typed_error is not None:
+            return EngineStepResult(
+                EngineDecision.REOBSERVE,
+                snapshot,
+                choice,
+                verified_feedback,
+                after,
+                typed_error,
+            )
+
         if self_loop:
             self._verified_self_loops.add(loop_key)
 
@@ -240,6 +251,44 @@ def _missing_preconditions(
     return tuple(item for item in required_preconditions if evidence.get(item) is not True)
 
 
+def _typed_action_contract(snapshot: ToolSnapshot, action_id: str) -> Mapping[str, Any] | None:
+    contracts = snapshot.facts.get("typed_action_contracts")
+    if not isinstance(contracts, Mapping):
+        return None
+    contract = contracts.get(action_id)
+    return contract if isinstance(contract, Mapping) else None
+
+
+def _typed_contract_request_error(contract: Mapping[str, Any], choice: ActionChoice) -> str | None:
+    if contract.get("verification_mode") != "fact_equals_argument":
+        return "typed action contract uses an unsupported verification mode"
+    argument = contract.get("argument")
+    fact = contract.get("fact")
+    if not isinstance(argument, str) or not argument or not isinstance(fact, str) or not fact:
+        return "typed action contract is malformed"
+    if set(choice.arguments) != {argument}:
+        return "typed action arguments do not match the trained control contract"
+    return None
+
+
+def _typed_postcondition_error(
+    contract: Mapping[str, Any] | None,
+    choice: ActionChoice,
+    after: ToolSnapshot,
+) -> str | None:
+    if contract is None:
+        return None
+    argument = contract.get("argument")
+    fact = contract.get("fact")
+    if not isinstance(argument, str) or not isinstance(fact, str):
+        return "typed action contract is malformed"
+    expected = choice.arguments.get(argument)
+    observed = after.facts.get(fact)
+    if observed != expected:
+        return f"typed postcondition {fact!r} did not equal requested {argument!r}"
+    return None
+
+
 def _dispatch_receipt_error(
     facts: Mapping[str, Any],
     before: ToolSnapshot,
@@ -256,6 +305,8 @@ def _dispatch_receipt_error(
         return "dispatch receipt target does not match choice"
     if receipt.get("non_interference_confirmed") is not True:
         return "dispatch receipt lacks non-interference proof"
+    if dict(receipt.get("bounded_arguments") or {}) != dict(choice.arguments):
+        return "dispatch receipt arguments do not match choice"
     return None
 
 
@@ -275,6 +326,7 @@ def _promote_verified_feedback(
     verified_receipt.setdefault("action_id", choice.action_id)
     verified_receipt.setdefault("target_id", choice.target_id)
     verified_receipt.setdefault("before_frame_id", before.frame_id)
+    verified_receipt.setdefault("bounded_arguments", dict(choice.arguments))
     verified_receipt["after_frame_id"] = after.frame_id
     facts["receipt"] = verified_receipt
     return ToolFeedback(
