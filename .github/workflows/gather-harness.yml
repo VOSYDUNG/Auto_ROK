@@ -3,12 +3,16 @@ name: gather-harness
 on:
   pull_request:
     paths:
+      - "AGENTS.md"
       - "harness/**"
       - "scripts/run_gather_tick.py"
       - "scripts/windows_ocr.ps1"
+      - "scripts/validate_engineering_graph.py"
       - "config/mission_flows.yaml"
       - "config/ui_states.yaml"
       - "config/gather_ocr_targets.json"
+      - "config/engineering_graph.yaml"
+      - "docs/GRAPH_ENGINEERING.md"
       - "tests/test_mission_*.py"
       - "tests/test_state_*.py"
       - "tests/test_gather_facts.py"
@@ -37,6 +41,8 @@ jobs:
           python-version: "3.11"
       - name: Install focused test dependencies
         run: python -m pip install --upgrade pytest PyYAML
+      - name: Validate engineering graph
+        run: python scripts/validate_engineering_graph.py
       - name: Run deterministic gather harness tests
         run: >-
           python -m pytest -q
