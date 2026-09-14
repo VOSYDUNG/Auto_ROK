@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "status": "untrained",
+  "min_margin": 0.08,
+  "prototypes": [],
+  "notes": [
+    "Populate only from operator-labelled real CITY_VIEW and WORLD_MAP_VIEW client frames.",
+    "An empty profile is fail-closed and emits no main-view state evidence."
+  ]
+}
