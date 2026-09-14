@@ -1,0 +1,40 @@
+name: gather-harness
+
+on:
+  pull_request:
+    paths:
+      - "harness/**"
+      - "config/mission_flows.yaml"
+      - "config/ui_states.yaml"
+      - "tests/test_mission_*.py"
+      - "tests/test_state_*.py"
+      - "tests/test_gather_facts.py"
+      - ".github/workflows/gather-harness.yml"
+  push:
+    branches:
+      - agentic-harness-v1
+      - gpt-gather-03
+
+jobs:
+  focused-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused test dependencies
+        run: python -m pip install --upgrade pytest PyYAML
+      - name: Run deterministic gather harness tests
+        run: >-
+          python -m pytest -q
+          tests/test_mission_loader.py
+          tests/test_state_classifier.py
+          tests/test_state_adapter.py
+          tests/test_mission_engine.py
+          tests/test_mission_tool.py
+          tests/test_mission_selector.py
+          tests/test_mission_store.py
+          tests/test_gather_facts.py
+          tests/test_mission_runner.py
