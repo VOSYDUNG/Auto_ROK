@@ -1,9 +1,8 @@
 """Deterministic CITY_VIEW/WORLD_MAP_VIEW evidence from trained visual signatures.
 
-The detector intentionally separates *runtime matching* from *training data*.
-It never invents a city/world state when no trained profile is available or when
-scores are too close.  Profiles are learned from operator-labelled screenshots
-and stored as numeric prototypes; runtime only compares the current frame.
+Runtime matching is separated from training data. The detector never invents a
+city/world state when no trained profile is available, scores are too close, or
+a foreground gather surface is visibly open over the underlying main view.
 """
 from __future__ import annotations
 
@@ -21,6 +20,14 @@ from harness.mission_tool import ObservationBundle, ObservationProvider
 CITY_VIEW = "CITY_VIEW"
 WORLD_MAP_VIEW = "WORLD_MAP_VIEW"
 _SUPPORTED = {CITY_VIEW, WORLD_MAP_VIEW}
+_FOREGROUND_MARKERS = {
+    "search",
+    "resource point",
+    "gather",
+    "dispatch a new troop from your city",
+    "new troop",
+    "march",
+}
 
 _CITY_EVIDENCE = (
     "city buildings occupy central world canvas",
@@ -61,8 +68,7 @@ class MainViewProfile:
 
     @classmethod
     def load(cls, path: str | Path) -> "MainViewProfile":
-        source = Path(path)
-        raw = json.loads(source.read_text(encoding="utf-8"))
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
         if not isinstance(raw, Mapping) or raw.get("schema_version") != 1:
             raise MainViewProfileError("main-view profile must use schema_version=1")
         min_margin = raw.get("min_margin", 0.08)
@@ -126,11 +132,7 @@ def classify_signature(vector: Sequence[float], profile: MainViewProfile) -> Mai
 
 
 def extract_visual_signature(image_path: str | Path) -> tuple[float, ...]:
-    """Extract a layout/color/edge signature from a client-area screenshot.
-
-    OpenCV is imported lazily because non-Windows CI validates the runtime
-    contracts without installing the live capture dependency set.
-    """
+    """Extract a coarse layout/color/edge signature from one client screenshot."""
     try:
         import cv2  # type: ignore
         import numpy as np  # type: ignore
@@ -154,8 +156,6 @@ def extract_visual_signature(image_path: str | Path) -> tuple[float, ...]:
             x1, x2 = col * cell_w, (col + 1) * cell_w if col < cols - 1 else image.shape[1]
             cell = hsv[y1:y2, x1:x2]
             edge_cell = edges[y1:y2, x1:x2]
-            # Hue/saturation/value means and spreads preserve coarse visual
-            # composition while remaining insensitive to exact object positions.
             for channel, scale in ((0, 180.0), (1, 255.0), (2, 255.0)):
                 values = cell[:, :, channel] / scale
                 features.extend((float(values.mean()), float(values.std())))
@@ -163,8 +163,21 @@ def extract_visual_signature(image_path: str | Path) -> tuple[float, ...]:
     return _unit(tuple(features))
 
 
+def _visible_markers(bundle: ObservationBundle) -> set[str]:
+    markers: set[str] = set()
+    for item in bundle.observation.evidence:
+        for value in (item.label, item.value):
+            if isinstance(value, str) and value.strip():
+                markers.add(value.strip().casefold())
+    raw = bundle.scene.facts.get("raw_text")
+    if isinstance(raw, str):
+        folded = raw.casefold()
+        markers.update(marker for marker in _FOREGROUND_MARKERS if marker in folded)
+    return markers
+
+
 class MainViewVisualObservationProvider:
-    """Append main-view semantic evidence only when a trained profile matches."""
+    """Append main-view evidence only for an unobscured, trained visual match."""
 
     def __init__(
         self,
@@ -179,8 +192,17 @@ class MainViewVisualObservationProvider:
 
     def observe(self, context: MissionContext) -> ObservationBundle:
         bundle = self.inner.observe(context)
-        image_path = bundle.scene.facts.get("image_path")
         facts = dict(bundle.scene.facts)
+        foreground = sorted(_FOREGROUND_MARKERS & _visible_markers(bundle))
+        if foreground:
+            facts["main_view_detector"] = {
+                "status": "suppressed",
+                "reason": "foreground_gather_surface_visible",
+                "foreground_markers": foreground,
+            }
+            return ObservationBundle(bundle.observation, replace(bundle.scene, facts=facts))
+
+        image_path = bundle.scene.facts.get("image_path")
         if not isinstance(image_path, str) or not image_path:
             facts["main_view_detector"] = {"status": "unavailable", "reason": "image_path_missing"}
             return ObservationBundle(bundle.observation, replace(bundle.scene, facts=facts))
