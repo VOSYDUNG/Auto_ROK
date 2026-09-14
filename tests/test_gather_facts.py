@@ -1,5 +1,9 @@
 from harness.contracts import Evidence, Observation
-from harness.gather_facts import GatherFactObservationProvider, extract_march_queue
+from harness.gather_facts import (
+    GatherFactObservationProvider,
+    extract_march_queue,
+    extract_visible_resource_level,
+)
 from harness.mission_runtime import MissionContext
 from harness.mission_tool import ObservationBundle
 from harness.scene_graph import SceneGraph
@@ -42,3 +46,18 @@ def test_ambiguous_visible_queue_fails_closed():
     assert extract_march_queue(ambiguous) is None
     result = GatherFactObservationProvider(One(ambiguous), character_id="hien").observe(CONTEXT)
     assert "march_queue_used" not in result.scene.facts
+
+
+def test_unique_visible_level_is_projected_for_typed_postcondition():
+    source = bundle("Logging Camp Level 6 SEARCH")
+    assert extract_visible_resource_level(source) == 6
+    result = GatherFactObservationProvider(One(source), character_id="hien").observe(CONTEXT)
+    assert result.scene.facts["selected_search_level"] == 6
+    assert result.scene.facts["selected_search_level_source"] == "visible_ocr_level_text"
+
+
+def test_ambiguous_visible_levels_fail_closed():
+    source = bundle("Level 5 ... Level 6")
+    assert extract_visible_resource_level(source) is None
+    result = GatherFactObservationProvider(One(source), character_id="hien").observe(CONTEXT)
+    assert "selected_search_level" not in result.scene.facts
