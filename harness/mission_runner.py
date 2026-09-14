@@ -51,12 +51,20 @@ class MissionRunner:
 
     def tick(self, context: MissionContext) -> MissionTickResult:
         existing = self.store.load(context)
-        if existing is not None and existing.status is CheckpointStatus.COMPLETE:
-            return MissionTickResult(
-                CheckpointStatus.COMPLETE,
-                existing,
-                reason="mission occurrence already completed",
-            )
+        if existing is not None:
+            mismatch = self._checkpoint_mismatch(context, existing)
+            if mismatch is not None:
+                return MissionTickResult(
+                    CheckpointStatus.BLOCKED,
+                    existing,
+                    reason=mismatch,
+                )
+            if existing.status is CheckpointStatus.COMPLETE:
+                return MissionTickResult(
+                    CheckpointStatus.COMPLETE,
+                    existing,
+                    reason="mission occurrence already completed",
+                )
 
         expected_revision = existing.revision if existing is not None else 0
         engine = MissionEngine(self.compiled, self.tool)
@@ -130,6 +138,20 @@ class MissionRunner:
             result,
             result.reason,
         )
+
+    def _checkpoint_mismatch(
+        self,
+        context: MissionContext,
+        existing: MissionCheckpoint,
+    ) -> str | None:
+        if existing.attempt != context.attempt:
+            return (
+                f"checkpoint attempt {existing.attempt} does not match requested attempt "
+                f"{context.attempt}; use a new run_id for a new occurrence"
+            )
+        if dict(existing.parameters) != dict(self.compiled.parameters):
+            return "checkpoint parameters differ from the compiled mission; use a new run_id"
+        return None
 
     def _bounded_choice(
         self,
