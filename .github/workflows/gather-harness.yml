@@ -3,16 +3,17 @@ name: gather-harness
 on:
   pull_request:
     paths:
-      - "AGENTS.md"
       - "harness/**"
       - "scripts/run_gather_tick.py"
       - "scripts/windows_ocr.ps1"
-      - "scripts/validate_engineering_graph.py"
+      - "scripts/train_main_view_profiles.py"
+      - "scripts/train_resource_level_profile.py"
       - "config/mission_flows.yaml"
       - "config/ui_states.yaml"
       - "config/gather_ocr_targets.json"
+      - "config/main_view_profiles.json"
+      - "config/resource_level_profile.json"
       - "config/engineering_graph.yaml"
-      - "docs/GRAPH_ENGINEERING.md"
       - "tests/test_mission_*.py"
       - "tests/test_state_*.py"
       - "tests/test_gather_facts.py"
@@ -24,6 +25,9 @@ on:
       - "tests/test_windows_input.py"
       - "tests/test_windows_interference_guard.py"
       - "tests/test_policy_overlay.py"
+      - "tests/test_main_view_detector.py"
+      - "tests/test_resource_level_control.py"
+      - "tests/test_typed_action_contracts.py"
       - ".github/workflows/gather-harness.yml"
   push:
     branches:
@@ -63,5 +67,8 @@ jobs:
           tests/test_windows_input.py
           tests/test_windows_interference_guard.py
           tests/test_policy_overlay.py
+          tests/test_main_view_detector.py
+          tests/test_resource_level_control.py
+          tests/test_typed_action_contracts.py
       - name: Verify live-tick composition imports without Win32 side effects
         run: python -c "import scripts.run_gather_tick"
