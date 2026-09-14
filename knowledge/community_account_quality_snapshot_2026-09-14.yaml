@@ -1,0 +1,122 @@
+schema_version: 1
+snapshot_date: "2026-09-14"
+status: researched_community_snapshot
+purpose: "Use marketplace/community behavior to identify which account dimensions matter enough to belong in Operator Layer. This is not a price table and not game truth."
+
+source_classes:
+  - id: REDDIT_ACCOUNT_VALUE_2026_07
+    type: community_discussion
+    finding: "Recent community discussion repeatedly prioritizes armaments, gear, speedups and VIP when judging account value/readiness."
+  - id: REDDIT_ACCOUNT_REVIEW_2026_07
+    type: community_discussion
+    finding: "Reviewers ask to see all marches, gear, armaments, gold heads and speedups before making a serious assessment."
+  - id: REDDIT_ACCOUNT_VALUE_2025_11
+    type: community_discussion
+    finding: "Power alone is insufficient; age/season, gold heads, equipment, gems, armaments, kill points and dead troops materially change assessment."
+  - id: REDDIT_ACCOUNT_VALUE_2024_09
+    type: community_discussion
+    finding: "VIP, gold heads, speedups, resources, passports and progress toward T5 are recurring account-quality signals."
+  - id: ROKMARKT_VALUE_TOOL_2026_09
+    type: marketplace_tool
+    finding: "Valuation input set uses Power, Kill Points, VIP, legendary gear, talented gear, expertised commanders, awakened gear, gold heads, passports, speedups and alliance credits."
+  - id: MARKET_LISTING_73M_2026
+    type: marketplace_listing
+    finding: "A contemporary listing highlights Power, VIP, Kill Points, universal speedups, resource stock, commanders, farm accounts and current KVK context."
+
+community_consensus_dimensions:
+  core_progression:
+    fields:
+      - power
+      - vip_level
+      - kingdom_or_season_stage
+      - t5_readiness
+
+  combat_history:
+    fields:
+      - kill_points
+      - dead_troops
+      - victory_defeat_when_available
+      - kvk_history
+    notes:
+      - "Kill Points should be interpreted relative to power, account age and season; never use KP alone."
+
+  investment_reserves:
+    fields:
+      - universal_speedup_days
+      - training_speedup_days
+      - healing_speedup_days
+      - legendary_sculptures_gold_heads
+      - gems
+      - legendary_materials
+      - action_point_reserve
+      - season_coins
+      - conquest_coins
+    notes:
+      - "Reserve stock describes future optionality; it is distinct from current power."
+
+  equipment_quality:
+    fields:
+      - legendary_equipment_count
+      - talented_legendary_equipment_count
+      - legendary_accessory_count
+      - epic_accessory_count
+      - iconic_or_awakened_state
+      - complete_march_sets
+
+  armament_quality:
+    fields:
+      - usable_armament_set_count
+      - march_role_tags
+      - approximate_stat_quality
+      - rare_inscription_count
+      - legendary_inscription_count
+    notes:
+      - "Recent community discussion gives armaments unusually high weight because strong rolls/inscriptions are RNG-constrained."
+
+  commander_depth:
+    fields:
+      - owned_commanders
+      - expertised_commanders
+      - partial_skill_states
+      - current_meta_usable_pairs
+      - role_coverage
+
+  resource_liquidity:
+    fields:
+      - food_stock
+      - wood_stock
+      - stone_stock
+      - gold_stock
+      - selectable_resource_stock
+
+  migration_mobility:
+    fields:
+      - passport_pages
+      - alliance_credits
+      - migration_ready
+      - current_kingdom_seed
+      - current_kvk_state
+
+  account_ecosystem:
+    fields:
+      - farm_accounts
+      - farm_power_levels
+      - account_binding_methods
+    notes:
+      - "Farm-network depth changes operational capacity even though it is not main-character combat strength."
+
+  kingdom_environment:
+    fields:
+      - kingdom_seed
+      - alliance_strength_context
+      - gold_chest_frequency_signal
+      - kvk_schedule_or_state
+    notes:
+      - "Environment changes what the same account can realistically do and how costly it is to remain competitive."
+
+operator_layer_rules:
+  - "Community/marketplace importance determines schema priority, not truth value."
+  - "Prefer direct visible game observation for account facts."
+  - "Sales listings are secondary evidence and may be incomplete or exaggerated."
+  - "Do not collapse account quality into one score until a transparent, versioned weighting model exists."
+  - "Keep market valuation separate from runtime mission policy."
