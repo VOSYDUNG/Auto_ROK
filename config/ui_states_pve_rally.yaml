@@ -1,0 +1,113 @@
+schema_version: 1
+source:
+  type: operator_screenshots
+  observed_at: "2026-09-14"
+  scope: "Barbarian Fort search and rally flow"
+
+states:
+  - id: BARBARIAN_SEARCH_PANEL
+    family: RESOURCE_SEARCH_PANEL
+    status: trained
+    description: "World-map Search panel on the Barbarians category, with Barbarians/Barbarian Fort tabs and level control."
+    positive_evidence:
+      - kind: tab
+        value: "Barbarians"
+      - kind: tab
+        value: "Barbarian Fort"
+      - kind: button
+        value: "SEARCH"
+      - kind: control
+        value: "Level slider"
+    outputs:
+      - selected_barbarian_subtype
+      - selected_level
+    entities:
+      - SEARCH_TAB_BARBARIANS
+      - SEARCH_TAB_BARBARIAN_FORT
+      - BARBARIAN_LEVEL_CONTROL
+      - BARBARIAN_SEARCH_EXECUTE
+
+  - id: BARBARIAN_FORT_DETAIL
+    status: trained
+    description: "Selected Barbarian Fort detail card on the world map."
+    positive_evidence:
+      - kind: text_pattern
+        value: "Lvl N Barbarian Fort"
+      - kind: text
+        value: "Potential Rewards"
+      - kind: button
+        value: "RALLY"
+    outputs:
+      - fort_level
+      - fort_coordinates_when_visible
+      - potential_rewards_when_readable
+      - suggested_troops_when_readable
+      - suggested_tier_when_readable
+      - visible_countdown_when_present
+    entities:
+      - BARBARIAN_FORT_RALLY
+    observed_example:
+      fort_level: 3
+      suggested_troops: 480000
+      suggested_tier: 3
+    notes:
+      - "Observed values are frame-local examples, not permanent rules."
+
+  - id: RALLY_ATTACK_SETUP
+    status: trained
+    description: "Right-side Rally Attack drawer where rally preparation duration is selected before creating the rally."
+    positive_evidence:
+      - kind: text
+        value: "Rally Attack"
+      - kind: text
+        value: "Select a prep time for the rally."
+      - kind: button
+        value: "RALLY"
+    outputs:
+      - selected_prep_time
+      - march_queue_used_when_visible
+      - march_queue_capacity_when_visible
+    entities:
+      - RALLY_PREP_5_MINUTES
+      - RALLY_PREP_10_MINUTES
+      - RALLY_PREP_30_MINUTES
+      - RALLY_PREP_8_HOURS
+      - RALLY_CREATE
+    observed_options:
+      - "5 Minutes"
+      - "10 Minutes"
+      - "30 Minutes"
+      - "8 Hours"
+
+  - id: RALLY_NEW_TROOP_SETUP
+    parent: NEW_TROOP_SETUP
+    status: trained
+    description: "New Troop modal reached while creating a Barbarian Fort rally."
+    positive_evidence:
+      - kind: text
+        value: "New Troop"
+      - kind: button
+        value: "MARCH"
+      - kind: text
+        value: "Action Point Cost"
+    outputs:
+      - selected_primary_commander_when_detectable
+      - selected_secondary_commander_when_detectable
+      - troop_type_counts
+      - total_units
+      - action_point_cost
+      - total_power
+      - march_time
+    entities:
+      - RALLY_TROOP_CLEAR
+      - RALLY_TROOP_MARCH
+    observed_example:
+      total_units: 25000
+      action_point_cost: 150
+    notes:
+      - "Commander and troop-selection policy is intentionally unresolved until Operator/Commander Intelligence supplies a recommendation."
+
+acquisition_rules:
+  - "All facts are derived from visible pixels only."
+  - "Level, troop suggestion, AP cost, rewards and timers are ephemeral observations and must carry frame/time provenance."
+  - "Do not infer that a selected prep time is globally preferred merely because it appears selected in one training screenshot."
