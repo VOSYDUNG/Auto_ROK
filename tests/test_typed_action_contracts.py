@@ -67,13 +67,14 @@ class Tool:
 def test_typed_level_control_requires_visible_requested_level_on_fresh_frame():
     before = snapshot("f1", selected_level=5)
     after = snapshot("f2", selected_level=6)
-    result = MissionEngine(compiled(), Tool(before, after)).step(
+    engine = MissionEngine(compiled(), Tool(before, after))
+    result = engine.step(
         CONTEXT,
         ActionChoice("SET_RESOURCE_LEVEL", "SEARCH_LEVEL_CONTROL", {"resource_level": 6}),
     )
     assert result.decision is EngineDecision.CONTINUE
     assert result.feedback.code == "VERIFIED"
-    assert (CONTEXT.run_id, "RESOURCE_SEARCH_PANEL", "SET_RESOURCE_LEVEL") in MissionEngine(compiled(), Tool(before, after)).verified_self_loops or True
+    assert (CONTEXT.run_id, "RESOURCE_SEARCH_PANEL", "SET_RESOURCE_LEVEL") in engine.verified_self_loops
 
 
 def test_typed_level_control_reobserves_when_visible_level_does_not_match_request():
