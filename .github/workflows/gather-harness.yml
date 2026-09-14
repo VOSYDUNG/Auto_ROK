@@ -5,12 +5,17 @@ on:
     paths:
       - "harness/**"
       - "scripts/run_gather_tick.py"
+      - "scripts/windows_ocr.ps1"
       - "config/mission_flows.yaml"
       - "config/ui_states.yaml"
+      - "config/gather_ocr_targets.json"
       - "tests/test_mission_*.py"
       - "tests/test_state_*.py"
       - "tests/test_gather_facts.py"
+      - "tests/test_gather_runtime_contracts.py"
       - "tests/test_observation_bridge.py"
+      - "tests/test_ocr_semantics.py"
+      - "tests/test_action_surface.py"
       - "tests/test_screen_mapped_surface.py"
       - "tests/test_windows_input.py"
       - "tests/test_windows_interference_guard.py"
@@ -44,7 +49,10 @@ jobs:
           tests/test_mission_store.py
           tests/test_gather_facts.py
           tests/test_mission_runner.py
+          tests/test_gather_runtime_contracts.py
           tests/test_observation_bridge.py
+          tests/test_ocr_semantics.py
+          tests/test_action_surface.py
           tests/test_screen_mapped_surface.py
           tests/test_windows_input.py
           tests/test_windows_interference_guard.py
