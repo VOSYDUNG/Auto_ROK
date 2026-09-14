@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from harness.mission_loader import CompiledMission
 from harness.mission_runtime import ActionChoice, MissionContext, MissionTool, ToolFeedback, ToolSnapshot
@@ -14,6 +14,7 @@ class EngineDecision(str, Enum):
     COMPLETE = "complete"
     WAIT = "wait"
     REOBSERVE = "reobserve"
+    NEEDS_DECISION = "needs_decision"
     REJECT_CHOICE = "reject_choice"
     BLOCKED = "blocked"
     FAILED = "failed"
@@ -43,8 +44,43 @@ class MissionEngine:
         self.tool = tool
         self._verified_self_loops: set[tuple[str, str, str]] = set()
 
+    @property
+    def verified_self_loops(self) -> tuple[tuple[str, str, str], ...]:
+        return tuple(sorted(self._verified_self_loops))
+
+    def restore_verified_self_loops(
+        self,
+        items: Sequence[tuple[str, str, str]],
+    ) -> None:
+        restored: set[tuple[str, str, str]] = set()
+        for item in items:
+            if (
+                not isinstance(item, tuple)
+                or len(item) != 3
+                or not all(isinstance(part, str) and part for part in item)
+            ):
+                raise ValueError("invalid verified self-loop checkpoint entry")
+            restored.add(item)
+        self._verified_self_loops.update(restored)
+
     def step(self, context: MissionContext, choice: ActionChoice | None) -> EngineStepResult:
         snapshot = self.tool.observe(context)
+        return self.step_from_snapshot(context, snapshot, choice)
+
+    def step_from_snapshot(
+        self,
+        context: MissionContext,
+        snapshot: ToolSnapshot,
+        choice: ActionChoice | None,
+    ) -> EngineStepResult:
+        """Advance from an already observed snapshot without recapturing it."""
+        if snapshot.mission_id != context.mission_id or snapshot.task_id != context.task_id:
+            return EngineStepResult(
+                EngineDecision.BLOCKED,
+                snapshot,
+                choice,
+                reason="snapshot identity does not match mission context",
+            )
         if snapshot.state in {"UNKNOWN_STATE", "AMBIGUOUS_STATE"}:
             return EngineStepResult(EngineDecision.REOBSERVE, snapshot, reason="state is not actionable")
         if choice is None:
@@ -71,6 +107,18 @@ class MissionEngine:
         loop_key = (context.run_id, snapshot.state, choice.action_id)
         if self_loop and loop_key in self._verified_self_loops:
             return EngineStepResult(EngineDecision.REOBSERVE, snapshot, choice, reason="verified self-loop cannot be reselected")
+
+        required_preconditions = self.compiled.transition_preconditions.get(
+            f"{transition.from_state}:{transition.action_id}", ()
+        )
+        missing_preconditions = _missing_preconditions(snapshot.facts, required_preconditions)
+        if missing_preconditions:
+            return EngineStepResult(
+                EngineDecision.NEEDS_DECISION,
+                snapshot,
+                choice,
+                reason="precondition evidence missing: " + "; ".join(missing_preconditions),
+            )
 
         execute = getattr(self.tool, "execute", None)
         if not callable(execute):
@@ -112,9 +160,6 @@ class MissionEngine:
         if self_loop:
             self._verified_self_loops.add(loop_key)
 
-        required_preconditions = self.compiled.transition_preconditions.get(
-            f"{transition.from_state}:{transition.action_id}", ()
-        )
         completion_requested = transition.completion_edge or feedback.completed
         if completion_requested:
             if not _completion_matches(
@@ -149,6 +194,18 @@ class MissionEngine:
         )
 
 
+def _missing_preconditions(
+    facts: Mapping[str, Any],
+    required_preconditions: Sequence[str],
+) -> tuple[str, ...]:
+    if not required_preconditions:
+        return ()
+    evidence = facts.get("precondition_evidence")
+    if not isinstance(evidence, Mapping):
+        return tuple(required_preconditions)
+    return tuple(item for item in required_preconditions if evidence.get(item) is not True)
+
+
 def _dispatch_receipt_error(
     facts: Mapping[str, Any],
     before: ToolSnapshot,
@@ -180,9 +237,6 @@ def _promote_verified_feedback(
     if isinstance(receipt, Mapping):
         verified_receipt = dict(receipt)
     else:
-        # Legacy fake/test executors may return VERIFIED without a dispatch
-        # receipt. They remain usable for non-completion transition tests, but
-        # cannot satisfy a typed completion rule.
         verified_receipt = {}
     verified_receipt.setdefault("action_id", choice.action_id)
     verified_receipt.setdefault("target_id", choice.target_id)
@@ -233,10 +287,7 @@ def _completion_matches(
     after_character = after.facts.get("character_id")
     if not isinstance(before_character, str) or not before_character or before_character != after_character:
         return False
-    if feedback.facts.get("troop_selection_policy_valid") is not True:
-        return False
-    evidence = feedback.facts.get("precondition_evidence")
-    if not isinstance(evidence, Mapping) or any(evidence.get(item) is not True for item in required_preconditions):
+    if _missing_preconditions(before.facts, required_preconditions):
         return False
     return _has_matching_receipt(feedback.facts, before.frame_id, after.frame_id) and (
         feedback.facts["receipt"].get("character_id") == before_character
