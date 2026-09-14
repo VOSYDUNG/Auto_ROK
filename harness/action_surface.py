@@ -55,6 +55,11 @@ class SemanticActionSurface:
 
     Native shortcuts are more stable and cheaper than repeatedly grounding a
     known menu icon. Visual coordinates remain frame-scoped execution data.
+
+    Some Windows OCR engines do not expose confidence. Such detections are not
+    assigned invented scores. They can be used only if both the target itself
+    carries explicit unique-exact authorization and this surface opts in via
+    ``allow_unscored_exact_targets``.
     """
 
     def __init__(
@@ -62,9 +67,13 @@ class SemanticActionSurface:
         shortcuts: Mapping[str, str] | None = None,
         *,
         min_target_confidence: float = 0.90,
+        allow_unscored_exact_targets: bool = False,
     ) -> None:
+        if not 0.0 <= min_target_confidence <= 1.0:
+            raise ValueError("min_target_confidence must be within [0, 1]")
         self.shortcuts = dict(shortcuts or {})
         self.min_target_confidence = min_target_confidence
+        self.allow_unscored_exact_targets = allow_unscored_exact_targets
 
     def resolve(
         self,
@@ -94,6 +103,7 @@ class SemanticActionSurface:
         target = scene.require_target(
             request.target_id,
             min_confidence=self.min_target_confidence,
+            allow_unscored_exact=self.allow_unscored_exact_targets,
         )
         if not scene.is_current(target):
             raise ActionResolutionError(
