@@ -1,0 +1,343 @@
+schema_version: 1
+graph_id: AUTO_ROK_GATHER_VERTICAL_SLICE
+updated_at: "2026-09-14"
+
+principles:
+  - deterministic_first
+  - fresh_observation_before_verification
+  - dispatch_is_not_success
+  - unknown_gameplay_policy_is_needs_decision
+  - one_canonical_authority_per_responsibility
+  - agent_packages_are_subgraphs_not_file_lists
+
+roots:
+  - mission_contract
+  - live_capture
+
+required_runtime_path:
+  - mission_contract
+  - mission_compiler
+  - live_capture
+  - windows_ocr
+  - observation_projection
+  - ocr_semantics
+  - state_classifier
+  - gather_fact_extractor
+  - policy_overlay
+  - state_adapter
+  - deterministic_selector
+  - mission_engine
+  - bounded_mission_tool
+  - semantic_action_surface
+  - screen_mapping
+  - interference_guard
+  - windows_input
+  - post_action_verification
+  - mission_store
+  - mission_runner
+  - gather_cli
+
+nodes:
+  - id: mission_contract
+    kind: config
+    responsibility: Declares GATHER_RESOURCE states, actions, parameters, preconditions and completion contract.
+    authority: canonical
+    status: implemented
+    path: config/mission_flows.yaml
+    evidence:
+      - tests/test_mission_loader.py
+
+  - id: mission_compiler
+    kind: code
+    responsibility: Compiles trained mission YAML into typed runtime transitions without inventing policy.
+    authority: canonical
+    status: implemented
+    path: harness/mission_loader.py
+    evidence:
+      - tests/test_mission_loader.py
+      - tests/test_gather_runtime_contracts.py
+
+  - id: live_capture
+    kind: code
+    responsibility: Captures one current ROK HWND client frame with identity, geometry and hash provenance.
+    authority: canonical
+    status: implemented
+    path: harness/windows_capture_backend.py
+    evidence:
+      - docs/WINDOWS_OBSERVATION.md
+
+  - id: windows_ocr
+    kind: adapter
+    responsibility: Produces Windows.Media.Ocr elements bound to the captured image/hash and client geometry.
+    authority: canonical
+    status: implemented
+    path: scripts/windows_ocr.ps1
+    evidence:
+      - tests/test_observation_bridge.py
+
+  - id: observation_projection
+    kind: code
+    responsibility: Rejects stale/cross-frame evidence and projects OCR/capture into Observation plus SceneGraph.
+    authority: canonical
+    status: implemented
+    path: harness/observation_bridge.py
+    evidence:
+      - tests/test_observation_bridge.py
+
+  - id: ocr_semantics
+    kind: code
+    responsibility: Assembles OCR phrases and explicitly grounds exact targets without fabricating detector confidence.
+    authority: canonical
+    status: implemented
+    path: harness/ocr_semantics.py
+    evidence:
+      - tests/test_ocr_semantics.py
+
+  - id: state_classifier
+    kind: code
+    responsibility: Classifies only trained GATHER states from current-frame semantic evidence; otherwise fails closed.
+    authority: canonical
+    status: implemented
+    path: harness/state_classifier.py
+    evidence:
+      - tests/test_state_classifier.py
+
+  - id: gather_fact_extractor
+    kind: code
+    responsibility: Extracts bounded GATHER facts such as march queue usage and character identity.
+    authority: canonical
+    status: implemented
+    path: harness/gather_facts.py
+    evidence:
+      - tests/test_gather_facts.py
+
+  - id: policy_overlay
+    kind: code
+    responsibility: Injects only explicit operator-approved gameplay precondition evidence.
+    authority: canonical
+    status: implemented
+    path: harness/policy_overlay.py
+    evidence:
+      - tests/test_policy_overlay.py
+
+  - id: state_adapter
+    kind: adapter
+    responsibility: Converts metadata-rich classification and scene evidence into MissionTool snapshots.
+    authority: canonical
+    status: implemented
+    path: harness/state_adapter.py
+    evidence:
+      - tests/test_state_adapter.py
+
+  - id: deterministic_selector
+    kind: code
+    responsibility: Resolves zero/one/many eligible actions without model use on deterministic states.
+    authority: canonical
+    status: implemented
+    path: harness/mission_selector.py
+    evidence:
+      - tests/test_mission_selector.py
+
+  - id: mission_engine
+    kind: code
+    responsibility: Executes one declared transition and promotes dispatch to verified only from fresh evidence.
+    authority: canonical
+    status: implemented
+    path: harness/mission_engine.py
+    evidence:
+      - tests/test_mission_engine.py
+      - tests/test_gather_runtime_contracts.py
+
+  - id: bounded_mission_tool
+    kind: code
+    responsibility: Bridges observation/classification to bounded semantic action dispatch and typed receipts.
+    authority: canonical
+    status: implemented
+    path: harness/mission_tool.py
+    evidence:
+      - tests/test_mission_tool.py
+
+  - id: semantic_action_surface
+    kind: code
+    responsibility: Resolves semantic actions via trained shortcuts or current-frame visual targets.
+    authority: canonical
+    status: implemented
+    path: harness/action_surface.py
+    evidence:
+      - tests/test_action_surface.py
+
+  - id: screen_mapping
+    kind: adapter
+    responsibility: Maps frame/client target geometry into screen coordinates while preserving frame provenance.
+    authority: canonical
+    status: implemented
+    path: harness/screen_mapped_surface.py
+    evidence:
+      - tests/test_screen_mapped_surface.py
+
+  - id: interference_guard
+    kind: safety
+    responsibility: Fails closed unless the expected ROK HWND/PID/foreground/geometry binding is safe for live input.
+    authority: canonical
+    status: implemented
+    path: harness/windows_interference_guard.py
+    evidence:
+      - tests/test_windows_interference_guard.py
+
+  - id: windows_input
+    kind: actuator
+    responsibility: Emits ordinary Win32 mouse/keyboard input only after the guard authorizes actuation.
+    authority: canonical
+    status: implemented
+    path: harness/windows_input.py
+    evidence:
+      - tests/test_windows_input.py
+
+  - id: post_action_verification
+    kind: verification
+    responsibility: Requires a fresh post-action frame, expected transition and typed completion evidence.
+    authority: canonical
+    status: implemented
+    path: harness/mission_engine.py
+    evidence:
+      - tests/test_mission_engine.py
+      - tests/test_mission_tool.py
+
+  - id: mission_store
+    kind: persistence
+    responsibility: Persists mission occurrence identity, revision and verified self-loop checkpoint state atomically.
+    authority: canonical
+    status: implemented
+    path: harness/mission_store.py
+    evidence:
+      - tests/test_mission_store.py
+      - tests/test_mission_runner.py
+
+  - id: mission_runner
+    kind: orchestration
+    responsibility: Runs one caller-driven deterministic mission tick and resumes from durable checkpoint state.
+    authority: canonical
+    status: implemented
+    path: harness/mission_runner.py
+    evidence:
+      - tests/test_mission_runner.py
+
+  - id: gather_cli
+    kind: composition
+    responsibility: Composes live observation, facts, policy, selector, engine, guarded input and checkpoint store for one GATHER tick.
+    authority: canonical
+    status: implemented
+    path: scripts/run_gather_tick.py
+    evidence:
+      - .github/workflows/gather-harness.yml
+
+  - id: city_world_visual_detector
+    kind: perception
+    responsibility: Produce current-frame semantic/layout evidence sufficient to distinguish CITY_VIEW and WORLD_MAP_VIEW from real pixels.
+    authority: missing
+    status: blocked
+    blocker: B001
+
+  - id: resource_level_control
+    kind: actuator
+    responsibility: Set the requested resource level using a typed trained control rather than a guessed generic click.
+    authority: missing
+    status: blocked
+    blocker: B002
+
+  - id: troop_selection_policy
+    kind: policy
+    responsibility: Define whether current commander/unit selection is acceptable for this mission.
+    authority: operator
+    status: needs_decision
+    blocker: B003
+
+  - id: live_replay_evidence
+    kind: verification
+    responsibility: Prove the composed vertical slice against real captured game frames and guarded live actuation.
+    authority: evidence
+    status: blocked
+    blocker: B004
+
+edges:
+  - {from: mission_contract, to: mission_compiler, relation: compiles_into}
+  - {from: mission_compiler, to: deterministic_selector, relation: constrains}
+  - {from: mission_compiler, to: mission_engine, relation: constrains}
+  - {from: live_capture, to: windows_ocr, relation: feeds}
+  - {from: live_capture, to: observation_projection, relation: proves_frame}
+  - {from: windows_ocr, to: observation_projection, relation: feeds}
+  - {from: observation_projection, to: ocr_semantics, relation: feeds}
+  - {from: ocr_semantics, to: state_classifier, relation: feeds}
+  - {from: ocr_semantics, to: gather_fact_extractor, relation: feeds}
+  - {from: observation_projection, to: city_world_visual_detector, relation: requires_for_main_view}
+  - {from: city_world_visual_detector, to: state_classifier, relation: feeds}
+  - {from: gather_fact_extractor, to: policy_overlay, relation: enriches}
+  - {from: policy_overlay, to: state_adapter, relation: feeds}
+  - {from: state_classifier, to: state_adapter, relation: feeds}
+  - {from: state_adapter, to: deterministic_selector, relation: exposes_actions}
+  - {from: deterministic_selector, to: mission_engine, relation: selects_for}
+  - {from: state_adapter, to: bounded_mission_tool, relation: snapshots}
+  - {from: mission_engine, to: bounded_mission_tool, relation: executes_through}
+  - {from: bounded_mission_tool, to: semantic_action_surface, relation: dispatches_to}
+  - {from: semantic_action_surface, to: screen_mapping, relation: resolves_through}
+  - {from: resource_level_control, to: screen_mapping, relation: typed_control}
+  - {from: troop_selection_policy, to: policy_overlay, relation: authorizes}
+  - {from: screen_mapping, to: interference_guard, relation: guarded_by}
+  - {from: interference_guard, to: windows_input, relation: authorizes}
+  - {from: windows_input, to: post_action_verification, relation: requires_fresh_verify}
+  - {from: post_action_verification, to: mission_engine, relation: verifies}
+  - {from: mission_engine, to: mission_store, relation: checkpoints}
+  - {from: mission_store, to: mission_runner, relation: resumes}
+  - {from: mission_engine, to: mission_runner, relation: driven_by}
+  - {from: mission_runner, to: gather_cli, relation: composed_by}
+  - {from: gather_cli, to: live_replay_evidence, relation: must_prove}
+
+blockers:
+  - id: B001
+    title: Main-view perception gap
+    class: perception_data
+    blocks: [city_world_visual_detector, live_replay_evidence]
+    falsification: Real CITY_VIEW/WORLD_MAP_VIEW fixtures classify deterministically from current pixels without hand-authored semantic evidence.
+
+  - id: B002
+    title: Resource-level control not trained
+    class: interaction_training
+    blocks: [resource_level_control, live_replay_evidence]
+    falsification: A typed level-control handler sets a requested level and verifies the visible selected level from a fresh frame.
+
+  - id: B003
+    title: Commander/troop policy is intentionally unknown
+    class: gameplay_policy
+    blocks: [troop_selection_policy, live_replay_evidence]
+    falsification: Operator supplies an explicit policy or explicitly approves current selection for the mission occurrence.
+
+  - id: B004
+    title: End-to-end live evidence missing
+    class: live_verification
+    blocks: [live_replay_evidence]
+    falsification: Guarded one-character GATHER_RESOURCE replay reaches typed completion from real frames with durable checkpoint evidence.
+
+coverage:
+  active_vertical_slice: GATHER_RESOURCE
+  dimensions:
+    mission_contract: covered
+    deterministic_selection: covered
+    persistence_resume: covered
+    action_dispatch_receipt: covered
+    host_input_guard: covered
+    post_action_verification: covered
+    windows_capture: covered
+    windows_ocr_bridge: covered
+    ocr_target_grounding: covered
+    gather_queue_fact: covered
+    main_view_visual_perception: partial
+    resource_level_actuation: missing
+    commander_troop_policy: needs_decision
+    real_live_replay: missing
+  other_mission_branches:
+    CLAIM_ALLIANCE_TERRITORY_RSS: not_covered_end_to_end
+    SWITCH_CHARACTER: not_covered_end_to_end
+    BARBARIAN_FORT_RALLY: training_only
+    EVENT_COORDINATION: not_covered_end_to_end
+    GPT_OSS_DECISION_PROVIDER: deferred
+    MISSION_SCHEDULER: deferred
