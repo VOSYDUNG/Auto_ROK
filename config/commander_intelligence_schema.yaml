@@ -1,0 +1,112 @@
+schema_version: 1
+purpose: "Join current commander meta snapshots with the operator's visible commander inventory to produce account-fit recommendations."
+
+catalog_entry:
+  required:
+    - commander_id
+    - canonical_name
+    - rarity
+    - specialties
+  optional:
+    - aliases
+    - prime_variant_of
+    - release_context
+    - season_access
+    - troop_affinity
+    - role_tags
+
+meta_snapshot:
+  required:
+    - snapshot_id
+    - snapshot_date
+    - sources
+    - role
+    - ranking_method
+  role_enum:
+    - GATHERING
+    - BARBARIAN_FORT_RALLY
+    - NORMAL_BARBARIAN_PVE
+    - OPEN_FIELD
+    - RALLY_PVP
+    - GARRISON
+    - SUPPORT
+    - CANYON
+  pairing_entry:
+    required:
+      - primary
+      - secondary
+      - role
+      - tier
+      - confidence
+      - evidence_sources
+    optional:
+      - troop_type
+      - kingdom_stage
+      - minimum_skill_state_primary
+      - minimum_skill_state_secondary
+      - expertise_preferred
+      - equipment_dependency
+      - notes
+      - trend_status
+
+operator_commander_fact:
+  source_boundary: "visible game UI only"
+  required:
+    - commander_id_or_observed_name
+    - observed_at
+    - source_surface
+    - confidence
+  optional:
+    - level
+    - stars
+    - skill_state
+    - expertise
+    - primary_talent_build_hint
+    - equipment_summary
+    - formation
+    - armament_summary
+    - available_as_primary
+    - available_as_secondary
+
+account_fit:
+  hard_filters:
+    - "commander is visibly owned/unlocked"
+    - "commander is available in the operator's current kingdom/season"
+    - "secondary commander has sufficient star level to function as secondary"
+    - "pair is compatible with requested role and troop type"
+  soft_scores:
+    - meta_tier
+    - skill_readiness
+    - level_readiness
+    - equipment_fit
+    - troop_fit
+    - replacement_cost
+    - investment_cost
+    - operator_role_fit
+  output:
+    - recommended_pair
+    - fallback_pair
+    - missing_requirements
+    - confidence
+    - source_snapshot_id
+    - explanation_evidence_ids
+
+refresh_policy:
+  meta_snapshot:
+    max_age_days: 30
+    refresh_early_when:
+      - "new commander release"
+      - "balance/update changes commander skills"
+      - "major KvK/season mechanic change"
+  operator_inventory:
+    refresh_when:
+      - "commander roster changes"
+      - "skill state changes"
+      - "equipment/formation/armament configuration changes materially"
+      - "before committing an expensive investment recommendation"
+
+principles:
+  - "Do not equate newest with best for this account."
+  - "Do not recommend a meta pair without checking the operator inventory and kingdom stage."
+  - "Primary/secondary order is meaningful because only the primary talent tree applies."
+  - "Rank by job first; there is no single universal best commander."
