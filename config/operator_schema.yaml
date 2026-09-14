@@ -1,0 +1,144 @@
+schema_version: 1
+layer: operator
+
+principles:
+  collect_game_visible_facts_first: true
+  ask_human_only_for_non_game_personalization: true
+  derived_fields_require_evidence: true
+  historical_values_are_snapshots_not_timeless_truth: true
+
+operator_profile:
+  identity:
+    governor_name:
+      type: string
+      source: visible_game_ui
+    character_label:
+      type: string
+      source: visible_game_ui
+    governor_id:
+      type: string
+      source: visible_game_ui
+    civilization:
+      type: string
+      source: visible_game_ui
+
+  progression:
+    power:
+      type: integer
+      source: visible_game_ui
+    kingdom_percentile_text:
+      type: string
+      source: visible_game_ui
+      notes: "Store the wording/number shown by UI; do not invent a percentile if not visible."
+    highest_power:
+      type: integer
+      source: visible_game_ui
+    power_breakdown:
+      building:
+        type: integer
+      technology:
+        type: integer
+      troop:
+        type: integer
+      commander:
+        type: integer
+    category_ratings:
+      type: mapping
+      notes: "Ratings shown by More Info, e.g. building/technology/troops/commanders/equipment/armaments."
+
+  combat:
+    kill_points:
+      type: integer
+    victory:
+      type: integer
+    defeat:
+      type: integer
+    dead:
+      type: integer
+    scout_times:
+      type: integer
+    acclaim:
+      type: integer
+    highest_acclaim:
+      type: integer
+
+  economy_support:
+    resources_gathered:
+      type: integer
+    resource_assistance:
+      type: integer
+    alliance_help_times:
+      type: integer
+
+  alliance:
+    tag_and_name:
+      type: string
+    alliance_power:
+      type: integer
+    leader_name:
+      type: string
+    territory_count:
+      type: integer
+    gift_level:
+      type: integer
+    member_count:
+      type: integer
+    member_capacity:
+      type: integer
+    operator_rank:
+      type: string
+      allowed_examples:
+        - leader
+        - rank_4_officer
+        - rank_3
+        - rank_2
+        - rank_1
+      notes: "Must be observed by locating current governor in Alliance Members UI; do not infer only from rank counts."
+
+  session_context:
+    action_points_current:
+      type: integer
+    action_points_max:
+      type: integer
+
+history_snapshot:
+  required:
+    - observed_at
+    - operator_identity
+  optional:
+    - event_or_kvk_id
+    - kingdom_context
+    - alliance_context
+    - role_rank
+    - progression
+    - combat
+    - economy_support
+    - source_evidence
+
+derived_profile:
+  fields:
+    alliance_position:
+      evidence_required: true
+    progression_distribution:
+      evidence_required: true
+    combat_activity_signal:
+      evidence_required: true
+    gathering_activity_signal:
+      evidence_required: true
+    economy_support_signal:
+      evidence_required: true
+    alliance_contribution_signal:
+      evidence_required: true
+    historical_event_signal:
+      evidence_required: true
+
+provenance:
+  required_fields:
+    - source_surface
+    - observed_at
+    - confidence
+  optional_fields:
+    - frame_id
+    - evidence_ref
+    - extractor
+    - notes
