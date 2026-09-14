@@ -1,7 +1,7 @@
 """Safe compiler for the trained mission YAML into the runtime graph types."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -171,6 +171,8 @@ def compile_mission(mission_path: str | Path, states_path: str | Path,
                 raise MissionCompileError(f"unsupported completion criterion: {item!r}")
         supporting = tuple(x for x in completion.get("supporting_evidence", []) if isinstance(x, str))
         criterion = CompletionCriterion("march_queue_used_increased", "march_queue_used", known, supporting)
+        if transitions:
+            transitions[-1] = replace(transitions[-1], completion_edge=True)
     return CompiledMission(TaskFlow(flow_id, tuple(transitions), complete_states, complete_families), supplied, str(mission_file), criterion, preconditions)
 
 
