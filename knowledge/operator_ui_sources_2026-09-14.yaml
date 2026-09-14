@@ -1,0 +1,124 @@
+schema_version: 1
+source_type: operator_training_from_visible_ui
+observed_at: 2026-09-14
+
+surfaces:
+  GOVERNOR_PROFILE:
+    purpose: identity_and_summary
+    visible_fields:
+      - governor_name
+      - character_label
+      - governor_id
+      - civilization
+      - alliance_tag_and_name
+      - power
+      - kill_points
+      - acclaim
+      - highest_acclaim
+      - action_points_current
+      - action_points_max
+    child_surfaces:
+      - MORE_INFO
+      - achievement_or_event_history_entries
+
+  MORE_INFO:
+    purpose: progression_combat_and_economy_detail
+    entry_hint:
+      from: GOVERNOR_PROFILE
+      visual_action: MORE_INFO_BUTTON
+    visible_fields:
+      - power
+      - kingdom_percentile_text
+      - category_ratings
+      - building_power
+      - technology_power
+      - troop_power
+      - commander_power
+      - highest_power
+      - victory
+      - defeat
+      - dead
+      - scout_times
+      - resources_gathered
+      - resource_assistance
+      - alliance_help_times
+    interaction_notes:
+      - "Panel is scrollable; extraction may require multiple visible frames."
+      - "Power info/question-mark control opens explanatory game text; treat as mechanic knowledge, not operator state."
+
+  ACCLAIM_INFO:
+    purpose: explain_acclaim_mechanic
+    entry_hint:
+      from: GOVERNOR_PROFILE
+      visual_action: ACCLAIM_INFO_CONTROL
+    classification: mechanic_knowledge
+    notes:
+      - "Useful for understanding the meaning of Acclaim; not a substitute for reading the operator's actual acclaim value."
+
+  ALLIANCE_HOME:
+    purpose: alliance_context
+    entry_hint:
+      semantic_action: OPEN_ALLIANCE
+      trained_shortcut: O
+    visible_fields:
+      - alliance_tag_and_name
+      - alliance_power
+      - leader_name
+      - territory_count
+      - gift_level
+      - member_count
+      - member_capacity
+    child_surfaces:
+      - ALLIANCE_MEMBERS
+    members_entry:
+      target_semantics:
+        - member_icon
+        - two_people_icon
+      operator_training: "Press the two-person/member button to open the alliance hierarchy."
+
+  ALLIANCE_MEMBERS:
+    purpose: operator_role_and_alliance_hierarchy
+    visible_fields:
+      - leader_name
+      - leader_power
+      - leader_kill_points
+      - rank_groups
+      - rank_member_counts
+    trained_rank_groups:
+      - rank_4_officer
+      - rank_3
+      - rank_2
+      - rank_1
+    current_operator_resolution:
+      required_identity_fact: governor_name
+      preferred_methods:
+        - search_current_governor_by_visible_name
+        - expand_rank_groups_and_match_visible_name
+      success_condition: "Current governor is visibly matched to one rank/role."
+      anti_guess_rule: "Do not infer the current operator's rank from group counts alone."
+
+  EVENT_OR_KVK_HISTORY:
+    purpose: temporal_operator_history
+    status: training_gap
+    target_fields:
+      - event_or_kvk_id
+      - kingdom_context
+      - role_rank_at_time
+      - progression_snapshot
+      - combat_snapshot
+      - economy_support_snapshot
+      - outcome_or_achievement
+    notes:
+      - "Profile exposes achievement/event-history entry points, but exact KVK historical navigation is not yet trained."
+
+acquisition_order_recommendation:
+  - GOVERNOR_PROFILE
+  - MORE_INFO
+  - ALLIANCE_HOME
+  - ALLIANCE_MEMBERS
+  - EVENT_OR_KVK_HISTORY
+
+operator_questions_policy:
+  game_visible_fact: collect_from_ui
+  non_game_personalization: ask_operator_when_needed
+  unknown_game_path: mark_training_gap
