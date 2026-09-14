@@ -21,6 +21,8 @@ required_runtime_path:
   - windows_ocr
   - observation_projection
   - ocr_semantics
+  - city_world_visual_detector
+  - resource_level_control
   - state_classifier
   - gather_fact_extractor
   - policy_overlay
@@ -93,6 +95,43 @@ nodes:
     evidence:
       - tests/test_ocr_semantics.py
 
+  - id: city_world_visual_detector
+    kind: perception
+    responsibility: Produce current-frame semantic/layout evidence sufficient to distinguish CITY_VIEW and WORLD_MAP_VIEW from real pixels while suppressing foreground gather surfaces.
+    authority: canonical
+    status: partial
+    path: harness/main_view_detector.py
+    evidence:
+      - tests/test_main_view_detector.py
+    blocker: B001
+
+  - id: main_view_training_profile
+    kind: evidence
+    responsibility: Hold operator-labelled real CITY_VIEW/WORLD_MAP_VIEW visual prototypes and calibrated acceptance thresholds.
+    authority: evidence
+    status: blocked
+    path: config/main_view_profiles.json
+    blocker: B001
+
+  - id: resource_level_control
+    kind: actuator
+    responsibility: Ground and actuate an explicitly trained discrete resource-level control, carrying a typed visible postcondition contract.
+    authority: canonical
+    status: partial
+    path: harness/resource_level_control.py
+    evidence:
+      - tests/test_resource_level_control.py
+      - tests/test_typed_action_contracts.py
+    blocker: B002
+
+  - id: resource_level_training_profile
+    kind: evidence
+    responsibility: Hold real search-panel slider geometry, visible level range, mode and anchor calibration supplied from operator training.
+    authority: evidence
+    status: blocked
+    path: config/resource_level_profile.json
+    blocker: B002
+
   - id: state_classifier
     kind: code
     responsibility: Classifies only trained GATHER states from current-frame semantic evidence; otherwise fails closed.
@@ -104,7 +143,7 @@ nodes:
 
   - id: gather_fact_extractor
     kind: code
-    responsibility: Extracts bounded GATHER facts such as march queue usage and character identity.
+    responsibility: Extracts bounded GATHER facts such as march queue usage, visible selected resource level and character identity.
     authority: canonical
     status: implemented
     path: harness/gather_facts.py
@@ -140,17 +179,18 @@ nodes:
 
   - id: mission_engine
     kind: code
-    responsibility: Executes one declared transition and promotes dispatch to verified only from fresh evidence.
+    responsibility: Executes one declared transition and promotes dispatch to verified only from fresh state and typed postcondition evidence.
     authority: canonical
     status: implemented
     path: harness/mission_engine.py
     evidence:
       - tests/test_mission_engine.py
       - tests/test_gather_runtime_contracts.py
+      - tests/test_typed_action_contracts.py
 
   - id: bounded_mission_tool
     kind: code
-    responsibility: Bridges observation/classification to bounded semantic action dispatch and typed receipts.
+    responsibility: Bridges observation/classification to bounded semantic action dispatch, arguments and typed receipts.
     authority: canonical
     status: implemented
     path: harness/mission_tool.py
@@ -159,12 +199,13 @@ nodes:
 
   - id: semantic_action_surface
     kind: code
-    responsibility: Resolves semantic actions via trained shortcuts or current-frame visual targets.
+    responsibility: Resolves semantic actions via trained shortcuts or current-frame visual targets while preserving authorized unscored-exact OCR semantics.
     authority: canonical
     status: implemented
     path: harness/action_surface.py
     evidence:
       - tests/test_action_surface.py
+      - tests/test_ocr_semantics.py
 
   - id: screen_mapping
     kind: adapter
@@ -195,13 +236,14 @@ nodes:
 
   - id: post_action_verification
     kind: verification
-    responsibility: Requires a fresh post-action frame, expected transition and typed completion evidence.
+    responsibility: Requires a fresh post-action frame, expected transition and typed completion or control evidence.
     authority: canonical
     status: implemented
     path: harness/mission_engine.py
     evidence:
       - tests/test_mission_engine.py
       - tests/test_mission_tool.py
+      - tests/test_typed_action_contracts.py
 
   - id: mission_store
     kind: persistence
@@ -224,26 +266,12 @@ nodes:
 
   - id: gather_cli
     kind: composition
-    responsibility: Composes live observation, facts, policy, selector, engine, guarded input and checkpoint store for one GATHER tick.
+    responsibility: Composes live observation, OCR semantics, trained visual evidence, typed level control, facts, policy, selector, engine, guarded input and checkpoint store for one GATHER tick.
     authority: canonical
     status: implemented
     path: scripts/run_gather_tick.py
     evidence:
       - .github/workflows/gather-harness.yml
-
-  - id: city_world_visual_detector
-    kind: perception
-    responsibility: Produce current-frame semantic/layout evidence sufficient to distinguish CITY_VIEW and WORLD_MAP_VIEW from real pixels.
-    authority: missing
-    status: blocked
-    blocker: B001
-
-  - id: resource_level_control
-    kind: actuator
-    responsibility: Set the requested resource level using a typed trained control rather than a guessed generic click.
-    authority: missing
-    status: blocked
-    blocker: B002
 
   - id: troop_selection_policy
     kind: policy
@@ -265,13 +293,21 @@ edges:
   - {from: mission_compiler, to: mission_engine, relation: constrains}
   - {from: live_capture, to: windows_ocr, relation: feeds}
   - {from: live_capture, to: observation_projection, relation: proves_frame}
+  - {from: live_capture, to: city_world_visual_detector, relation: supplies_current_frame}
   - {from: windows_ocr, to: observation_projection, relation: feeds}
   - {from: observation_projection, to: ocr_semantics, relation: feeds}
+  - {from: observation_projection, to: city_world_visual_detector, relation: supplies_frame_provenance}
   - {from: ocr_semantics, to: state_classifier, relation: feeds}
   - {from: ocr_semantics, to: gather_fact_extractor, relation: feeds}
-  - {from: observation_projection, to: city_world_visual_detector, relation: requires_for_main_view}
+  - {from: ocr_semantics, to: resource_level_control, relation: supplies_current_anchors}
+  - {from: main_view_training_profile, to: city_world_visual_detector, relation: calibrates}
   - {from: city_world_visual_detector, to: state_classifier, relation: feeds}
+  - {from: resource_level_training_profile, to: resource_level_control, relation: calibrates}
+  - {from: resource_level_control, to: state_adapter, relation: grounds_typed_target}
+  - {from: resource_level_control, to: semantic_action_surface, relation: resolves_typed_control}
+  - {from: resource_level_control, to: mission_engine, relation: exposes_typed_postcondition_contract}
   - {from: gather_fact_extractor, to: policy_overlay, relation: enriches}
+  - {from: gather_fact_extractor, to: mission_engine, relation: supplies_visible_postcondition_fact}
   - {from: policy_overlay, to: state_adapter, relation: feeds}
   - {from: state_classifier, to: state_adapter, relation: feeds}
   - {from: state_adapter, to: deterministic_selector, relation: exposes_actions}
@@ -280,7 +316,7 @@ edges:
   - {from: mission_engine, to: bounded_mission_tool, relation: executes_through}
   - {from: bounded_mission_tool, to: semantic_action_surface, relation: dispatches_to}
   - {from: semantic_action_surface, to: screen_mapping, relation: resolves_through}
-  - {from: resource_level_control, to: screen_mapping, relation: typed_control}
+  - {from: resource_level_control, to: screen_mapping, relation: typed_screen_point}
   - {from: troop_selection_policy, to: policy_overlay, relation: authorizes}
   - {from: screen_mapping, to: interference_guard, relation: guarded_by}
   - {from: interference_guard, to: windows_input, relation: authorizes}
@@ -294,16 +330,16 @@ edges:
 
 blockers:
   - id: B001
-    title: Main-view perception gap
+    title: Main-view detector code exists but real CITY/WORLD calibration evidence is missing
     class: perception_data
-    blocks: [city_world_visual_detector, live_replay_evidence]
-    falsification: Real CITY_VIEW/WORLD_MAP_VIEW fixtures classify deterministically from current pixels without hand-authored semantic evidence.
+    blocks: [city_world_visual_detector, main_view_training_profile, live_replay_evidence]
+    falsification: At least two labelled real CITY_VIEW and two WORLD_MAP_VIEW client frames train the profile, held-out real fixtures classify deterministically, and foreground gather surfaces suppress main-view output.
 
   - id: B002
-    title: Resource-level control not trained
+    title: Typed resource-level control exists but real slider geometry/range calibration is missing
     class: interaction_training
-    blocks: [resource_level_control, live_replay_evidence]
-    falsification: A typed level-control handler sets a requested level and verifies the visible selected level from a fresh frame.
+    blocks: [resource_level_control, resource_level_training_profile, live_replay_evidence]
+    falsification: A real RESOURCE_SEARCH_PANEL trains horizontal slider bounds/range, guarded input sets a requested level, and a fresh visible selected_search_level fact equals the requested resource_level.
 
   - id: B003
     title: Commander/troop policy is intentionally unknown
@@ -330,8 +366,11 @@ coverage:
     windows_ocr_bridge: covered
     ocr_target_grounding: covered
     gather_queue_fact: covered
+    selected_resource_level_fact: covered
     main_view_visual_perception: partial
-    resource_level_actuation: missing
+    main_view_profile_training: missing
+    resource_level_actuation: partial
+    resource_level_profile_training: missing
     commander_troop_policy: needs_decision
     real_live_replay: missing
   other_mission_branches:
