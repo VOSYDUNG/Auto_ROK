@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT))
 
 from harness.action_surface import TRAINED_NATIVE_SHORTCUTS  # noqa: E402
 from harness.gather_facts import GatherFactObservationProvider  # noqa: E402
+from harness.main_view_detector import MainViewProfile, MainViewVisualObservationProvider  # noqa: E402
 from harness.mission_loader import compile_mission  # noqa: E402
 from harness.mission_runner import MissionRunner  # noqa: E402
 from harness.mission_runtime import MissionContext  # noqa: E402
@@ -23,7 +24,11 @@ from harness.mission_store import CheckpointStatus, JsonMissionStore  # noqa: E4
 from harness.mission_tool import BoundedMissionTool, HumanInterfaceActionProvider  # noqa: E402
 from harness.ocr_semantics import OcrSemanticObservationProvider, OcrTargetSpec  # noqa: E402
 from harness.policy_overlay import PolicyEvidenceObservationProvider  # noqa: E402
-from harness.screen_mapped_surface import ScreenMappedSemanticActionSurface  # noqa: E402
+from harness.resource_level_control import (  # noqa: E402
+    GatherScreenMappedActionSurface,
+    ResourceLevelControlObservationProvider,
+    ResourceLevelProfile,
+)
 from harness.windows_input import WindowsHumanInputActuator  # noqa: E402
 from harness.windows_interference_guard import WindowsForegroundInterferenceGuard  # noqa: E402
 from harness.windows_live_observation import WindowsLiveObservationProvider  # noqa: E402
@@ -57,12 +62,7 @@ def _candidate_specs(path: str | None) -> tuple[OcrTargetSpec, ...]:
             or type(allow_unscored) is not bool
         ):
             raise ValueError(f"invalid candidate entry: {item!r}")
-        result.append(OcrTargetSpec(
-            target_id,
-            tuple(labels),
-            float(confidence),
-            allow_unscored,
-        ))
+        result.append(OcrTargetSpec(target_id, tuple(labels), float(confidence), allow_unscored))
     return tuple(result)
 
 
@@ -75,7 +75,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--resource-level", type=int)
     parser.add_argument(
         "--candidates",
-        help="JSON OCR target specs; unscored Windows OCR requires explicit allow_unscored_exact per target",
+        default=str(ROOT / "config" / "gather_ocr_targets.json"),
+        help="JSON OCR target specs; defaults to the trained GATHER target set",
+    )
+    parser.add_argument(
+        "--main-view-profile",
+        default=str(ROOT / "config" / "main_view_profiles.json"),
+        help="operator-trained CITY_VIEW/WORLD_MAP_VIEW visual signature profile",
+    )
+    parser.add_argument(
+        "--resource-level-profile",
+        default=str(ROOT / "config" / "resource_level_profile.json"),
+        help="operator-trained resource level slider profile",
     )
     parser.add_argument("--workspace-root", default=str(ROOT / "workspace" / "runtime"))
     parser.add_argument("--checkpoint-root", default=str(ROOT / "workspace" / "checkpoints"))
@@ -95,27 +106,24 @@ def main(argv: list[str] | None = None) -> int:
             ROOT / "config" / "mission_flows.yaml",
             ROOT / "config" / "ui_states.yaml",
             "GATHER_RESOURCE",
-            {
-                "resource_type": args.resource_type,
-                "resource_level": args.resource_level,
-            },
+            {"resource_type": args.resource_type, "resource_level": args.resource_level},
         )
         context = MissionContext("GATHER_RESOURCE", args.task_id, args.run_id)
         candidate_specs = _candidate_specs(args.candidates)
+        main_view_profile = MainViewProfile.load(args.main_view_profile)
+        resource_level_profile = ResourceLevelProfile.load(args.resource_level_profile)
 
-        # The raw projection validates provenance but does not manufacture a
-        # confidence score for Windows.Media.Ocr. Phrase assembly/grounding is a
-        # separate explicit layer so unscored targets stay visible as unscored.
+        # Provenance -> OCR semantics -> trained visual/layout evidence -> trained
+        # typed controls -> visible facts -> explicit operator policy.
         observations = WindowsLiveObservationProvider(args.workspace_root)
         observations = OcrSemanticObservationProvider(observations, candidate_specs)
-        observations = GatherFactObservationProvider(
-            observations,
-            character_id=args.character_id,
-        )
+        observations = MainViewVisualObservationProvider(observations, main_view_profile)
+        observations = ResourceLevelControlObservationProvider(observations, resource_level_profile)
+        observations = GatherFactObservationProvider(observations, character_id=args.character_id)
         approvals = {PRECONDITION: True} if args.approve_current_troop_selection else {}
         observations = PolicyEvidenceObservationProvider(observations, approvals)
 
-        surface = ScreenMappedSemanticActionSurface(
+        surface = GatherScreenMappedActionSurface(
             TRAINED_NATIVE_SHORTCUTS,
             min_target_confidence=args.min_target_confidence,
             allow_unscored_exact_targets=any(spec.allow_unscored_exact for spec in candidate_specs),
@@ -141,6 +149,8 @@ def main(argv: list[str] | None = None) -> int:
             "policy_approved": bool(args.approve_current_troop_selection),
             "ocr_target_specs": len(candidate_specs),
             "unscored_exact_enabled": any(spec.allow_unscored_exact for spec in candidate_specs),
+            "main_view_profile_trained": bool(main_view_profile.prototypes),
+            "resource_level_profile_trained": resource_level_profile.trained,
         }
         if result.selection is not None:
             payload["selection"] = result.selection.decision.value
@@ -149,6 +159,7 @@ def main(argv: list[str] | None = None) -> int:
                 payload["choice"] = {
                     "action_id": result.selection.choice.action_id,
                     "target_id": result.selection.choice.target_id,
+                    "arguments": dict(result.selection.choice.arguments),
                 }
         print(json.dumps(payload, ensure_ascii=False))
 
