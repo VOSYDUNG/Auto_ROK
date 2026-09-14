@@ -1,6 +1,6 @@
 import json
 
-from harness.contracts import Observation
+from harness.contracts import Evidence, Observation
 from harness.main_view_detector import (
     CITY_VIEW,
     WORLD_MAP_VIEW,
@@ -17,12 +17,13 @@ CONTEXT = MissionContext("GATHER_RESOURCE", "one-character", "run-main-view")
 
 
 class FakeProvider:
-    def __init__(self, image_path="frame.png"):
+    def __init__(self, image_path="frame.png", evidence=()):
         self.image_path = image_path
+        self.evidence = tuple(evidence)
 
     def observe(self, context):
         return ObservationBundle(
-            Observation(1.0, "f1", (1280, 720), ()),
+            Observation(1.0, "f1", (1280, 720), self.evidence),
             SceneGraph("f1", None, (), {"image_path": self.image_path}),
         )
 
@@ -83,3 +84,16 @@ def test_visual_provider_appends_current_frame_city_evidence(tmp_path):
     assert "resource counters across top" in labels
     assert all(item.metadata["frame_id"] == "f1" for item in bundle.observation.evidence)
     assert bundle.scene.facts["main_view_detector"]["state_id"] == CITY_VIEW
+
+
+def test_foreground_search_surface_suppresses_background_main_view_match(tmp_path):
+    search = Evidence("ocr", "SEARCH", 0.0, value="SEARCH", metadata={"frame_id": "f1"})
+    wrapper = MainViewVisualObservationProvider(
+        FakeProvider(evidence=(search,)),
+        profile(tmp_path),
+        extractor=lambda _: [1.0, 0.0, 0.0],
+    )
+    bundle = wrapper.observe(CONTEXT)
+    assert bundle.observation.evidence == (search,)
+    assert bundle.scene.facts["main_view_detector"]["status"] == "suppressed"
+    assert bundle.scene.facts["main_view_detector"]["reason"] == "foreground_gather_surface_visible"
