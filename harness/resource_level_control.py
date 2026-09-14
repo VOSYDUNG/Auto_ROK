@@ -1,6 +1,6 @@
 """Typed, trained resource-level control for GATHER_RESOURCE.
 
-The old automation clicked a generic search-panel position.  This module makes
+The old automation clicked a generic search-panel position. This module makes
 resource-level selection an explicit bounded control: a trained profile grounds
 one slider track only while current search-panel OCR anchors are visible, and
 the requested level is converted to one discrete point on that track.
@@ -129,6 +129,15 @@ class ResourceLevelControlObservationProvider:
             "track_bbox_client": [bbox.x1, bbox.y1, bbox.x2, bbox.y2],
             "source": "trained_resource_level_profile",
         }
+        contracts = dict(facts.get("typed_action_contracts") or {})
+        contracts[ACTION_ID] = {
+            "verification_mode": "fact_equals_argument",
+            "argument": "resource_level",
+            "fact": "selected_search_level",
+            "target_id": TARGET_ID,
+            "source": "trained_resource_level_profile",
+        }
+        facts["typed_action_contracts"] = contracts
         return ObservationBundle(bundle.observation, replace(bundle.scene, targets=targets, facts=facts))
 
 
@@ -151,8 +160,6 @@ class GatherScreenMappedActionSurface(ScreenMappedSemanticActionSurface):
         if type(min_level) is not int or type(max_level) is not int or not min_level <= level <= max_level:
             raise ResourceLevelProfileError("requested resource level is outside the trained control range")
 
-        # The profile explicitly declares a discrete horizontal slider.  Use the
-        # trained track bounds, not a guessed generic click or stale V0 point.
         fraction = (level - min_level) / (max_level - min_level)
         client_x = round(target.bbox.x1 + fraction * (target.bbox.x2 - target.bbox.x1))
         client_y = (target.bbox.y1 + target.bbox.y2) // 2
