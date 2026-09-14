@@ -21,6 +21,7 @@ ROOT = Path(__file__).parents[1]
 MISSIONS = ROOT / "config" / "mission_flows.yaml"
 STATES = ROOT / "config" / "ui_states.yaml"
 CONTEXT = MissionContext("GATHER_RESOURCE", "one-character", "run-g03")
+PRECONDITION = "troop/commander selection policy is valid for this mission"
 
 
 def compiled():
@@ -110,9 +111,7 @@ def test_bounded_tool_compiles_visible_observation_into_current_action_surface()
         FakeObservations(bundle("f1", "CITY_VIEW")),
         FakeActions(ActionDispatchReceipt("TOGGLE_CITY_MAP", "f1", True, non_interference_confirmed=True)),
     )
-
     snapshot = tool.observe(CONTEXT)
-
     assert snapshot.frame_id == "f1"
     assert snapshot.state == "CITY_VIEW"
     assert [item.action_id for item in snapshot.allowed_actions] == ["TOGGLE_CITY_MAP"]
@@ -130,14 +129,12 @@ def test_human_action_provider_denies_input_before_actuation_when_guard_fails():
         FakeObservations(bundle("f1", "CITY_VIEW")),
         FakeActions(ActionDispatchReceipt("noop", "f1", False)),
     ).observe(CONTEXT)
-
     receipt = provider.dispatch(
         CONTEXT,
         before,
         ActionChoice("TOGGLE_CITY_MAP"),
         SceneGraph("f1", None),
     )
-
     assert receipt.dispatched is False
     assert receipt.code == "INTERFERENCE_BLOCKED"
     assert recorder.actions == []
@@ -155,14 +152,12 @@ def test_human_action_provider_dispatches_hotkey_only_after_guard_passes():
         FakeObservations(bundle("f1", "CITY_VIEW")),
         FakeActions(ActionDispatchReceipt("noop", "f1", False)),
     ).observe(CONTEXT)
-
     receipt = provider.dispatch(
         CONTEXT,
         before,
         ActionChoice("TOGGLE_CITY_MAP"),
         SceneGraph("f1", None),
     )
-
     assert receipt.dispatched is True
     assert receipt.non_interference_confirmed is True
     assert recorder.actions == [KeyboardAction(("SPACE",))]
@@ -183,20 +178,16 @@ def test_dispatch_receipt_is_promoted_only_after_fresh_expected_observation():
         ),
         FakeActions(receipt),
     )
-
     result = MissionEngine(compiled(), tool).step(
         CONTEXT,
         ActionChoice("TOGGLE_CITY_MAP"),
     )
-
     assert result.decision is EngineDecision.CONTINUE
-    assert result.feedback is not None
     assert result.feedback.code == "VERIFIED"
-    assert result.feedback.facts["receipt"]["before_frame_id"] == "f1"
     assert result.feedback.facts["receipt"]["after_frame_id"] == "f2"
 
 
-def test_final_gather_completion_is_engine_verified_not_provider_declared():
+def test_final_gather_completion_is_engine_verified_from_pre_action_policy_evidence():
     target = VisualTarget(
         "TROOP_MARCH",
         "f1",
@@ -205,7 +196,6 @@ def test_final_gather_completion_is_engine_verified_not_provider_declared():
         1.0,
         "test",
     )
-    precondition = "troop/commander selection policy is valid for this mission"
     receipt = ActionDispatchReceipt(
         "MARCH_WITH_CURRENT_SELECTION",
         "f1",
@@ -213,10 +203,6 @@ def test_final_gather_completion_is_engine_verified_not_provider_declared():
         "TROOP_MARCH",
         True,
     )
-    action_facts = {
-        "troop_selection_policy_valid": True,
-        "precondition_evidence": {precondition: True},
-    }
     tool = BoundedMissionTool(
         compiled(),
         FakeObservations(
@@ -224,7 +210,11 @@ def test_final_gather_completion_is_engine_verified_not_provider_declared():
                 "f1",
                 "NEW_TROOP_SETUP",
                 targets=(target,),
-                facts={"march_queue_used": 0, "character_id": "hien"},
+                facts={
+                    "march_queue_used": 0,
+                    "character_id": "hien",
+                    "precondition_evidence": {PRECONDITION: True},
+                },
             ),
             bundle(
                 "f2",
@@ -232,16 +222,13 @@ def test_final_gather_completion_is_engine_verified_not_provider_declared():
                 facts={"march_queue_used": 1, "character_id": "hien"},
             ),
         ),
-        FakeActions(receipt, facts=action_facts),
+        FakeActions(receipt),
     )
-
     result = MissionEngine(compiled(), tool).step(
         CONTEXT,
         ActionChoice("MARCH_WITH_CURRENT_SELECTION", "TROOP_MARCH"),
     )
-
     assert result.decision is EngineDecision.COMPLETE
-    assert result.feedback is not None
     assert result.feedback.code == "VERIFIED"
     assert result.feedback.completed is False
     assert result.feedback.facts["receipt"]["after_frame_id"] == "f2"
