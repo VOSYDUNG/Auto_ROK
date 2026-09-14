@@ -39,6 +39,7 @@ def trained_profile(tmp_path):
             {
                 "schema_version": 1,
                 "status": "trained",
+                "control_mode": "horizontal_discrete_slider",
                 "min_level": 1,
                 "max_level": 10,
                 "track_normalized": [0.20, 0.70, 0.80, 0.76],
@@ -59,12 +60,39 @@ def test_untrained_profile_never_grounds_control(tmp_path):
     assert bundle.scene.facts["resource_level_control"]["status"] == "untrained"
 
 
+def test_trained_profile_requires_explicit_control_mode(tmp_path):
+    path = tmp_path / "bad.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "status": "trained",
+                "min_level": 1,
+                "max_level": 10,
+                "track_normalized": [0.20, 0.70, 0.80, 0.76],
+                "confidence": 0.97,
+                "required_anchors": ["SEARCH", "Cropland"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    try:
+        ResourceLevelProfile.load(path)
+    except ValueError as exc:
+        assert "control_mode" in str(exc)
+    else:
+        raise AssertionError("trained control without explicit mode must fail closed")
+
+
 def test_trained_profile_requires_current_search_anchors(tmp_path):
     bundle = ResourceLevelControlObservationProvider(FakeProvider(), trained_profile(tmp_path)).observe(CONTEXT)
     target = bundle.scene.require_target("SEARCH_LEVEL_CONTROL", 0.90)
     assert target.frame_id == "f1"
     assert target.source == "trained_resource_level_profile"
     assert bundle.scene.facts["resource_level_control"]["status"] == "grounded"
+    contract = bundle.scene.facts["typed_action_contracts"]["SET_RESOURCE_LEVEL"]
+    assert contract["argument"] == "resource_level"
+    assert contract["fact"] == "selected_search_level"
 
 
 def test_typed_surface_maps_requested_level_to_discrete_slider_point(tmp_path):
@@ -78,8 +106,6 @@ def test_typed_surface_maps_requested_level_to_discrete_slider_point(tmp_path):
         ),
         scene=bundle.scene,
     )
-    # Track runs from client x=200..800; level 10 selects right edge (x=800).
-    # Current client begins at screen x=100, y=200.
     assert resolved.point == (900, 565)
     assert resolved.source == "trained_resource_level_profile+client_to_screen"
 
