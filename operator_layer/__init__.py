@@ -1,5 +1,11 @@
 """AUTO_ROK operator acquisition and profile model."""
 
+from .account_quality import (
+    AccountQualityVector,
+    QualityDimension,
+    QUALITY_DIMENSIONS,
+    validate_evidence,
+)
 from .native_capabilities import (
     CapabilityEntitlement,
     NativeCapabilityId,
@@ -14,6 +20,7 @@ from .profile import (
 )
 
 __all__ = [
+    "AccountQualityVector",
     "CapabilityEntitlement",
     "DerivedSignal",
     "NativeCapabilityId",
@@ -22,4 +29,7 @@ __all__ = [
     "OfferSnapshot",
     "OperatorSnapshot",
     "Provenance",
+    "QUALITY_DIMENSIONS",
+    "QualityDimension",
+    "validate_evidence",
 ]
