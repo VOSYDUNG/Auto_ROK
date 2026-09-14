@@ -22,6 +22,7 @@ from harness.screen_mapped_surface import ScreenMappedSemanticActionSurface
 
 ACTION_ID = "SET_RESOURCE_LEVEL"
 TARGET_ID = "SEARCH_LEVEL_CONTROL"
+CONTROL_MODE = "horizontal_discrete_slider"
 
 
 class ResourceLevelProfileError(ValueError):
@@ -36,6 +37,7 @@ class ResourceLevelProfile:
     track_normalized: tuple[float, float, float, float] | None = None
     confidence: float = 0.0
     required_anchors: tuple[str, ...] = ("SEARCH",)
+    control_mode: str | None = None
 
     @classmethod
     def load(cls, path: str | Path) -> "ResourceLevelProfile":
@@ -44,6 +46,10 @@ class ResourceLevelProfile:
             raise ResourceLevelProfileError("resource-level profile must use schema_version=1")
         if raw.get("status") != "trained":
             return cls(False)
+        if raw.get("control_mode") != CONTROL_MODE:
+            raise ResourceLevelProfileError(
+                f"trained resource-level profile must declare control_mode={CONTROL_MODE!r}"
+            )
         min_level, max_level = raw.get("min_level"), raw.get("max_level")
         bounds = raw.get("track_normalized")
         confidence = raw.get("confidence")
@@ -63,10 +69,18 @@ class ResourceLevelProfile:
             raise ResourceLevelProfileError("confidence must be within (0, 1]")
         if not isinstance(anchors, list) or not anchors or any(not isinstance(v, str) or not v for v in anchors):
             raise ResourceLevelProfileError("required_anchors must be non-empty strings")
-        return cls(True, min_level, max_level, (x1, y1, x2, y2), float(confidence), tuple(anchors))
+        return cls(
+            True,
+            min_level,
+            max_level,
+            (x1, y1, x2, y2),
+            float(confidence),
+            tuple(anchors),
+            CONTROL_MODE,
+        )
 
     def bbox(self, width: int, height: int) -> BoundingBox:
-        if not self.trained or self.track_normalized is None:
+        if not self.trained or self.control_mode != CONTROL_MODE or self.track_normalized is None:
             raise ResourceLevelProfileError("resource-level control profile is not trained")
         x1, y1, x2, y2 = self.track_normalized
         left = max(0, min(width - 1, round(x1 * width)))
@@ -118,12 +132,14 @@ class ResourceLevelControlObservationProvider:
             {
                 "frame_id": bundle.observation.frame_id,
                 "trained_geometry": True,
+                "control_mode": CONTROL_MODE,
                 "required_anchors": self.profile.required_anchors,
             },
         )
         targets = tuple(t for t in bundle.scene.targets if t.target_id != TARGET_ID) + (target,)
         facts["resource_level_control"] = {
             "status": "grounded",
+            "control_mode": CONTROL_MODE,
             "min_level": self.profile.min_level,
             "max_level": self.profile.max_level,
             "track_bbox_client": [bbox.x1, bbox.y1, bbox.x2, bbox.y2],
@@ -154,7 +170,12 @@ class GatherScreenMappedActionSurface(ScreenMappedSemanticActionSurface):
             raise ResourceLevelProfileError("resource-level target is stale")
         level = request.arguments.get("resource_level")
         facts = scene.facts.get("resource_level_control")
-        if type(level) is not int or not isinstance(facts, Mapping) or facts.get("status") != "grounded":
+        if (
+            type(level) is not int
+            or not isinstance(facts, Mapping)
+            or facts.get("status") != "grounded"
+            or facts.get("control_mode") != CONTROL_MODE
+        ):
             raise ResourceLevelProfileError("resource level argument/control evidence is missing")
         min_level, max_level = facts.get("min_level"), facts.get("max_level")
         if type(min_level) is not int or type(max_level) is not int or not min_level <= level <= max_level:
