@@ -1,14 +1,15 @@
 """Durable runtime evidence for the one-character GATHER_RESOURCE vertical slice.
 
 This module records what the canonical runtime actually observed/selected/
-dispatched/verified.  It does not replay clicks and it does not promote a
-DISPATCHED receipt to success.  A live replay is accepted only from the fresh
+dispatched/verified. It does not replay clicks and it does not promote a
+DISPATCHED receipt to success. A live replay is accepted only from the fresh
 post-action evidence already verified by MissionEngine.
 """
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -144,6 +145,21 @@ def build_gather_tick_evidence(
     }
 
 
+def _run_directory(identity: Mapping[str, Any]) -> str:
+    parts = (
+        identity.get("mission_id"),
+        identity.get("task_id"),
+        identity.get("run_id"),
+        identity.get("attempt"),
+        identity.get("character_id"),
+    )
+    if not all(isinstance(value, (str, int)) for value in parts):
+        raise ValueError("gather evidence identity is malformed")
+    material = "\0".join(str(value) for value in parts)
+    digest = hashlib.sha256(material.encode("utf-8")).hexdigest()[:20]
+    return f"gather-{digest}"
+
+
 def save_gather_tick_evidence(root: str | Path, record: Mapping[str, Any]) -> Path:
     """Atomically persist one tick without overwriting earlier evidence."""
     identity = record.get("identity")
@@ -157,7 +173,7 @@ def save_gather_tick_evidence(root: str | Path, record: Mapping[str, Any]) -> Pa
     if type(revision) is not int or revision < 0:
         raise ValueError("gather evidence record requires non-negative checkpoint revision")
 
-    directory = Path(root) / run_id
+    directory = Path(root) / _run_directory(identity)
     directory.mkdir(parents=True, exist_ok=True)
     stamp = time.time_ns()
     path = directory / f"revision-{revision:06d}-{stamp}.json"
