@@ -2,7 +2,8 @@
 
 This command is caller-driven, not a scheduler. Live input is fail-closed unless
 --arm-live is supplied and the foreground/geometry guard passes immediately
-before actuation.
+before actuation. Each invocation also writes a durable evidence record so a
+later validator can distinguish dispatch from verified live completion.
 """
 from __future__ import annotations
 
@@ -16,6 +17,10 @@ sys.path.insert(0, str(ROOT))
 
 from harness.action_surface import TRAINED_NATIVE_SHORTCUTS  # noqa: E402
 from harness.gather_facts import GatherFactObservationProvider  # noqa: E402
+from harness.gather_replay_evidence import (  # noqa: E402
+    build_gather_tick_evidence,
+    save_gather_tick_evidence,
+)
 from harness.main_view_detector import MainViewProfile, MainViewVisualObservationProvider  # noqa: E402
 from harness.mission_loader import compile_mission  # noqa: E402
 from harness.mission_runner import MissionRunner  # noqa: E402
@@ -29,12 +34,10 @@ from harness.resource_level_control import (  # noqa: E402
     ResourceLevelControlObservationProvider,
     ResourceLevelProfile,
 )
+from harness.troop_policy import TroopSelectionApproval  # noqa: E402
 from harness.windows_input import WindowsHumanInputActuator  # noqa: E402
 from harness.windows_interference_guard import WindowsForegroundInterferenceGuard  # noqa: E402
 from harness.windows_live_observation import WindowsLiveObservationProvider  # noqa: E402
-
-
-PRECONDITION = "troop/commander selection policy is valid for this mission"
 
 
 def _candidate_specs(path: str | None) -> tuple[OcrTargetSpec, ...]:
@@ -90,7 +93,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--workspace-root", default=str(ROOT / "workspace" / "runtime"))
     parser.add_argument("--checkpoint-root", default=str(ROOT / "workspace" / "checkpoints"))
-    parser.add_argument("--approve-current-troop-selection", action="store_true")
+    parser.add_argument(
+        "--evidence-root",
+        default=str(ROOT / "workspace" / "evidence" / "gather"),
+        help="append-only per-tick GATHER evidence root",
+    )
+    parser.add_argument(
+        "--troop-policy-approval",
+        help="JSON operator approval bound to this mission/task/run/character occurrence",
+    )
+    parser.add_argument(
+        "--approve-current-troop-selection",
+        action="store_true",
+        help="explicit one-shot operator approval for the current occurrence; prefer --troop-policy-approval for durable provenance",
+    )
     parser.add_argument("--arm-live", action="store_true")
     parser.add_argument("--min-target-confidence", type=float, default=0.90)
     return parser
@@ -101,6 +117,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if not 0.0 <= args.min_target_confidence <= 1.0:
             raise ValueError("min-target-confidence must be within [0, 1]")
+        if args.troop_policy_approval and args.approve_current_troop_selection:
+            raise ValueError(
+                "use either --troop-policy-approval or --approve-current-troop-selection, not both"
+            )
 
         compiled = compile_mission(
             ROOT / "config" / "mission_flows.yaml",
@@ -113,14 +133,29 @@ def main(argv: list[str] | None = None) -> int:
         main_view_profile = MainViewProfile.load(args.main_view_profile)
         resource_level_profile = ResourceLevelProfile.load(args.resource_level_profile)
 
+        approval: TroopSelectionApproval | None = None
+        if args.troop_policy_approval:
+            approval = TroopSelectionApproval.load(args.troop_policy_approval)
+        elif args.approve_current_troop_selection:
+            approval = TroopSelectionApproval.explicit_cli(context, args.character_id)
+        approvals = approval.approvals_for(context, args.character_id) if approval is not None else {}
+        approval_summary = (
+            approval.to_summary(context, args.character_id)
+            if approval is not None
+            else {
+                "approved": False,
+                "bound_to_occurrence": False,
+                "source": "none",
+            }
+        )
+
         # Provenance -> OCR semantics -> trained visual/layout evidence -> trained
-        # typed controls -> visible facts -> explicit operator policy.
+        # typed controls -> visible facts -> occurrence-bound operator policy.
         observations = WindowsLiveObservationProvider(args.workspace_root)
         observations = OcrSemanticObservationProvider(observations, candidate_specs)
         observations = MainViewVisualObservationProvider(observations, main_view_profile)
         observations = ResourceLevelControlObservationProvider(observations, resource_level_profile)
         observations = GatherFactObservationProvider(observations, character_id=args.character_id)
-        approvals = {PRECONDITION: True} if args.approve_current_troop_selection else {}
         observations = PolicyEvidenceObservationProvider(observations, approvals)
 
         surface = GatherScreenMappedActionSurface(
@@ -137,6 +172,17 @@ def main(argv: list[str] | None = None) -> int:
         runner = MissionRunner(compiled, tool, JsonMissionStore(args.checkpoint_root))
         result = runner.tick(context)
 
+        evidence_record = build_gather_tick_evidence(
+            context=context,
+            character_id=args.character_id,
+            result=result,
+            live_armed=bool(args.arm_live),
+            policy_approval=approval_summary,
+            main_view_profile_trained=bool(main_view_profile.prototypes),
+            resource_level_profile_trained=resource_level_profile.trained,
+        )
+        evidence_path = save_gather_tick_evidence(args.evidence_root, evidence_record)
+
         payload = {
             "status": result.status.value,
             "run_id": context.run_id,
@@ -146,7 +192,10 @@ def main(argv: list[str] | None = None) -> int:
             "decision": result.checkpoint.last_decision,
             "reason": result.reason,
             "live_armed": bool(args.arm_live),
-            "policy_approved": bool(args.approve_current_troop_selection),
+            "policy_approved": bool(approval_summary.get("bound_to_occurrence")),
+            "policy_approval_id": approval_summary.get("approval_id"),
+            "policy_approval_source": approval_summary.get("source"),
+            "evidence_path": str(evidence_path),
             "ocr_target_specs": len(candidate_specs),
             "unscored_exact_enabled": any(spec.allow_unscored_exact for spec in candidate_specs),
             "main_view_profile_trained": bool(main_view_profile.prototypes),
