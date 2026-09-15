@@ -97,6 +97,7 @@ flows:
         action: SET_RESOURCE_LEVEL
         execution: visual_target
         target: SEARCH_LEVEL_CONTROL
+        arguments_from_parameters: [resource_level]
         optional: true
         expect: [RESOURCE_SEARCH_PANEL]
       - from: RESOURCE_SEARCH_PANEL

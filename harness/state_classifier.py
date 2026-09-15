@@ -1,13 +1,14 @@
 """Deterministically classify the bounded gather UI states from frame evidence.
 
-The rules below are the positive semantic evidence recorded for these states in
-``config/ui_states.yaml``.  They deliberately do not infer unobserved UI or use
-coordinates: every positive match must be explicitly bound to the observation's
-current frame.
+The rules below mirror the positive evidence recorded in ``config/ui_states.yaml``.
+They deliberately do not infer unobserved UI: every positive match must be bound
+to the current frame. OCR phrase evidence is acceptable when it was assembled
+from current-frame word boxes.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import re
 from typing import Any, Mapping, Sequence
 
 from harness.contracts import Evidence, Observation
@@ -27,8 +28,6 @@ class StateClassification:
     ambiguity: Mapping[str, Any] = field(default_factory=dict)
 
 
-# Exact positive-evidence values from config/ui_states.yaml.  A state is a
-# candidate only when every value documented for it is observed in this frame.
 _STATE_RULES: Mapping[str, tuple[str, ...]] = {
     "CITY_VIEW": (
         "city buildings occupy central world canvas",
@@ -48,12 +47,16 @@ _STATE_RULES: Mapping[str, tuple[str, ...]] = {
         "New Troop",
         "Queue X/5",
     ),
-    "NEW_TROOP_SETUP": ("New Troop", "MARCH", "Units", "Load"),
+    # Keep this synchronized with config/ui_states.yaml. "Load" was an older
+    # training note; the accepted positive anchor is now "Total Power".
+    "NEW_TROOP_SETUP": ("New Troop", "MARCH", "Units", "Total Power"),
     "MARCH_IN_PROGRESS": (
         "used march count is greater than before dispatch",
         "troop/path indicator may be visible on map",
     ),
 }
+
+_QUEUE_PATTERN = re.compile(r"^queue\s+\d{1,2}\s*/\s*\d{1,2}$", re.IGNORECASE)
 
 
 def _current_evidence(observation: Observation, scene: SceneGraph | None) -> tuple[Evidence, ...]:
@@ -67,9 +70,18 @@ def _current_evidence(observation: Observation, scene: SceneGraph | None) -> tup
     )
 
 
+def _text(item: Evidence) -> tuple[str, ...]:
+    values = [item.label]
+    if isinstance(item.value, str) and item.value != item.label:
+        values.append(item.value)
+    return tuple(value for value in values if isinstance(value, str))
+
+
 def _matches(item: Evidence, expected: str) -> bool:
-    """Match an observed semantic label/value without interpreting metadata."""
-    return item.label == expected or isinstance(item.value, str) and item.value == expected
+    """Match exact trained anchors plus the one declared queue text pattern."""
+    if expected == "Queue X/5":
+        return any(_QUEUE_PATTERN.fullmatch(value.strip()) is not None for value in _text(item))
+    return any(value == expected for value in _text(item))
 
 
 class StateClassifier:

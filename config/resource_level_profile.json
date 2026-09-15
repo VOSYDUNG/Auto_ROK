@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "status": "trained",
+  "control_mode": "horizontal_discrete_slider",
+  "min_level": 1,
+  "max_level": 6,
+  "track_normalized": [
+    0.33601756954612005,
+    0.7018229166666666,
+    0.42020497803806733,
+    0.7200520833333334
+  ],
+  "confidence": 0.95,
+  "required_anchors": [
+    "SEARCH",
+    "Level:"
+  ],
+  "training_frame_size": [
+    1366,
+    768
+  ]
+}

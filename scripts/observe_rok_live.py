@@ -75,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         if completed.returncode != 0:
             raise WindowsCaptureError(completed.stderr.strip() or f"Windows OCR exited {completed.returncode}")
-        ocr = json.loads(completed.stdout)
+        ocr = json.loads(completed.stdout, strict=False)
         _write_json(ocr_path, ocr)
         stage = "projection"
         projected = project_observation(capture, ocr, image, _candidate_specs(args.candidates),

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Mapping
+from typing import Any, Mapping
 
 from harness.scene_graph import SceneGraph
 
@@ -24,11 +24,13 @@ class ShortcutBinding:
 class ActionRequest:
     """Semantic request produced by MissionRuntime / GPT-OSS.
 
-    The request intentionally contains no screen coordinates.
+    The request intentionally contains no screen coordinates. Typed bounded
+    arguments may be carried when the compiled transition declares them.
     """
 
     action_id: str
     target_id: str | None = None
+    arguments: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -47,24 +49,18 @@ class ActionResolutionError(RuntimeError):
 
 
 class SemanticActionSurface:
-    """Resolve symbolic actions into concrete OS input.
-
-    Resolution order is deliberately shortcut-first:
-
-      semantic action -> native game shortcut -> visual target fallback
-
-    Native shortcuts are more stable and cheaper than repeatedly grounding a
-    known menu icon. Visual coordinates remain frame-scoped execution data.
-    """
+    """Resolve symbolic actions into concrete OS input."""
 
     def __init__(
         self,
         shortcuts: Mapping[str, str] | None = None,
         *,
         min_target_confidence: float = 0.90,
+        allow_unscored_exact_targets: bool = False,
     ) -> None:
         self.shortcuts = dict(shortcuts or {})
         self.min_target_confidence = min_target_confidence
+        self.allow_unscored_exact_targets = allow_unscored_exact_targets
 
     def resolve(
         self,
@@ -85,16 +81,20 @@ class SemanticActionSurface:
             raise ActionResolutionError(
                 f"action {request.action_id!r} has no native shortcut and no target"
             )
-
         if scene is None:
             raise ActionResolutionError(
                 f"action {request.action_id!r} requires a current scene graph"
             )
 
-        target = scene.require_target(
+        target = scene.target(
             request.target_id,
             min_confidence=self.min_target_confidence,
+            allow_unscored_exact=self.allow_unscored_exact_targets,
         )
+        if target is None:
+            raise LookupError(
+                f"target {request.target_id!r} is not grounded for the current action surface"
+            )
         if not scene.is_current(target):
             raise ActionResolutionError(
                 f"target {request.target_id!r} is stale for frame {scene.frame_id!r}"
@@ -110,8 +110,6 @@ class SemanticActionSurface:
         )
 
 
-# Trained from the operator-provided in-game Settings > Controls > Shortcuts
-# screenshots. Keep this small and explicit; ambiguous entries are not included.
 TRAINED_NATIVE_SHORTCUTS: Mapping[str, str] = {
     "TOGGLE_CHAT_WINDOWS": "ENTER",
     "OPEN_VIP": "V",

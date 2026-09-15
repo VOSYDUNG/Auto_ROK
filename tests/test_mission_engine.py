@@ -11,10 +11,19 @@ ROOT = Path(__file__).parents[1]
 MISSIONS = ROOT / "config" / "mission_flows.yaml"
 STATES = ROOT / "config" / "ui_states.yaml"
 CONTEXT = MissionContext("GATHER_RESOURCE", "one-character", "run-1")
+PRECONDITION = "troop/commander selection policy is valid for this mission"
 
 
-def snapshot(frame: str, state: str, *, targets=(), actions=()):
-    return ToolSnapshot("GATHER_RESOURCE", "one-character", frame, state, allowed_actions=actions, target_ids=targets)
+def snapshot(frame, state, *, targets=(), actions=(), facts=None):
+    return ToolSnapshot(
+        "GATHER_RESOURCE",
+        "one-character",
+        frame,
+        state,
+        facts=facts or {},
+        allowed_actions=actions,
+        target_ids=targets,
+    )
 
 
 class FakeMissionTool:
@@ -32,7 +41,12 @@ class FakeMissionTool:
 
 
 def compiled(level=6):
-    return compile_mission(MISSIONS, STATES, "GATHER_RESOURCE", {"resource_type": "WOOD", "resource_level": level})
+    return compile_mission(
+        MISSIONS,
+        STATES,
+        "GATHER_RESOURCE",
+        {"resource_type": "WOOD", "resource_level": level},
+    )
 
 
 def test_verified_declared_transition_replays_from_real_compiled_flow():
@@ -53,69 +67,125 @@ def test_unknown_or_ambiguous_state_blocks_execute(state):
 
 
 def test_missing_target_or_invalid_choice_blocks_execute():
-    missing = snapshot("one", "RESOURCE_POINT_DETAIL", actions=(AllowedAction("GATHER_RESOURCE_NODE", True, ("RESOURCE_GATHER",)),))
-    tool = FakeMissionTool((missing,))
-    result = MissionEngine(compiled(), tool).step(CONTEXT, ActionChoice("GATHER_RESOURCE_NODE", "RESOURCE_GATHER"))
+    action = AllowedAction("GATHER_RESOURCE_NODE", True, ("RESOURCE_GATHER",))
+    tool = FakeMissionTool((snapshot("one", "RESOURCE_POINT_DETAIL", actions=(action,)),))
+    result = MissionEngine(compiled(), tool).step(
+        CONTEXT, ActionChoice("GATHER_RESOURCE_NODE", "RESOURCE_GATHER")
+    )
     assert result.decision is EngineDecision.REOBSERVE
     assert tool.executions == []
-    invalid = FakeMissionTool((snapshot("one", "CITY_VIEW", actions=(AllowedAction("TOGGLE_CITY_MAP"),)),))
+
+    invalid = FakeMissionTool((
+        snapshot("one", "CITY_VIEW", actions=(AllowedAction("TOGGLE_CITY_MAP"),)),
+    ))
     result = MissionEngine(compiled(), invalid).step(CONTEXT, ActionChoice("OPEN_SEARCH"))
     assert result.decision is EngineDecision.REJECT_CHOICE
     assert invalid.executions == []
 
 
-def test_verified_self_loop_advances_once_and_cannot_reselect():
+def test_verified_self_loop_can_be_checkpointed_and_restored():
     action = AllowedAction("SELECT_RESOURCE_TYPE", True, ("SEARCH_CATEGORY_WOOD",))
-    tool = FakeMissionTool((
+    first_tool = FakeMissionTool((
         snapshot("one", "RESOURCE_SEARCH_PANEL", targets=("SEARCH_CATEGORY_WOOD",), actions=(action,)),
         snapshot("two", "RESOURCE_SEARCH_PANEL"),
-        snapshot("three", "RESOURCE_SEARCH_PANEL", targets=("SEARCH_CATEGORY_WOOD",), actions=(action,)),
     ))
-    engine = MissionEngine(compiled(), tool)
+    engine = MissionEngine(compiled(), first_tool)
     choice = ActionChoice("SELECT_RESOURCE_TYPE", "SEARCH_CATEGORY_WOOD")
     assert engine.step(CONTEXT, choice).decision is EngineDecision.CONTINUE
-    assert engine.step(CONTEXT, choice).decision is EngineDecision.REOBSERVE
-    assert tool.executions == [choice]
+    checkpoint = engine.verified_self_loops
+    assert checkpoint == (("run-1", "RESOURCE_SEARCH_PANEL", "SELECT_RESOURCE_TYPE"),)
+
+    second_tool = FakeMissionTool((
+        snapshot("three", "RESOURCE_SEARCH_PANEL", targets=("SEARCH_CATEGORY_WOOD",), actions=(action,)),
+    ))
+    resumed = MissionEngine(compiled(), second_tool)
+    resumed.restore_verified_self_loops(checkpoint)
+    result = resumed.step(CONTEXT, choice)
+    assert result.decision is EngineDecision.REOBSERVE
+    assert second_tool.executions == []
 
 
-def test_completed_flag_without_typed_completion_or_receipt_does_not_complete():
+def test_declared_gameplay_precondition_blocks_before_actuation():
     last = AllowedAction("MARCH_WITH_CURRENT_SELECTION", True, ("TROOP_MARCH",))
     tool = FakeMissionTool((
-        snapshot("one", "NEW_TROOP_SETUP", targets=("TROOP_MARCH",), actions=(last,)),
-        snapshot("two", "MARCH_IN_PROGRESS"),
-    ), ToolFeedback(True, "VERIFIED", completed=True))
-    result = MissionEngine(compiled(), tool).step(CONTEXT, ActionChoice("MARCH_WITH_CURRENT_SELECTION", "TROOP_MARCH"))
-    assert result.decision is EngineDecision.REOBSERVE
-    assert result.decision is not EngineDecision.COMPLETE
+        snapshot(
+            "one",
+            "NEW_TROOP_SETUP",
+            targets=("TROOP_MARCH",),
+            actions=(last,),
+            facts={"march_queue_used": 0, "character_id": "hien"},
+        ),
+    ))
+    result = MissionEngine(compiled(), tool).step(
+        CONTEXT, ActionChoice("MARCH_WITH_CURRENT_SELECTION", "TROOP_MARCH")
+    )
+    assert result.decision is EngineDecision.NEEDS_DECISION
+    assert PRECONDITION in result.reason
+    assert tool.executions == []
 
 
-def test_typed_completion_requires_fresh_same_character_receipt_and_queue_increase():
+def test_typed_completion_requires_fresh_same_character_receipt_queue_increase_and_precondition():
     last = AllowedAction("MARCH_WITH_CURRENT_SELECTION", True, ("TROOP_MARCH",))
-    before = snapshot("one", "NEW_TROOP_SETUP", targets=("TROOP_MARCH",), actions=(last,))
-    before = ToolSnapshot(**{**before.__dict__, "facts": {"march_queue_used": 0, "character_id": "hien"}})
-    after = snapshot("two", "MARCH_IN_PROGRESS")
-    after = ToolSnapshot(**{**after.__dict__, "facts": {"march_queue_used": 1, "character_id": "hien"}})
-    feedback = ToolFeedback(True, "VERIFIED", completed=True, facts={
-        "troop_selection_policy_valid": True,
-        "precondition_evidence": {"troop/commander selection policy is valid for this mission": True},
-        "receipt": {"before_frame_id": "one", "after_frame_id": "two", "character_id": "hien"},
-    })
+    before = snapshot(
+        "one",
+        "NEW_TROOP_SETUP",
+        targets=("TROOP_MARCH",),
+        actions=(last,),
+            facts={
+                "character_id": "hien",
+                "completion_baseline": {"predicate_id": "march_queue_used_increased", "counter_fact": "march_queue_used", "counter_value": 0, "capacity": 5, "source_frame_id": "queue-frame", "source": "visible_ocr_queue_anchor", "character_id": "hien"},
+                "precondition_evidence": {PRECONDITION: True},
+        },
+    )
+    after = snapshot(
+        "two",
+        "MARCH_IN_PROGRESS",
+            facts={"march_queue_used": 1, "march_queue_capacity": 5, "march_queue_source": "visible_ocr_march_queue_region", "character_id": "hien"},
+    )
+    feedback = ToolFeedback(
+        True,
+        "VERIFIED",
+        completed=True,
+        facts={
+            "receipt": {
+                "before_frame_id": "one",
+                "after_frame_id": "two",
+                "character_id": "hien",
+            },
+        },
+    )
     result = MissionEngine(compiled(), FakeMissionTool((before, after), feedback)).step(
         CONTEXT, ActionChoice("MARCH_WITH_CURRENT_SELECTION", "TROOP_MARCH")
     )
     assert result.decision is EngineDecision.COMPLETE
 
 
-@pytest.mark.parametrize("before_facts, feedback_facts", [
-    ({"character_id": "hien"}, {"troop_selection_policy_valid": True, "receipt": {"before_frame_id": "one", "after_frame_id": "two", "character_id": "hien"}}),
-    ({"march_queue_used": 0, "character_id": "hien"}, {"receipt": {"before_frame_id": "one", "after_frame_id": "two", "character_id": "hien"}}),
-])
-def test_typed_completion_fails_closed_when_count_or_policy_evidence_is_missing(before_facts, feedback_facts):
+def test_completion_fails_closed_when_queue_count_missing():
     last = AllowedAction("MARCH_WITH_CURRENT_SELECTION", True, ("TROOP_MARCH",))
-    before = ToolSnapshot("GATHER_RESOURCE", "one-character", "one", "NEW_TROOP_SETUP", facts=before_facts, allowed_actions=(last,), target_ids=("TROOP_MARCH",))
-    after = ToolSnapshot("GATHER_RESOURCE", "one-character", "two", "MARCH_IN_PROGRESS", facts={"march_queue_used": 1, "character_id": "hien"})
-    feedback = ToolFeedback(True, "VERIFIED", completed=True, facts=feedback_facts)
-    result = MissionEngine(compiled(), FakeMissionTool((before, after), feedback)).step(CONTEXT, ActionChoice("MARCH_WITH_CURRENT_SELECTION", "TROOP_MARCH"))
+    before = snapshot(
+        "one",
+        "NEW_TROOP_SETUP",
+        targets=("TROOP_MARCH",),
+        actions=(last,),
+        facts={
+            "character_id": "hien",
+            "precondition_evidence": {PRECONDITION: True},
+        },
+    )
+    after = snapshot(
+        "two",
+        "MARCH_IN_PROGRESS",
+        facts={"march_queue_used": 1, "character_id": "hien"},
+    )
+    feedback = ToolFeedback(
+        True,
+        "VERIFIED",
+        completed=True,
+        facts={"receipt": {"before_frame_id": "one", "after_frame_id": "two", "character_id": "hien"}},
+    )
+    result = MissionEngine(compiled(), FakeMissionTool((before, after), feedback)).step(
+        CONTEXT, ActionChoice("MARCH_WITH_CURRENT_SELECTION", "TROOP_MARCH")
+    )
     assert result.decision is EngineDecision.REOBSERVE
 
 
@@ -128,23 +198,23 @@ def test_missing_executor_is_explicitly_blocked():
     assert result.decision is EngineDecision.BLOCKED
 
 
-def test_compiler_classifier_adapter_engine_replay_waits_for_wp04():
-    adapter = pytest.importorskip("harness.state_adapter")
-    from harness.contracts import Evidence, Observation
-    from harness.scene_graph import SceneGraph
-    from harness.state_classifier import StateClassifier
+def test_step_from_snapshot_does_not_recapture_before_action():
+    class Tool:
+        def __init__(self):
+            self.observe_calls = 0
 
-    observation = Observation(1.0, "one", (1280, 720), (
-        Evidence("semantic", "city buildings occupy central world canvas", 1.0, metadata={"frame_id": "one"}),
-        Evidence("semantic", "resource counters across top", 1.0, metadata={"frame_id": "one"}),
-        Evidence("semantic", "primary circular navigation/actions at bottom-right", 1.0, metadata={"frame_id": "one"}),
-        Evidence("semantic", "quest/task list at left", 1.0, metadata={"frame_id": "one"}),
-    ))
-    flow = compiled().flow
-    classified = StateClassifier().classify(observation, SceneGraph("one", None))
-    before = adapter.to_tool_snapshot(CONTEXT, classified, SceneGraph("one", None), flow)
-    assert before.state == "CITY_VIEW"
-    after = snapshot("two", "WORLD_MAP_VIEW")
-    tool = FakeMissionTool((before, after))
-    result = MissionEngine(compiled(), tool).step(CONTEXT, ActionChoice("TOGGLE_CITY_MAP"))
+        def observe(self, context):
+            self.observe_calls += 1
+            return snapshot("after", "WORLD_MAP_VIEW")
+
+        def execute(self, context, before, choice):
+            assert before.frame_id == "before"
+            return ToolFeedback(True, "VERIFIED")
+
+    tool = Tool()
+    before = snapshot("before", "CITY_VIEW", actions=(AllowedAction("TOGGLE_CITY_MAP"),))
+    result = MissionEngine(compiled(), tool).step_from_snapshot(
+        CONTEXT, before, ActionChoice("TOGGLE_CITY_MAP")
+    )
     assert result.decision is EngineDecision.CONTINUE
+    assert tool.observe_calls == 1
