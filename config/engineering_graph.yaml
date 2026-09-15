@@ -101,19 +101,20 @@ nodes:
     kind: perception
     responsibility: Produce current-frame semantic/layout evidence sufficient to distinguish CITY_VIEW and WORLD_MAP_VIEW from real pixels while suppressing foreground gather surfaces.
     authority: canonical
-    status: partial
+    status: implemented
     path: harness/main_view_detector.py
     evidence:
       - tests/test_main_view_detector.py
-    blocker: B001
 
   - id: main_view_training_profile
     kind: evidence
     responsibility: Hold operator-labelled real CITY_VIEW/WORLD_MAP_VIEW visual prototypes and calibrated acceptance thresholds.
     authority: evidence
-    status: blocked
+    status: implemented
     path: config/main_view_profiles.json
-    blocker: B001
+    evidence:
+      - config/main_view_profiles.json
+      - tests/test_main_view_detector.py
 
   - id: resource_level_control
     kind: actuator
@@ -357,12 +358,6 @@ edges:
   - {from: gather_runtime_evidence, to: live_replay_evidence, relation: validates}
 
 blockers:
-  - id: B001
-    title: Main-view detector code exists but real CITY/WORLD calibration evidence is missing
-    class: perception_data
-    blocks: [city_world_visual_detector, main_view_training_profile, live_replay_evidence]
-    falsification: At least two labelled real CITY_VIEW and two WORLD_MAP_VIEW client frames train the profile, held-out real fixtures classify deterministically, and foreground gather surfaces suppress main-view output.
-
   - id: B002
     title: Typed resource-level control exists but real slider geometry/range calibration is missing
     class: interaction_training
@@ -395,8 +390,8 @@ coverage:
     ocr_target_grounding: covered
     gather_queue_fact: covered
     selected_resource_level_fact: covered
-    main_view_visual_perception: partial
-    main_view_profile_training: missing
+    main_view_visual_perception: covered
+    main_view_profile_training: covered
     resource_level_actuation: partial
     resource_level_profile_training: missing
     commander_troop_policy: partial
