@@ -5,6 +5,7 @@ on:
     paths:
       - "harness/**"
       - "scripts/run_gather_tick.py"
+      - "scripts/validate_gather_replay.py"
       - "scripts/windows_ocr.ps1"
       - "scripts/train_main_view_profiles.py"
       - "scripts/train_resource_level_profile.py"
@@ -13,11 +14,13 @@ on:
       - "config/gather_ocr_targets.json"
       - "config/main_view_profiles.json"
       - "config/resource_level_profile.json"
+      - "config/troop_policy_approval.example.json"
       - "config/engineering_graph.yaml"
       - "tests/test_mission_*.py"
       - "tests/test_state_*.py"
       - "tests/test_gather_facts.py"
       - "tests/test_gather_runtime_contracts.py"
+      - "tests/test_gather_replay_evidence.py"
       - "tests/test_observation_bridge.py"
       - "tests/test_ocr_semantics.py"
       - "tests/test_action_surface.py"
@@ -25,6 +28,7 @@ on:
       - "tests/test_windows_input.py"
       - "tests/test_windows_interference_guard.py"
       - "tests/test_policy_overlay.py"
+      - "tests/test_troop_policy.py"
       - "tests/test_main_view_detector.py"
       - "tests/test_resource_level_control.py"
       - "tests/test_typed_action_contracts.py"
@@ -60,6 +64,7 @@ jobs:
           tests/test_gather_facts.py
           tests/test_mission_runner.py
           tests/test_gather_runtime_contracts.py
+          tests/test_gather_replay_evidence.py
           tests/test_observation_bridge.py
           tests/test_ocr_semantics.py
           tests/test_action_surface.py
@@ -67,8 +72,9 @@ jobs:
           tests/test_windows_input.py
           tests/test_windows_interference_guard.py
           tests/test_policy_overlay.py
+          tests/test_troop_policy.py
           tests/test_main_view_detector.py
           tests/test_resource_level_control.py
           tests/test_typed_action_contracts.py
       - name: Verify live-tick composition imports without Win32 side effects
-        run: python -c "import scripts.run_gather_tick"
+        run: python -c "import scripts.run_gather_tick, scripts.validate_gather_replay"
