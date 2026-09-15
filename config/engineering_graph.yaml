@@ -1,6 +1,6 @@
 schema_version: 1
 graph_id: AUTO_ROK_GATHER_VERTICAL_SLICE
-updated_at: "2026-09-14"
+updated_at: "2026-09-15"
 
 principles:
   - deterministic_first
@@ -25,6 +25,7 @@ required_runtime_path:
   - resource_level_control
   - state_classifier
   - gather_fact_extractor
+  - troop_selection_policy
   - policy_overlay
   - state_adapter
   - deterministic_selector
@@ -38,6 +39,7 @@ required_runtime_path:
   - mission_store
   - mission_runner
   - gather_cli
+  - gather_runtime_evidence
 
 nodes:
   - id: mission_contract
@@ -150,6 +152,22 @@ nodes:
     evidence:
       - tests/test_gather_facts.py
 
+  - id: troop_selection_policy
+    kind: policy
+    responsibility: Binds only an explicit positive operator approval to the exact mission/task/run/character occurrence and exposes the compiled troop-selection precondition without choosing commanders or composition.
+    authority: canonical
+    status: implemented
+    path: harness/troop_policy.py
+    evidence:
+      - tests/test_troop_policy.py
+
+  - id: troop_selection_policy_approval
+    kind: evidence
+    responsibility: Hold the explicit operator decision approving the currently visible troop/commander selection for one exact GATHER occurrence.
+    authority: operator
+    status: blocked
+    blocker: B003
+
   - id: policy_overlay
     kind: code
     responsibility: Injects only explicit operator-approved gameplay precondition evidence.
@@ -158,6 +176,7 @@ nodes:
     path: harness/policy_overlay.py
     evidence:
       - tests/test_policy_overlay.py
+      - tests/test_troop_policy.py
 
   - id: state_adapter
     kind: adapter
@@ -266,23 +285,28 @@ nodes:
 
   - id: gather_cli
     kind: composition
-    responsibility: Composes live observation, OCR semantics, trained visual evidence, typed level control, facts, policy, selector, engine, guarded input and checkpoint store for one GATHER tick.
+    responsibility: Composes live observation, OCR semantics, trained visual evidence, typed level control, facts, occurrence-bound policy, guarded input, checkpoint store and append-only runtime evidence for one GATHER tick.
     authority: canonical
     status: implemented
     path: scripts/run_gather_tick.py
     evidence:
       - .github/workflows/gather-harness.yml
+      - tests/test_troop_policy.py
+      - tests/test_gather_replay_evidence.py
 
-  - id: troop_selection_policy
-    kind: policy
-    responsibility: Define whether current commander/unit selection is acceptable for this mission.
-    authority: operator
-    status: needs_decision
-    blocker: B003
+  - id: gather_runtime_evidence
+    kind: verification
+    responsibility: Records each canonical GATHER tick append-only and deterministically validates that real completion has live arming, trained profiles, occurrence-bound policy, fresh VERIFIED receipt and same-character march queue increase.
+    authority: canonical
+    status: implemented
+    path: harness/gather_replay_evidence.py
+    evidence:
+      - tests/test_gather_replay_evidence.py
+      - scripts/validate_gather_replay.py
 
   - id: live_replay_evidence
-    kind: verification
-    responsibility: Prove the composed vertical slice against real captured game frames and guarded live actuation.
+    kind: evidence
+    responsibility: Prove the composed vertical slice against real captured game frames and guarded live actuation using the canonical replay evidence validator.
     authority: evidence
     status: blocked
     blocker: B004
@@ -291,6 +315,7 @@ edges:
   - {from: mission_contract, to: mission_compiler, relation: compiles_into}
   - {from: mission_compiler, to: deterministic_selector, relation: constrains}
   - {from: mission_compiler, to: mission_engine, relation: constrains}
+  - {from: mission_contract, to: troop_selection_policy, relation: declares_precondition}
   - {from: live_capture, to: windows_ocr, relation: feeds}
   - {from: live_capture, to: observation_projection, relation: proves_frame}
   - {from: live_capture, to: city_world_visual_detector, relation: supplies_current_frame}
@@ -306,8 +331,10 @@ edges:
   - {from: resource_level_control, to: state_adapter, relation: grounds_typed_target}
   - {from: resource_level_control, to: semantic_action_surface, relation: resolves_typed_control}
   - {from: resource_level_control, to: mission_engine, relation: exposes_typed_postcondition_contract}
-  - {from: gather_fact_extractor, to: policy_overlay, relation: enriches}
+  - {from: gather_fact_extractor, to: troop_selection_policy, relation: supplies_character_scope}
   - {from: gather_fact_extractor, to: mission_engine, relation: supplies_visible_postcondition_fact}
+  - {from: troop_selection_policy_approval, to: troop_selection_policy, relation: explicitly_authorizes}
+  - {from: troop_selection_policy, to: policy_overlay, relation: supplies_bounded_approval}
   - {from: policy_overlay, to: state_adapter, relation: feeds}
   - {from: state_classifier, to: state_adapter, relation: feeds}
   - {from: state_adapter, to: deterministic_selector, relation: exposes_actions}
@@ -317,7 +344,6 @@ edges:
   - {from: bounded_mission_tool, to: semantic_action_surface, relation: dispatches_to}
   - {from: semantic_action_surface, to: screen_mapping, relation: resolves_through}
   - {from: resource_level_control, to: screen_mapping, relation: typed_screen_point}
-  - {from: troop_selection_policy, to: policy_overlay, relation: authorizes}
   - {from: screen_mapping, to: interference_guard, relation: guarded_by}
   - {from: interference_guard, to: windows_input, relation: authorizes}
   - {from: windows_input, to: post_action_verification, relation: requires_fresh_verify}
@@ -326,7 +352,9 @@ edges:
   - {from: mission_store, to: mission_runner, relation: resumes}
   - {from: mission_engine, to: mission_runner, relation: driven_by}
   - {from: mission_runner, to: gather_cli, relation: composed_by}
-  - {from: gather_cli, to: live_replay_evidence, relation: must_prove}
+  - {from: gather_cli, to: gather_runtime_evidence, relation: emits}
+  - {from: troop_selection_policy_approval, to: live_replay_evidence, relation: supplies_policy_provenance}
+  - {from: gather_runtime_evidence, to: live_replay_evidence, relation: validates}
 
 blockers:
   - id: B001
@@ -342,16 +370,16 @@ blockers:
     falsification: A real RESOURCE_SEARCH_PANEL trains horizontal slider bounds/range, guarded input sets a requested level, and a fresh visible selected_search_level fact equals the requested resource_level.
 
   - id: B003
-    title: Commander/troop policy is intentionally unknown
-    class: gameplay_policy
-    blocks: [troop_selection_policy, live_replay_evidence]
-    falsification: Operator supplies an explicit policy or explicitly approves current selection for the mission occurrence.
+    title: Occurrence-bound troop/commander approval evidence is missing
+    class: gameplay_policy_evidence
+    blocks: [troop_selection_policy_approval, live_replay_evidence]
+    falsification: Operator supplies an explicit positive approval bound to the exact GATHER mission/task/run/character occurrence, and runtime evidence records the same approval on the completion transition.
 
   - id: B004
     title: End-to-end live evidence missing
     class: live_verification
     blocks: [live_replay_evidence]
-    falsification: Guarded one-character GATHER_RESOURCE replay reaches typed completion from real frames with durable checkpoint evidence.
+    falsification: Canonical replay evidence validator PASSes a guarded one-character GATHER_RESOURCE run with live arming, trained B001/B002 profiles, occurrence-bound B003 approval, fresh VERIFIED receipt and durable same-character march queue increase.
 
 coverage:
   active_vertical_slice: GATHER_RESOURCE
@@ -371,7 +399,10 @@ coverage:
     main_view_profile_training: missing
     resource_level_actuation: partial
     resource_level_profile_training: missing
-    commander_troop_policy: needs_decision
+    commander_troop_policy: partial
+    commander_troop_policy_contract: covered
+    commander_troop_policy_approval: missing
+    runtime_replay_evidence_contract: covered
     real_live_replay: missing
   other_mission_branches:
     CLAIM_ALLIANCE_TERRITORY_RSS: not_covered_end_to_end
