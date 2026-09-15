@@ -6,7 +6,7 @@ occurrence and one character.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -156,7 +156,7 @@ class TroopSelectionApproval:
             raise TroopSelectionApprovalError(f"cannot read troop approval {source}: {exc}") from exc
         approval = cls.from_dict(raw)
         if approval.source == "operator_artifact":
-            object.__setattr__(approval, "source", f"operator_artifact:{source.resolve()}")
+            return replace(approval, source=f"operator_artifact:{source.resolve()}")
         return approval
 
     @classmethod
