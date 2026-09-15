@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "approval_id": "replace-with-unique-approval-id",
+  "mission_id": "GATHER_RESOURCE",
+  "task_id": "one-character",
+  "run_id": "replace-with-run-id",
+  "character_id": "replace-with-character-id",
+  "approved": true,
+  "approved_by": "operator",
+  "approved_at": "2026-09-15T00:00:00+00:00",
+  "source": "operator_artifact",
+  "note": "I explicitly approve the currently visible troop/commander selection for this exact mission occurrence."
+}
