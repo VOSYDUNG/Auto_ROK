@@ -120,20 +120,22 @@ nodes:
     kind: actuator
     responsibility: Ground and actuate an explicitly trained discrete resource-level control, carrying a typed visible postcondition contract.
     authority: canonical
-    status: partial
+    status: implemented
     path: harness/resource_level_control.py
     evidence:
       - tests/test_resource_level_control.py
       - tests/test_typed_action_contracts.py
-    blocker: B002
+      - workspace/evidence/b002_falsification_report.json
 
   - id: resource_level_training_profile
     kind: evidence
     responsibility: Hold real search-panel slider geometry, visible level range, mode and anchor calibration supplied from operator training.
     authority: evidence
-    status: blocked
+    status: implemented
     path: config/resource_level_profile.json
-    blocker: B002
+    evidence:
+      - config/resource_level_profile.json
+      - workspace/evidence/b002_falsification_report.json
 
   - id: state_classifier
     kind: code
@@ -358,12 +360,6 @@ edges:
   - {from: gather_runtime_evidence, to: live_replay_evidence, relation: validates}
 
 blockers:
-  - id: B002
-    title: Typed resource-level control exists but real slider geometry/range calibration is missing
-    class: interaction_training
-    blocks: [resource_level_control, resource_level_training_profile, live_replay_evidence]
-    falsification: A real RESOURCE_SEARCH_PANEL trains horizontal slider bounds/range, guarded input sets a requested level, and a fresh visible selected_search_level fact equals the requested resource_level.
-
   - id: B003
     title: Occurrence-bound troop/commander approval evidence is missing
     class: gameplay_policy_evidence
@@ -392,8 +388,8 @@ coverage:
     selected_resource_level_fact: covered
     main_view_visual_perception: covered
     main_view_profile_training: covered
-    resource_level_actuation: partial
-    resource_level_profile_training: missing
+    resource_level_actuation: covered
+    resource_level_profile_training: covered
     commander_troop_policy: partial
     commander_troop_policy_contract: covered
     commander_troop_policy_approval: missing
