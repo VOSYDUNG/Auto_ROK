@@ -63,6 +63,12 @@ class WindowsForegroundInterferenceGuard:
             return InterferenceCheck(False, "WINDOWS_GUARD_UNAVAILABLE")
 
         user32 = ctypes.WinDLL("user32", use_last_error=True)
+        try:
+            hdesk = user32.OpenInputDesktop(0, False, 0x01FF)
+            if hdesk:
+                user32.SetThreadDesktop(hdesk)
+        except Exception:
+            pass
         foreground = int(user32.GetForegroundWindow())
         if foreground != hwnd:
             return InterferenceCheck(

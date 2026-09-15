@@ -39,6 +39,12 @@ class CtypesWin32InputBackend:
             raise WindowsInputError("Win32 input backend is available only on Windows")
         import ctypes
         self.user32 = ctypes.WinDLL("user32", use_last_error=True)
+        try:
+            hdesk = self.user32.OpenInputDesktop(0, False, 0x01FF)
+            if hdesk:
+                self.user32.SetThreadDesktop(hdesk)
+        except Exception:
+            pass
 
     def move_to(self, x: int, y: int) -> None:
         if not self.user32.SetCursorPos(int(x), int(y)):

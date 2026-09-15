@@ -82,7 +82,7 @@ class WindowsLiveObservationProvider:
                 raise LiveObservationError(
                     completed.stderr.strip() or f"Windows OCR exited {completed.returncode}"
                 )
-            ocr = json.loads(completed.stdout)
+            ocr = json.loads(completed.stdout, strict=False)
             self._write_json(ocr_path, ocr)
             projected = project_observation(
                 capture,

@@ -55,7 +55,17 @@ def _process_path(pid: int) -> str | None:
         _kernel32.CloseHandle(handle)
 
 
+def _attach_input_desktop() -> None:
+    try:
+        hdesk = _user32.OpenInputDesktop(0, False, 0x01FF)
+        if hdesk:
+            _user32.SetThreadDesktop(hdesk)
+    except Exception:
+        pass
+
+
 def discover_rok_window(title: str = "Rise of Kingdoms", exe: str = "MASS.exe") -> dict[str, Any]:
+    _attach_input_desktop()
     matches: list[dict[str, Any]] = []
 
     @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
