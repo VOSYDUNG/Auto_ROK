@@ -366,10 +366,17 @@ def _completion_matches(
     counter = _contract_value(completion, "canonical_counter_fact")
     if not isinstance(counter, str) or not counter:
         return False
-    before_count, after_count = before.facts.get(counter), after.facts.get(counter)
+    baseline = before.facts.get("completion_baseline")
+    if not isinstance(baseline, Mapping) or baseline.get("counter_fact") != counter:
+        return False
+    before_count, after_count = baseline.get("counter_value"), after.facts.get(counter)
     if type(before_count) is not int or type(after_count) is not int or after_count <= before_count:
         return False
-    before_character = before.facts.get("character_id")
+    if baseline.get("source") not in {"visible_ocr_queue_anchor", "visible_ocr_march_queue_region"} or after.facts.get("march_queue_source") not in {"visible_ocr_queue_anchor", "visible_ocr_march_queue_region"}:
+        return False
+    if baseline.get("capacity") != after.facts.get("march_queue_capacity"):
+        return False
+    before_character = baseline.get("character_id")
     after_character = after.facts.get("character_id")
     if not isinstance(before_character, str) or not before_character or before_character != after_character:
         return False

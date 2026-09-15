@@ -42,6 +42,7 @@ class MissionCheckpoint:
     last_reason: str | None = None
     verified_self_loops: Sequence[tuple[str, str, str]] = field(default_factory=tuple)
     updated_at: str | None = None
+    completion_baseline: Mapping[str, Any] | None = None
 
     def matches(self, context: MissionContext) -> bool:
         return (
@@ -159,6 +160,7 @@ class JsonMissionStore:
                 last_reason=payload.get("last_reason"),
                 verified_self_loops=tuple(loops),
                 updated_at=payload.get("updated_at"),
+                completion_baseline=payload.get("completion_baseline"),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise RuntimeError("malformed mission checkpoint payload") from exc

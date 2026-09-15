@@ -9,7 +9,7 @@ from harness.mission_runtime import MissionContext
 from harness.mission_tool import ObservationBundle, ObservationProvider
 
 
-_QUEUE = re.compile(r"\b(?:queue\s*)?(\d{1,2})\s*/\s*(\d{1,2})\b", re.IGNORECASE)
+_QUEUE = re.compile(r"\bqueue\s*(\d{1,2})\s*/\s*(\d{1,2})\b", re.IGNORECASE)
 _LEVEL = re.compile(r"\b(?:level|lvl|lv\.?)\s*[:\-]?\s*(\d{1,2})\b", re.IGNORECASE)
 
 
@@ -27,7 +27,10 @@ def _texts(bundle: ObservationBundle) -> Iterable[str]:
 def extract_march_queue(bundle: ObservationBundle) -> tuple[int, int] | None:
     """Return one unambiguous visible ``used/capacity`` pair, else fail closed."""
     pairs: set[tuple[int, int]] = set()
-    for text in _texts(bundle):
+    for evidence in bundle.observation.evidence:
+        text = evidence.value if isinstance(evidence.value, str) else evidence.label
+        if not isinstance(text, str):
+            continue
         for used_raw, capacity_raw in _QUEUE.findall(text):
             used, capacity = int(used_raw), int(capacity_raw)
             if 0 <= used <= capacity <= 20:
@@ -79,7 +82,7 @@ class GatherFactObservationProvider:
         queue = extract_march_queue(bundle)
         if queue is not None:
             facts["march_queue_used"], facts["march_queue_capacity"] = queue
-            facts["march_queue_source"] = "visible_ocr"
+            facts["march_queue_source"] = "visible_ocr_queue_anchor"
         level = extract_visible_resource_level(bundle)
         if level is not None:
             facts["selected_search_level"] = level

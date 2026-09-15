@@ -30,6 +30,7 @@ _REPLAY_FACT_KEYS = (
     "selected_search_level",
     "selected_search_level_source",
     "precondition_evidence_source",
+    "completion_baseline",
 )
 
 
@@ -308,12 +309,15 @@ def validate_gather_replay(records: Sequence[Mapping[str, Any]]) -> dict[str, An
             if not isinstance(before_facts, Mapping) or not isinstance(after_facts, Mapping):
                 errors.append("completion lacks before/after fact snapshots")
             else:
-                before_used = before_facts.get("march_queue_used")
+                baseline = before_facts.get("completion_baseline")
+                before_used = baseline.get("counter_value") if isinstance(baseline, Mapping) else None
                 after_used = after_facts.get("march_queue_used")
                 if type(before_used) is not int or type(after_used) is not int or after_used <= before_used:
                     errors.append("march_queue_used did not increase on the completion transition")
-                if before_facts.get("character_id") != identity.get("character_id"):
-                    errors.append("before snapshot character_id does not match replay identity")
+                if not isinstance(baseline, Mapping) or baseline.get("predicate_id") != "march_queue_used_increased" or baseline.get("counter_fact") != "march_queue_used" or baseline.get("source") not in {"visible_ocr_queue_anchor", "visible_ocr_march_queue_region"} or not baseline.get("source_frame_id") or baseline.get("character_id") != identity.get("character_id") or after_facts.get("march_queue_source") not in {"visible_ocr_queue_anchor", "visible_ocr_march_queue_region"}:
+                    errors.append("completion queue provenance is not positively grounded")
+                if isinstance(baseline, Mapping) and baseline.get("capacity") != after_facts.get("march_queue_capacity"):
+                    errors.append("completion queue capacity changed")
                 if after_facts.get("character_id") != identity.get("character_id"):
                     errors.append("after snapshot character_id does not match replay identity")
 

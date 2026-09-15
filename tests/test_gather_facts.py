@@ -36,7 +36,7 @@ def test_visible_queue_and_configured_character_are_projected_into_scene_facts()
     result = provider.observe(CONTEXT)
     assert result.scene.facts["march_queue_used"] == 0
     assert result.scene.facts["march_queue_capacity"] == 5
-    assert result.scene.facts["march_queue_source"] == "visible_ocr"
+    assert result.scene.facts["march_queue_source"] == "visible_ocr_queue_anchor"
     assert result.scene.facts["character_id"] == "hien"
     assert result.scene.facts["character_id_source"] == "configured_single_character_scope"
 

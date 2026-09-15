@@ -1,7 +1,7 @@
 """One bounded deterministic mission tick with durable checkpointing."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol, Sequence
 
 from harness.mission_engine import EngineDecision, EngineStepResult, MissionEngine
@@ -72,6 +72,20 @@ class MissionRunner:
             engine.restore_verified_self_loops(existing.verified_self_loops)
 
         snapshot = self.tool.observe(context)
+        baseline = existing.completion_baseline if existing is not None else None
+        if context.mission_id == "GATHER_RESOURCE" and snapshot.state == "TROOP_DISPATCH_DRAWER":
+            facts = snapshot.facts
+            if (type(facts.get("march_queue_used")) is int and type(facts.get("march_queue_capacity")) is int
+                    and facts.get("march_queue_source") in {"visible_ocr_queue_anchor", "visible_ocr_march_queue_region"}
+                    and isinstance(facts.get("character_id"), str)):
+                baseline = {"predicate_id": "march_queue_used_increased", "counter_fact": "march_queue_used",
+                            "counter_value": facts["march_queue_used"], "capacity": facts["march_queue_capacity"],
+                            "source_frame_id": snapshot.frame_id, "source": facts["march_queue_source"],
+                            "character_id": facts["character_id"]}
+        if baseline is not None:
+            enriched = dict(snapshot.facts)
+            enriched["completion_baseline"] = baseline
+            snapshot = replace(snapshot, facts=enriched)
         selection = self.selector.select(
             context,
             snapshot,

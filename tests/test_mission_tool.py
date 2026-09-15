@@ -211,15 +211,15 @@ def test_final_gather_completion_is_engine_verified_from_pre_action_policy_evide
                 "NEW_TROOP_SETUP",
                 targets=(target,),
                 facts={
-                    "march_queue_used": 0,
-                    "character_id": "hien",
+                        "character_id": "hien",
+                        "completion_baseline": {"predicate_id": "march_queue_used_increased", "counter_fact": "march_queue_used", "counter_value": 0, "capacity": 5, "source_frame_id": "queue-frame", "source": "visible_ocr_queue_anchor", "character_id": "hien"},
                     "precondition_evidence": {PRECONDITION: True},
                 },
             ),
             bundle(
                 "f2",
                 "MARCH_IN_PROGRESS",
-                facts={"march_queue_used": 1, "character_id": "hien"},
+                    facts={"march_queue_used": 1, "march_queue_capacity": 5, "march_queue_source": "visible_ocr_march_queue_region", "character_id": "hien"},
             ),
         ),
         FakeActions(receipt),

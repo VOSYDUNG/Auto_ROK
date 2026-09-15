@@ -23,8 +23,7 @@ def valid_record():
         "NEW_TROOP_SETUP",
         facts={
             "character_id": "char-a",
-            "march_queue_used": 0,
-            "march_queue_capacity": 5,
+            "completion_baseline": {"predicate_id": "march_queue_used_increased", "counter_fact": "march_queue_used", "counter_value": 0, "capacity": 5, "source_frame_id": "queue-frame", "source": "visible_ocr_queue_anchor", "character_id": "char-a"},
             "precondition_evidence_source": "explicit_operator_configuration",
         },
     )
@@ -37,6 +36,7 @@ def valid_record():
             "character_id": "char-a",
             "march_queue_used": 1,
             "march_queue_capacity": 5,
+            "march_queue_source": "visible_ocr_march_queue_region",
         },
     )
     choice = ActionChoice("MARCH_WITH_CURRENT_SELECTION", "TROOP_MARCH")

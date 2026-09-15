@@ -78,8 +78,8 @@ def test_final_completion_predicate_can_finish_from_fresh_unclassified_post_fram
         "f1",
         "NEW_TROOP_SETUP",
         facts={
-            "march_queue_used": 0,
-            "character_id": "hien",
+                "character_id": "hien",
+                "completion_baseline": {"predicate_id": "march_queue_used_increased", "counter_fact": "march_queue_used", "counter_value": 0, "capacity": 5, "source_frame_id": "queue-frame", "source": "visible_ocr_queue_anchor", "character_id": "hien"},
             "precondition_evidence": {PRECONDITION: True},
         },
         allowed_actions=(action,),
@@ -90,7 +90,7 @@ def test_final_completion_predicate_can_finish_from_fresh_unclassified_post_fram
         "one-character",
         "f2",
         "UNKNOWN_STATE",
-        facts={"march_queue_used": 1, "character_id": "hien"},
+            facts={"march_queue_used": 1, "march_queue_capacity": 5, "march_queue_source": "visible_ocr_march_queue_region", "character_id": "hien"},
     )
     feedback = ToolFeedback(
         True,
