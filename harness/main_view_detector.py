@@ -2,7 +2,7 @@
 
 Runtime matching is separated from training data. The detector never invents a
 city/world state when no trained profile is available, scores are too close, or
-a foreground gather surface is visibly open over the underlying main view.
+a foreground mission surface is visibly open over the underlying main view.
 """
 from __future__ import annotations
 
@@ -20,6 +20,9 @@ from harness.mission_tool import ObservationBundle, ObservationProvider
 CITY_VIEW = "CITY_VIEW"
 WORLD_MAP_VIEW = "WORLD_MAP_VIEW"
 _SUPPORTED = {CITY_VIEW, WORLD_MAP_VIEW}
+# Strong foreground markers only. Avoid generic tokens such as "Alliance" or
+# "Territory" because they can appear in the normal HUD. The alliance phrases
+# below are specific to the trained modal surfaces in ui_states.yaml.
 _FOREGROUND_MARKERS = {
     "search",
     "resource point",
@@ -27,6 +30,9 @@ _FOREGROUND_MARKERS = {
     "dispatch a new troop from your city",
     "new troop",
     "march",
+    "holy sites",
+    "alliance territory",
+    "territory resource earnings",
 }
 
 _CITY_EVIDENCE = (
