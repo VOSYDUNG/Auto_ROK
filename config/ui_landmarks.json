@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "anchors": [
+    {
+      "id": "WORLD_MAP_BUTTON",
+      "label": "World map button (Space)",
+      "algorithm": "opencv.TM_CCOEFF_NORMED",
+      "representation": "grayscale_laplacian_abs_v1",
+      "match_threshold": 0.9,
+      "minimum_runner_up_margin": 0.12
+    }
+  ]
+}

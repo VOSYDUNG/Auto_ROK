@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "enabled": false,
+  "provider": "local-openai-compatible",
+  "endpoint": "http://127.0.0.1:8080/v1",
+  "model": "gpt-oss-20b",
+  "alternatives": [
+    "qwen3-coder-30b"
+  ],
+  "timeout_seconds": 8,
+  "max_output_tokens": 128,
+  "temperature": 0,
+  "reasoning_budget_ratio": 0.2,
+  "role": "bounded_action_selector",
+  "input_contract": [
+    "mission_id",
+    "task_id",
+    "frame_id",
+    "symbolic_state",
+    "visible_facts",
+    "allowed_candidates",
+    "last_visible_feedback"
+  ],
+  "forbidden_model_inputs": [
+    "raw_screen_coordinates",
+    "hidden_game_state",
+    "process_memory",
+    "unbounded_tool_calls"
+  ],
+  "output_contract": {
+    "format": "single JSON object",
+    "fields": ["action_id", "target_id"],
+    "must_match_existing_candidate": true
+  }
+}

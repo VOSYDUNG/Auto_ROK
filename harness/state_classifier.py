@@ -81,7 +81,12 @@ def _matches(item: Evidence, expected: str) -> bool:
     """Match exact trained anchors plus the one declared queue text pattern."""
     if expected == "Queue X/5":
         return any(_QUEUE_PATTERN.fullmatch(value.strip()) is not None for value in _text(item))
-    return any(value == expected for value in _text(item))
+    if expected == "Dispatch a new troop from your city":
+        return any(
+            value == expected or value in ("Dispatch a new", "troop from your city")
+            for value in _text(item)
+        )
+    return any(value == expected or value.rstrip(":") == expected for value in _text(item))
 
 
 class StateClassifier:

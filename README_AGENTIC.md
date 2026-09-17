@@ -6,6 +6,14 @@ Branch objective: evolve the old proof-of-concept into a mission-driven support 
 
 No gameplay mission is autonomous yet.
 
+## Canonical build surface
+
+New work enters through `scripts/run_autorok.py`. The original root scripts are
+preserved as legacy evidence only. The harness carries perception, game
+knowledge, mission transitions, policy, grounding, guarded input, checkpoints
+and verification; a local Qwen/GPT-OSS provider is consulted only for a bounded
+`NEEDS_DECISION` choice (target model reasoning share: about 10–20%).
+
 The key architecture rules are now:
 
 > The game is an external visual UI environment. The harness does not read hidden game state or modify the game internally.
@@ -180,4 +188,5 @@ Priority is to build reliable **visual perception + human-input execution**, not
 - verified target-handle execution;
 - visible postcondition checks;
 - scheduler/task ledger;
-- local GPT-OSS selector only after the deterministic tool surface is stable.
+- bounded local GPT-OSS/Qwen selector behind `config/local-llm.json`, only after
+  the deterministic tool surface is stable.

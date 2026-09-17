@@ -21,6 +21,7 @@ from harness.gather_replay_evidence import (  # noqa: E402
     build_gather_tick_evidence,
     save_gather_tick_evidence,
 )
+from harness.local_llm_selector import OpenAICompatibleDecisionProvider  # noqa: E402
 from harness.main_view_detector import MainViewProfile, MainViewVisualObservationProvider  # noqa: E402
 from harness.mission_loader import compile_mission  # noqa: E402
 from harness.mission_runner import MissionRunner  # noqa: E402
@@ -69,6 +70,20 @@ def _candidate_specs(path: str | None) -> tuple[OcrTargetSpec, ...]:
     return tuple(result)
 
 
+def _local_llm_provider(path: str | None) -> OpenAICompatibleDecisionProvider | None:
+    if path is None:
+        return None
+    config_path = Path(path).resolve()
+    if not config_path.is_relative_to(ROOT):
+        raise ValueError("local LLM config must be inside the repository")
+    value = json.loads(config_path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError("local LLM config must be a JSON object")
+    if value.get("enabled") is False:
+        return None
+    return OpenAICompatibleDecisionProvider.from_mapping(value)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-id", required=True)
@@ -108,6 +123,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="explicit one-shot operator approval for the current occurrence; prefer --troop-policy-approval for durable provenance",
     )
     parser.add_argument("--arm-live", action="store_true")
+    parser.add_argument(
+        "--local-llm-config",
+        help="optional repository-local OpenAI-compatible config; used only for NEEDS_DECISION candidates",
+    )
     parser.add_argument("--min-target-confidence", type=float, default=0.90)
     return parser
 
@@ -169,7 +188,13 @@ def main(argv: list[str] | None = None) -> int:
             WindowsForegroundInterferenceGuard(armed=args.arm_live),
         )
         tool = BoundedMissionTool(compiled, observations, action_provider)
-        runner = MissionRunner(compiled, tool, JsonMissionStore(args.checkpoint_root))
+        decision_provider = _local_llm_provider(args.local_llm_config)
+        runner = MissionRunner(
+            compiled,
+            tool,
+            JsonMissionStore(args.checkpoint_root),
+            decision_provider=decision_provider,
+        )
         result = runner.tick(context)
 
         evidence_record = build_gather_tick_evidence(
@@ -200,6 +225,7 @@ def main(argv: list[str] | None = None) -> int:
             "unscored_exact_enabled": any(spec.allow_unscored_exact for spec in candidate_specs),
             "main_view_profile_trained": bool(main_view_profile.prototypes),
             "resource_level_profile_trained": resource_level_profile.trained,
+            "local_llm_model": decision_provider.model if decision_provider is not None else None,
         }
         if result.selection is not None:
             payload["selection"] = result.selection.decision.value
