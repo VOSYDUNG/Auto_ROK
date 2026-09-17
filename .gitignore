@@ -1,0 +1,13 @@
+# Generated Python/test state.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Runtime captures, checkpoints and evidence are local artifacts unless
+# explicitly selected for publication.
+workspace/
+
+# Local model files and private environment material must never enter Git.
+*.gguf
+.env
+.venv/
