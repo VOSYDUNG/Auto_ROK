@@ -113,7 +113,10 @@ không có dữ liệu để đề xuất.
 | MIS-010 | Số tài khoản/nhân vật là đầu vào lúc chạy | Không hằng số nào trong `autorok/` mã hoá 2, 4, hay 8 | F14 | ĐÃ KIỂM |
 | MIS-011 | Ước lượng và số đo **không được lẫn nhau** | Chu kỳ `MEASURED` không có mẫu thì bị từ chối | F10 | ĐÃ KIỂM |
 | MIS-012 | Không có nhân vật đủ điều kiện là **trạng thái chờ**, không phải lỗi | Trả `None` kèm thời điểm đủ điều kiện kế tiếp | F15 | ĐÃ KIỂM |
-| MIS-013 | Tiến độ hạn mức đọc từ bề mặt **loại trừ item** | Không dùng số header làm tròn hay số túi gộp item | F13 | CHƯA XÂY — cần quan sát |
+| MIS-013 | Tiến độ hạn mức = **Total Resources − From Items** (Items → Statistics) | Hiệu số khớp header trong sai số hiển thị 100K | F13 | **CÁCH ĐÃ CÓ** (2026-09-20), chưa nối code |
+| MIS-014 | Không dùng header thô, cũng không dùng cột Total thô | Header làm tròn; Total gộp item chưa mở | F13 | CHƯA XÂY |
+| MIS-015 | Mỗi lượt vào nhân vật có **trần thời gian**; hết trần thì rời đi | Việc chưa xong xếp hàng cho lượt sau, không cố làm nốt | F14 | **CHƯA XÂY** |
+| MIS-016 | Lộ trình ngày **tính từ trạng thái**, không phải lịch cố định | Cùng giờ hai ngày khác nhau có thể cho lộ trình khác nhau | F10 | **CHƯA XÂY** |
 
 ### 3.5 Phân bổ và suy giảm — LAD
 
@@ -123,6 +126,7 @@ không có dữ liệu để đề xuất.
 | LAD-002 | Bù từ số đang bay, không reset tỉ lệ | Vàng đang thừa thì slot mới không vào vàng | F09 | ĐÃ KIỂM |
 | LAD-003 | Phân bổ tất định | Hai lần gọi cho cùng kết quả | F09 | ĐÃ KIỂM |
 | LAD-004 | Tìm không ra mỏ → **vẫn lấp đầy slot** | Danh sách mỏ rỗng vẫn trả đủ số slot, chế độ `SCARCITY` | F15 | ĐÃ KIỂM |
+| LAD-010 | Khan mỏ nhận biết bằng **khung hình không đổi sau khi bấm Tìm kiếm** | Viewport đứng yên trong cửa sổ chờ = không có mỏ | F15 | **CHƯA XÂY** — thuộc tầng tri giác, không phải OCR |
 | LAD-005 | Suy giảm chỉ được **nới lỏng**, không siết | Ngưỡng sàn cao hơn ngưỡng ưu tiên thì báo lỗi | F15 | ĐÃ KIỂM |
 | LAD-006 | Mỗi slot ghi rõ chế độ và **lý do** | Không assignment nào có lý do rỗng | F15 | ĐÃ KIỂM |
 | LAD-007 | Thang 5 bậc `ORDER_WORK → OBSERVE_ONLY` | Bậc bị chặn thì tụt đúng một bậc, không nhảy cóc | F15 | **CHƯA XÂY** |
@@ -188,34 +192,36 @@ không có dữ liệu để đề xuất.
 
 | Mã | Mệnh đề | Tiêu chí chấp nhận | Nguồn | Trạng thái |
 |---|---|---|---|---|
-| DEL-001 | Năng lực giao = hàng mỗi lượt (cấp Chợ) × số xe | Bảng tra đọc từ client | F17 | **KHOÁ** — chưa quan sát |
+| DEL-001 | Năng lực giao = hàng mỗi lượt (cấp Chợ) × số xe | Chợ cấp 25 → **10.000.000/chuyến** (đã đọc 2026-09-20); số xe chưa đọc | F17 | **MỘT PHẦN** |
 | DEL-002 | Tele lại gần là chi phí trả **trước**, nằm trong kế hoạch | Kế hoạch giao gồm bước tele | F17 | KHOÁ |
 | DEL-003 | Người nhận nối đất trên khung hiện tại, không nhớ | Người nhận cũ không được tái dùng | F17 | KHOÁ |
 | DEL-004 | Số đã giao xác minh bằng tồn kho sau chuyển | Biên nhận không đủ | F17 | KHOÁ |
-| DEL-005 | Thuế bao nhiêu phần trăm | **TBD-OP** | F13 | KHOÁ |
+| DEL-005 | Thuế | **8%** tại Chợ cấp 25, đọc từ panel info | F13 | **ĐÃ CÓ SỐ** |
+| DEL-006 | Ngữ nghĩa sức chứa 10M: trước hay sau thuế | phải chốt; lệch 800.000 mỗi chuyến | F17 | **CẦN XÁC NHẬN** |
 
 ---
 
 ## 4. Bảng truy vết — cái gì còn thiếu
 
-| Nhóm | Tổng | ĐÃ KIỂM | CHƯA KIỂM | CHƯA XÂY | KHOÁ |
+| Nhóm | Tổng | ĐÃ KIỂM | CHƯA KIỂM | CHƯA XÂY | KHOÁ / chờ |
 |---|---|---|---|---|---|
 | CAP thu hình | 6 | 6 | — | — | — |
 | OCR | 4 | 2 | — | 2 | — |
 | STA trạng thái | 4 | 4 | — | — | — |
-| MIS order/đội hình | 13 | 12 | — | 1 | — |
-| LAD suy giảm | 9 | 6 | — | 3 | — |
+| MIS order/đội hình | 16 | 12 | — | 4 | — |
+| LAD suy giảm | 10 | 6 | — | 4 | — |
 | LLM biên quyết định | 9 | 4 | 1 | 4 | — |
 | ONB onboarding | 5 | 1 | — | 4 | — |
 | ACT actuation | 6 | 6 | — | — | — |
 | EVI bằng chứng | 4 | 4 | — | — | — |
 | SAF an toàn | 6 | 3 | 1 | 2 | — |
-| DEL giao hàng | 5 | — | — | — | 5 |
-| **Tổng** | **71** | **48** | **2** | **16** | **5** |
+| DEL giao hàng | 6 | — | — | — | 6 |
+| **Tổng** | **76** | **48** | **2** | **20** | **6** |
 
-**Đọc bảng này:** 48/71 yêu cầu đã có test đang chạy. Phần chưa xây tập trung đúng ba chỗ —
-**thang suy giảm** (LAD-007…009), **tầng chiến lược của LLM** (LLM-005…009), và
-**onboarding** (ONB-001…004). Đó chính là P1 trong `BUILD_PLAN`.
+**Đọc bảng này:** 48/76 yêu cầu đã có test đang chạy. Phần chưa xây tập trung đúng bốn chỗ —
+**thang suy giảm** (LAD-007…010), **tầng chiến lược của LLM** (LLM-005…009),
+**onboarding** (ONB-001…004), và **lịch biểu động** (MIS-013…016). Ba nhóm đầu là P1 trong
+`BUILD_PLAN`; nhóm thứ tư là mới, sinh ra từ buổi 2026-09-20.
 
 Nhóm ACT, EVI, CAP, STA phủ kín — đó là phần harness đã trưởng thành.
 
@@ -241,9 +247,33 @@ Không dùng dịch vụ CI. Mọi kiểm tra chạy trên máy người vận h
 |---|---|
 | SC-01…SC-05 | duyệt hoặc sửa ngưỡng tôi đề xuất |
 | SC-06 | sản lượng ngày thực tế người vận hành đạt được |
-| DEL-005 | thuế bao nhiêu phần trăm |
-| MIS-013 | màn chi tiết tài nguyên loại trừ item nằm ở đâu |
-| DEL-001 | bảng cấp Chợ → hàng mỗi lượt |
+| DEL-006 | sức chứa 10M là trước hay sau thuế |
+| — | phép tính đơn hàng mẫu ra **1.522 chuyến**; xem §7 |
+| MIS-015 | trần thời gian mỗi lượt vào nhân vật — **sau khi đo**, không chốt trước |
 
-Bốn mục dưới trả lời được trong **một pass quan sát duy nhất** (P3). Hai mục đầu thì người
-vận hành quyết.
+~~DEL-005 thuế~~ và ~~MIS-013 cách đọc tồn kho~~ đã có đáp án ngày 2026-09-20.
+
+---
+
+## 7. Một phép tính cần kiểm lại trước khi xây
+
+Đơn hàng mẫu của người vận hành — 3B ngô, 3B gỗ, 3B đá, 5B vàng **thực nhận** — quy ra:
+
+```
+net    = 14.000.000.000
+thuế   = 8%
+gross  = 14.000.000.000 / 0,92 = 15.217.391.305
+chuyến = 15.217.391.305 / 10.000.000 ≈ 1.522
+```
+
+**1.522 chuyến vận chuyển.** Con số này lớn tới mức nhiều khả năng một đầu vào đang bị đọc
+sai. Các khả năng, chưa cái nào được xác nhận:
+
+1. Sức chứa 10.000.000 là **mỗi xe**, và có nhiều xe mỗi chuyến;
+2. Đơn hàng mẫu chỉ là ví dụ minh hoạ, không phải quy mô thật;
+3. Một tuyến giao khác không đi qua Chợ có sức chứa lớn hơn;
+4. Con số 10M áp cho một loại tài nguyên, không phải tổng.
+
+Tôi **không đoán và không mã hoá** cái nào. Nếu xây phần giao hàng dựa trên giả định sai ở
+đây thì sai số dồn lại, và nó chỉ lộ ra **sau khi tài nguyên đã rời tài khoản** — không lấy
+lại được.

@@ -111,15 +111,52 @@ mission_model:
           hàng hóa, và hàng đợi đó tương ứng với số xe chuyển hàng luôn"
         model:
           driver: trading_post_level
-          cargo_per_turn: derived from trading post level
           transport_queue_size: equals the number of transport carts
           note: >
             This is a SECOND queue, independent of the five march queues used
             for gathering.  The agent now has two capacity-limited queues with
             different drivers, and the delivery schedule is bounded by the
             transport one.
-        status: NEEDS_OBSERVATION - the exact level-to-capacity mapping has
-          not been read from the client yet
+
+        OBSERVED_2026-09-20:
+          surface: city view > Trading Post > info (i) button
+          panel_title: "LEVEL 25 TRADING POST"
+          reading:
+            trading_post_level: 25
+            transportation_capacity: 10_000_000
+            tax_rate_percent: 8
+            transportation_march_speed_bonus_percent: 100
+            power: 626_317
+          significance: >
+            This single panel answers both the tax rate and the per-transport
+            payload for the operator's current build.  It is the grounding
+            surface for the whole delivery plan.
+          capacity_semantics:
+            operator_statement: >
+              "bấm vào i là thấy 10M trong hình là chưa tính thuế nhé, đó là
+              số thực nhận khi send troop"
+            reading_taken: >
+              10,000,000 is the payload loaded per transport, before the 8%
+              tax is deducted, so a full transport nets 9,200,000 to the
+              recipient.
+            status: NEEDS_CONFIRMATION
+            why_it_matters: >
+              The two readings differ by 800,000 per transport.  Over a large
+              order that compounds into a visible shortfall, and a shortfall is
+              only discovered after the resources are already gone.
+          arithmetic_flag:
+            observation: >
+              The operator's worked order (3B food, 3B wood, 3B stone, 5B gold
+              net) grosses to 15.22B at 8% tax, which at 10,000,000 per
+              transport is about 1,522 transport runs.
+            status: OPEN_QUESTION - this number is large enough that one of the
+              inputs is probably being read wrong; raised with the operator
+              rather than encoded
+          level_to_capacity_table:
+            status: NOT_NEEDED_YET
+            note: >
+              Only level 25 matters while every farmer shares this build.  A
+              table becomes necessary if characters differ.
 
       required_guards:
         - the recipient is grounded on the current frame, never remembered
@@ -297,10 +334,59 @@ progress_measurement:
       status: NEEDS_CONFIRMATION - the operator described this surface but the
         harness has not yet grounded it
 
+  SOLVED_2026-09-20:
+    method: actual_stock = total_resources - from_items
+    surface: Items panel > Statistics > "YOUR RESOURCES & SPEEDUPS" > RESOURCES tab
+    columns_observed: ["Resource Type", "From Items", "Total Resources"]
+    operator_statement: >
+      "nó có from item và all không có tổng ... nhìn màn hình main thì đã thấy
+      số ước lượng ở trên rồi, chi tiết thì không thể thấy được"
+    verification:
+      note: >
+        The subtraction was checked against the main-screen header on the same
+        client state and matched on all four resources.  That is what makes
+        this a derivation rather than a guess.
+      samples:
+        - resource: Food
+          total: 80_300_000
+          from_items: 2_900_000
+          derived: 77_400_000
+          header: 77_400_000
+        - resource: Wood
+          total: 19_200_000
+          from_items: 4_200_000
+          derived: 15_000_000
+          header: 15_000_000
+        - resource: Stone
+          total: 16_000_000
+          from_items: 262_500
+          derived: 15_737_500
+          header: 15_700_000
+        - resource: Gold
+          total: 15_600_000
+          from_items: 100_000
+          derived: 15_500_000
+          header: 15_500_000
+    precision:
+      display_granularity: 100_000
+      reason: both surfaces round to 0.1M
+      error_against_billion_quota: about 0.003 percent
+      verdict: acceptable for quota tracking
+    known_exclusion:
+      panel_note_observed: >
+        "Resources and speedups from Resource Packs and Pick One chests are not
+        shown here."
+      consequence: >
+        A third category exists that neither column counts.  Unopened packs are
+        not stock and must not be counted toward a quota, but the agent also
+        cannot see them, so it cannot warn that they exist.
+
   derived_rule: >
-    Quota progress must be read from an exact, item-excluded surface.  A
-    rounded header value may be used as a cheap cross-check only, never as
-    the number of record.
+    Quota progress is read as (Total Resources - From Items) from the
+    Statistics panel.  The main-screen header is the cheap cross-check and
+    agrees to display precision.  Neither the raw header nor the raw Total
+    column may be used alone: the first is rounded, the second counts unopened
+    resource items as if they were stock.
 
 # ---------------------------------------------------------------------------
 # 4. Default daily goal - what it does with no mission assigned
@@ -346,6 +432,24 @@ default_daily_goal:
         A competitive kingdom where searches return no node.  The operator
         named this explicitly as a condition the agent must handle rather than
         stall on.
+      OBSERVABLE_SIGNAL_2026-09-20:
+        operator_statement: >
+          "bấm tìm kiếm mà nó không di chuyển hoặc đưa chúng ta tới mỏ để bấm,
+          thường nó sẽ đứng yên"
+        rule: >
+          Scarcity is NOT detected from an empty result list.  It is detected
+          from the CAMERA NOT MOVING after Search is pressed.  On success the
+          client pans the world view to a node; on failure the view simply
+          stays where it is.
+        detection_method: >
+          Compare the frame before and after pressing Search.  No viewport
+          change within the settle window means no node was offered.
+        design_note: >
+          This is a visual-difference predicate, not an OCR predicate, so it
+          belongs in the perception layer beside the main-view detector rather
+          than in the OCR semantics layer.
+        response: change resource type, or lower the level requirement, then
+          retry - per the operator's rule
       rule: >
         Drop the level requirement and relax the resource-type preference.
         The governing objective becomes: fill the remaining queue slots.  Any
@@ -358,6 +462,88 @@ default_daily_goal:
         project.  It is the pattern that separates this agent from the legacy
         script: when the preferred plan is unavailable, fall back to a weaker
         but still-productive goal instead of freezing.
+
+# ---------------------------------------------------------------------------
+# 4b. The turn budget - reset is the peak load
+# ---------------------------------------------------------------------------
+turn_budget:
+  problem_statement:
+    operator_statement: >
+      "Thường tôi vào lúc 7h sáng được cho là nặng nhất vì tất cả đã reset ...
+      phân bổ thời gian farm và thao tác các nghiệp vụ trong 1 turn cũng là bài
+      toán ... cần khung trần tránh việc bị chôn chân ở 1 acc quá lâu ... nhưng
+      cần đo trước mới quyết định cái gì cần cái gì bỏ"
+  why_it_matters: >
+    At 07:00 Vietnam time (00:00 UTC reset) every character simultaneously has
+    a full daily list - VIP, VIP gifts, Courier Station, alliance donation -
+    ON TOP of the farm dispatch.  With 8 characters the work does not fit in a
+    comfortable window, so the agent must decide what to do now and what to
+    defer.  Without a ceiling it will sink all its time into the first
+    character and leave the other seven with empty march queues.
+
+  required_mechanism:
+    id: PER_CHARACTER_TURN_CEILING
+    statement: >
+      A character visit is bounded by an explicit time ceiling.  When the
+      ceiling is reached the agent leaves for the next character, and the
+      unfinished tasks stay queued for the next visit.
+    ceiling_value: NEEDS_MEASUREMENT - the operator's instruction is to measure
+      before choosing, not to pick a number now
+
+  proposed_priority_rule:
+    status: PROPOSED - to be validated against measurement, not assumed
+    principle: >
+      The march queue is the PERISHABLE resource.  An idle queue slot loses
+      gathering time that can never be recovered, while an unclaimed VIP gift
+      or an undone donation simply waits and is still there an hour later.
+    consequence: >
+      At reset the correct default is BREADTH-FIRST: dispatch marches on every
+      character first, then spend whatever time remains on the daily list.
+      Depth-first - finishing one character completely before moving on -
+      maximises idle queue time across the fleet, which is precisely the
+      rhythm break the whole project is built to avoid.
+    exception: >
+      Alliance donation recovers on a 30-minute cadence with a per-reset cap,
+      so it also perishes, but slowly.  It should ride along with a visit that
+      is happening anyway rather than justify its own visit.
+
+  measurements_needed_before_deciding:
+    - id: seconds_per_daily_task
+      detail: how long each of VIP, VIP gifts, Courier check, donation takes
+    - id: seconds_per_farm_dispatch
+      detail: time to fill one character's five march slots
+    - id: seconds_per_character_switch
+      detail: the fixed cost of rotating, which sets how often it is worth it
+    - id: reset_peak_total
+      detail: the full list across all characters, to size the ceiling
+  operator_decision_after_measurement: >
+    Which tasks are worth their time at peak, and which are dropped or
+    deferred.  That call is the operator's; the agent's job is to supply the
+    numbers it is made from.
+
+# ---------------------------------------------------------------------------
+# 4c. Daily route is planned, not fixed
+# ---------------------------------------------------------------------------
+daily_route_planning:
+  operator_statement: >
+    "nó phải có memory trạng thái để tự schedule plan lộ trình ngày không phải
+    cố định"
+  requirement: >
+    The agent holds persistent state and plans the day's route from it.  There
+    is no fixed daily script.
+  inputs_to_the_plan:
+    - per-character batch return times, measured
+    - remaining gathering buff
+    - outstanding order quota and time left on the horizon
+    - which daily tasks are still unclaimed per character
+    - alliance donation charges recovered
+    - the turn ceiling from turn_budget above
+  invariant: >
+    Because the plan is recomputed from state, the same clock time on two days
+    can produce different routes.  A fixed schedule would be a regression to
+    the legacy hardcoded loop.
+  storage: harness/mission_knowledge.py SQLite - the facts, occurrences,
+    events and change_signals tables already exist for this
 
 # ---------------------------------------------------------------------------
 # 5. Architectural consequence - fail-closed action, never-stopping loop
