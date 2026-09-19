@@ -41,10 +41,17 @@ tiếp là gãy, import chạy nhờ `sys.path.insert` lặp trong 32/42 script,
 2. `autorok/llm/boundary.py` — gộp hai danh sách lọc trùng (Design Brief R2), cả hai tầng
    cùng dùng. Giữ nguyên tắc danh sách cho phép
 3. Đưa `autorok.mission` vào `config/engineering_graph.yaml`
-4. CI chuyển sang `windows-latest`, chạy `pytest tests/` đầy đủ thay vì danh sách 22 file cứng
 
-**Xong khi:** `pytest` chạy từ thư mục bất kỳ · một danh sách lọc duy nhất · CI xanh trên
-Windows với toàn bộ 56+ file test.
+**Xong khi:** `pytest` chạy từ thư mục bất kỳ · một danh sách lọc duy nhất ·
+`python scripts/check_local.py` xanh.
+
+> **Đã xong ngày 2026-09-19 — CI bị xoá hẳn.** Mục "chuyển CI sang windows-latest" trong bản
+> kế hoạch đầu là **sai** và đã bị rút. Dịch vụ CI chạy trên máy ảo đi thuê, trái với ranh
+> giới của chính dự án. Thay bằng `scripts/check_local.py` chạy trên máy người vận hành, và
+> `tests/test_no_virtualization.py` cưỡng chế ranh giới. Xem `docs/PROJECT_DECLARATION.md` §5.1.
+>
+> Đề xuất trước đó của tôi về *"biến phép thử port thành test chạy trong CI"* cũng bị rút vì
+> cùng lý do: nó sẽ đưa hành vi Agent vào chạy trong máy ảo.
 
 ---
 

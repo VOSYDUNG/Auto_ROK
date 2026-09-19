@@ -66,7 +66,6 @@ def build_gather_tick_evidence(
     result: MissionTickResult,
     live_armed: bool,
     host_input_isolation: Mapping[str, Any] | None = None,
-    guest_isolation: Mapping[str, Any] | None = None,
     policy_approval: Mapping[str, Any] | None,
     main_view_profile_trained: bool,
     resource_level_profile_trained: bool,
@@ -125,10 +124,6 @@ def build_gather_tick_evidence(
     }
     if host_input_isolation is not None:
         runtime["host_input_isolation"] = _json_safe(dict(host_input_isolation))
-    if guest_isolation is not None:
-        # Historical replay fixtures may still carry this key.  New direct-host
-        # runtime records use host_input_isolation instead.
-        runtime["guest_isolation"] = _json_safe(dict(guest_isolation))
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -283,10 +278,6 @@ def validate_gather_replay(records: Sequence[Mapping[str, Any]]) -> dict[str, An
             if runtime.get("live_armed") is not True:
                 errors.append("completion was not produced with live input armed")
             host_input = runtime.get("host_input_isolation")
-            if not isinstance(host_input, Mapping):
-                # Historical records used the guest key.  Read them for audit,
-                # but all newly written direct-host evidence is canonical.
-                host_input = runtime.get("guest_isolation")
             if not isinstance(host_input, Mapping) or host_input.get("ready") is not True:
                 errors.append("completion lacks ready direct-host input-isolation evidence")
             if runtime.get("main_view_profile_trained") is not True:

@@ -99,7 +99,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--character-id", required=True)
     parser.add_argument("--troop-policy-approval")
     parser.add_argument("--input-isolation-evidence")
-    parser.add_argument("--guest-isolation-evidence", help=argparse.SUPPRESS)
     parser.add_argument(
         "--main-view-profile",
         default=str(ROOT / "config" / "main_view_profiles.json"),
@@ -118,10 +117,6 @@ def main(argv: list[str] | None = None) -> int:
     try:
         output = _evidence_path(args.output, "output")
         context = MissionContext("GATHER_RESOURCE", args.task_id, args.run_id)
-        if args.guest_isolation_evidence:
-            raise ValueError(
-                "GUEST_MODE_OUT_OF_SCOPE: use --input-isolation-evidence for direct one-user host mode"
-            )
         host_input_isolation = _load_host_input_isolation(args.input_isolation_evidence, context)
         approval = _approval(args.troop_policy_approval, context, args.character_id)
         main_profile = MainViewProfile.load(Path(args.main_view_profile).resolve())

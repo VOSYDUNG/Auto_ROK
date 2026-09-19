@@ -115,6 +115,27 @@ mà người chơi có.
 Hệ quả bắt buộc: code thuộc đường guest/VM còn sót lại trong repo là **nợ phải xoá**,
 không phải tính năng đang tạm nghỉ.
 
+### 5.1 Ranh giới này được cưỡng chế, không phải được hứa
+
+Ngày 2026-09-19, một bản audit cho thấy ảo hoá đã lọt vào dự án **dù điều khoản cấm ở trên
+đã được viết từ trước**: một validator guest/VM, các script dò Hyper-V, một cờ CLI ẩn, và hai
+quy trình CI chạy trên máy ảo Linux đi thuê.
+
+Kết luận không phải "dọn đi là xong", mà là: **một luật không ai kiểm tra chỉ là một điều
+ước.** Từ nay luật này có người kiểm:
+
+- `tests/test_no_virtualization.py` quét toàn bộ mã nguồn sản phẩm và **fail** khi từ vựng
+  ảo hoá quay lại. Dòng nào nêu tên hypervisor **để từ chối nó** thì được miễn trừ, nhưng
+  phải khai từng dòng một — miễn trừ cũ không che được vi phạm mới.
+- Test đó cũng kiểm rằng `docs/PROJECT_DECLARATION.md` và `docs/GOAL.md` **vẫn còn** ghi
+  điều khoản cấm. Ai nới lỏng tuyên bố thì test đỏ, biến việc nới lỏng thành một quyết định
+  nhìn thấy được thay vì một thay đổi lặng lẽ.
+- **Không dùng CI.** Dịch vụ CI chạy trên máy ảo đi thuê. Toàn bộ kiểm tra chạy trên chính
+  máy của người vận hành bằng `python scripts/check_local.py`, mất khoảng 10 giây.
+
+Quy tắc phân biệt: *sản phẩm chạy ở đâu* là điều khoản cấm; *code được soát ở đâu* cũng vậy,
+vì máy đi thuê vẫn là máy ảo.
+
 ---
 
 ## 6. Ba quy tắc chống nhiễu

@@ -1,6 +1,6 @@
 # Độ phủ hiện tại — Auto_ROK
 
-Chụp ngày **2026-09-19**, tại commit merge `61d818b`.
+Chụp ngày **2026-09-19**, cập nhật sau khi xoá CI và đường guest/VM.
 Chịu sự điều chỉnh của [`docs/PROJECT_DECLARATION.md`](PROJECT_DECLARATION.md).
 
 Tài liệu này là **bản chụp có ngày của số đo**, không phải bảng tuyên bố viết tay. Mọi con
@@ -39,7 +39,7 @@ người vận hành uỷ quyền tường minh, không được tự mở.
 | `knowledge/` | 9 file |
 | `docs/` | 20 file + `docs/reference/` 10 file |
 
-Kiểm thử cục bộ: **248 test pass** (`python -m pytest -q`).
+Kiểm thử cục bộ: **297 test pass** (`python scripts/check_local.py`).
 
 ---
 
@@ -116,13 +116,11 @@ dùng ngôn ngữ native là đường OCR.
 |---|---|
 | Không có `pyproject.toml`, `__init__.py`, `conftest.py` | import chạy nhờ `sys.path.insert` lặp trong 32/42 script; một script hardcode đường dẫn tuyệt đối của máy này |
 | `pytest` chỉ chạy được qua `python -m pytest` | gõ `pytest tests/` trực tiếp là gãy |
-| CI chạy trên `ubuntu-latest` cho sản phẩm Windows-only | **22/56 file test** được chạy; 34 file chưa bao giờ chạy trên CI |
-| CI có danh sách test viết cứng | thêm test mới không tự được chạy |
-| `.github/workflows/alliance-claim.yml` | chỉ kích hoạt trên nhánh `gpt-alliance-01` đã bị xoá → file chết |
+| ~~CI chạy trên `ubuntu-latest`~~ | **ĐÃ GIẢI QUYẾT 2026-09-19** — xoá hẳn CI. Chạy `scripts/check_local.py` trên máy người vận hành; `tests/test_no_virtualization.py` cưỡng chế ranh giới |
+| ~~Đường guest/VM còn sót~~ | **ĐÃ GIẢI QUYẾT 2026-09-19** — xoá 5 file và 2 cờ CLI ẩn; giữ lại 2 dòng canh cửa có khai báo miễn trừ |
 | 16 module `harness/` không có trong đồ thị kỹ thuật | gồm cả `mission_runtime.py` (module được import nhiều nhất, 42 file) và `windows_live_observation.py` |
 | Hai bộ contract song song | `mission_runtime.py` (đang dùng) và `contracts.py`+`runtime.py`+`policy.py`; `runtime.py` và `policy.py` **không có file nào import** |
 | Bốn đường chạy mission song song | chỉ đường `mission_loader→engine→runner` là chính thức |
-| Đường guest/VM còn sót | trái với ranh giới ở §5 Tuyên bố dự án |
 | Evidence bị check vào `config/` | `r3_registered_runs.json`, `observation_label_lock.json` là output chứ không phải config |
 | Luật nghiệm thu không chạy được ngoài máy này | validator đòi mọi node `implemented` có file evidence tồn tại, mà `workspace/` nằm trong `.gitignore` |
 
@@ -150,11 +148,11 @@ huấn luyện dần bằng kiểm nghiệm thực địa. Chúng **không chặ
 
 ## 7. Cách tái lập bản chụp này
 
+Toàn bộ kiểm tra chạy trên máy người vận hành. Không dùng dịch vụ CI — xem
+`docs/PROJECT_DECLARATION.md` §5.1.
+
 ```bash
-python -m pytest -q
-```
-```bash
-python scripts/validate_engineering_graph.py
+python scripts/check_local.py
 ```
 ```bash
 python scripts/audit_goal_readiness.py

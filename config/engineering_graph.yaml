@@ -672,7 +672,6 @@ nodes:
     status: implemented
     path: scripts/run_gather_tick.py
     evidence:
-      - .github/workflows/gather-harness.yml
       - tests/test_troop_policy.py
       - tests/test_gather_replay_evidence.py
       - workspace/evidence/gather/live-20260918-01-cpu-criterion/
@@ -740,7 +739,6 @@ nodes:
     path: scripts/run_alliance_claim_tick.py
     evidence:
       - tests/test_alliance_runtime_contracts.py
-      - .github/workflows/alliance-claim.yml
 
   - id: alliance_post_claim_training
     kind: evidence

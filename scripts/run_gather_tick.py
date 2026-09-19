@@ -218,10 +218,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="raw or assessed windows_host_direct trace JSON; required and ready before --arm-live",
     )
     parser.add_argument(
-        "--guest-isolation-evidence",
-        help=argparse.SUPPRESS,
-    )
-    parser.add_argument(
         "--local-llm-config",
         help="optional repository-local OpenAI-compatible config; used only for NEEDS_DECISION candidates",
     )
@@ -241,10 +237,6 @@ def main(argv: list[str] | None = None) -> int:
         if args.troop_policy_approval and args.approve_current_troop_selection:
             raise ValueError(
                 "use either --troop-policy-approval or --approve-current-troop-selection, not both"
-            )
-        if args.guest_isolation_evidence:
-            raise ValueError(
-                "GUEST_MODE_OUT_OF_SCOPE: use --input-isolation-evidence for direct one-user host mode"
             )
         if args.r3_repetition and not args.arm_live:
             raise ValueError("R3_REPETITION_REQUIRES_LIVE_ARM")
