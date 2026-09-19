@@ -131,3 +131,65 @@ def test_parser_defaults_are_sane():
     args = build_parser().parse_args(["--events", "workspace/e.jsonl"])
     assert 0.3 <= args.opacity <= 1.0
     assert 50 <= args.poll_ms <= 5000
+
+
+def test_cursor_reads_the_screen_point_from_the_payload():
+    from scripts.run_agent_hud import read_target_point
+
+    assert read_target_point({"cursor_screen": [640, 360]}) == (640.0, 360.0)
+    assert read_target_point({"target_screen": [10, 20.5]}) == (10.0, 20.5)
+
+
+def test_cursor_point_prefers_where_the_pointer_will_land():
+    """target_screen is the element; cursor_screen is where it will be clicked."""
+    from scripts.run_agent_hud import read_target_point
+
+    payload = {"cursor_screen": [100, 100], "target_screen": [900, 900]}
+    assert read_target_point(payload) == (100.0, 100.0)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"cursor_screen": None},
+        {"cursor_screen": [1]},
+        {"cursor_screen": [1, 2, 3]},
+        {"cursor_screen": ["a", "b"]},
+        {"cursor_screen": [True, False]},
+        {"cursor_screen": "640,360"},
+    ],
+)
+def test_a_malformed_point_draws_no_cursor(payload):
+    """Never guess a click location - draw nothing instead."""
+    from scripts.run_agent_hud import read_target_point
+
+    assert read_target_point(payload) is None
+
+
+def test_the_cursor_centre_stays_open():
+    """A filled marker would hide the very element being clicked."""
+    from scripts.run_agent_hud import CURSOR_BOX, CURSOR_RING, CURSOR_TICK
+
+    assert CURSOR_RING * 2 < CURSOR_BOX
+    # Ring, a gap, then ticks - all inside the window.
+    assert (CURSOR_RING + 2 + 3 + CURSOR_TICK) < CURSOR_BOX // 2
+
+
+def test_the_cursor_is_small_enough_not_to_obscure_a_target():
+    """The rejected overlay drew a 68px crosshair."""
+    from scripts.run_agent_hud import CURSOR_RING
+
+    assert CURSOR_RING * 2 <= 26
+
+
+def test_the_two_windows_never_share_a_transparency_mechanism():
+    """Alpha plus colour key on one window is what fringed pink."""
+    from scripts.run_agent_hud import CURSOR_KEY
+
+    assert CURSOR_KEY.lower() != "#ff00ff"
+    for look in LOOKS.values():
+        for field in ("dot", "background", "border", "primary", "muted"):
+            assert getattr(look, field).lower() != CURSOR_KEY.lower(), (
+                "a palette colour equal to the key would be keyed out and vanish"
+            )

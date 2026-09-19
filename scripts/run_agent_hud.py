@@ -17,9 +17,26 @@ Three things were wrong with it, and each is fixed here for a stated reason.
    everything.  This HUD uses alpha alone and never sets a colour key, so
    there is nothing to leak.
 
-3. It drew a 68px crosshair at every action point, over live game UI.  Here
-   the action marker is a small ring that fades within a second, and only at
-   the moment of dispatch.
+3. It drew a 68px crosshair over live game UI at every action point.  The
+   agent cursor here is a 22px ring with short inward ticks and an open
+   centre, so the thing being clicked stays visible.
+
+Two windows, and each uses exactly ONE transparency mechanism:
+
+    the docked bar     alpha, no colour key
+    the agent cursor   colour key, no alpha
+
+Mixing the two is what produced the pink, so the split is deliberate rather
+than incidental.
+
+On the agent cursor.  Windows has one physical pointer and SendInput moves it,
+so the agent cannot own a second one the way a remote-desktop agent can.  The
+ring is better than a second pointer would be anyway: it appears at the target
+BEFORE the click, so the operator sees where the agent is going while there is
+still time to stop it.  A real cursor only tells you where it already went.
+
+It is deliberately not an arrow.  At a glance a dashed ring cannot be confused
+with the operator's own pointer, which is the whole reason it exists.
 
 The HUD is read-only and click-through.  It never sends input, and it is not a
 control surface: it reports what the harness already decided.
@@ -44,6 +61,24 @@ DOCK_X, DOCK_Y = 334, 2
 DOCK_W, DOCK_H = 607, 34
 COLLAPSED_W, COLLAPSED_H = 120, 4
 
+#: The agent cursor.  Windows has one physical pointer, and SendInput moves
+#: it, so the agent cannot have a second one.  What it gets instead is a ring
+#: drawn around where it intends to act - visible BEFORE the click, which the
+#: real cursor cannot give you, because by the time the pointer has moved the
+#: decision is already made.
+#:
+#: Deliberately not an arrow.  A ring with inward ticks cannot be mistaken for
+#: the operator's own pointer at a glance, which is the entire point.
+CURSOR_BOX = 64
+CURSOR_RING = 11
+CURSOR_TICK = 6
+
+#: Colour-key transparency, and NO alpha.  The HUD bar uses alpha and no key.
+#: Each window uses exactly one mechanism - using both together is what made
+#: the previous overlay fringe pink.  The key is a near-black the marker never
+#: draws, so nothing can be keyed out by accident.
+CURSOR_KEY = "#010203"
+
 FONT_UI = ("Segoe UI", 9)
 FONT_UI_MEDIUM = ("Segoe UI", 9, "bold")
 FONT_NUM = ("Consolas", 9)
@@ -67,6 +102,101 @@ LOOKS = {
     "degraded": Look("#c4705e", "#161a1f", "#2a3139", "#c9d2dc", "#7d8794"),
     "blocked": Look("#c4705e", "#25171a", "#7a3b3b", "#e8c4c4", "#b08484"),
 }
+
+
+def read_target_point(payload: dict[str, Any]) -> tuple[float, float] | None:
+    """Where the agent intends to act, in screen pixels.
+
+    ``cursor_screen`` wins over ``target_screen`` because it is where the
+    pointer will actually land; the target is the element it was grounded to.
+    """
+    for key in ("cursor_screen", "target_screen"):
+        value = payload.get(key)
+        if (
+            isinstance(value, (list, tuple))
+            and len(value) == 2
+            and all(isinstance(item, (int, float)) and not isinstance(item, bool) for item in value)
+        ):
+            return float(value[0]), float(value[1])
+    return None
+
+
+class AgentCursor:
+    """A ring around the point the agent is about to act on.
+
+    Click-through and never filled: the operator has to be able to see the
+    thing being clicked, which a solid dot would hide.
+    """
+
+    def __init__(self, master: tk.Misc) -> None:
+        self.window = tk.Toplevel(master)
+        self.window.overrideredirect(True)
+        self.window.attributes("-topmost", True)
+        self.window.attributes("-transparentcolor", CURSOR_KEY)
+        self.window.configure(bg=CURSOR_KEY)
+        self.canvas = tk.Canvas(
+            self.window, width=CURSOR_BOX, height=CURSOR_BOX,
+            highlightthickness=0, bd=0, bg=CURSOR_KEY,
+        )
+        self.canvas.pack()
+        self.visible = False
+        self.window.withdraw()
+        _set_click_through(self.window)
+
+    def hide(self) -> None:
+        if self.visible:
+            self.window.withdraw()
+            self.visible = False
+
+    def show(self, x: float, y: float, look: Look, *, armed: bool) -> None:
+        half = CURSOR_BOX // 2
+        left, top = int(round(x)) - half, int(round(y)) - half
+        self.window.geometry(f"{CURSOR_BOX}x{CURSOR_BOX}+{left}+{top}")
+        if not self.visible:
+            self.window.deiconify()
+            self.window.attributes("-topmost", True)
+            self.visible = True
+
+        self.canvas.delete("all")
+        colour = look.dot
+        radius = CURSOR_RING + (2 if armed else 0)
+        width = 2 if armed else 1
+        dash = () if armed else (3, 3)
+
+        self.canvas.create_oval(
+            half - radius, half - radius, half + radius, half + radius,
+            outline=colour, width=width, dash=dash,
+        )
+        # Inward ticks, stopping short of the ring so the centre stays clear.
+        gap = radius + 3
+        reach = gap + CURSOR_TICK
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            self.canvas.create_line(
+                half + dx * gap, half + dy * gap,
+                half + dx * reach, half + dy * reach,
+                fill=colour, width=width,
+            )
+
+
+def _set_click_through(window: tk.Misc) -> None:
+    """Mouse events pass through to whatever is underneath."""
+    try:
+        import ctypes
+
+        window.update_idletasks()
+        hwnd = ctypes.windll.user32.GetParent(window.winfo_id())
+        GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_TRANSPARENT = -20, 0x00080000, 0x00000020
+        style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+        ctypes.windll.user32.SetWindowLongW(
+            hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED | WS_EX_TRANSPARENT
+        )
+    except Exception:
+        # A marker that cannot become click-through must at least not steal
+        # clicks it is unable to forward.
+        try:
+            window.attributes("-disabled", True)
+        except tk.TclError:
+            pass
 
 
 def _read_new_events(path: Path, offset: int) -> tuple[list[dict[str, Any]], int]:
@@ -129,24 +259,9 @@ class AgentHud:
             self.root, highlightthickness=0, bd=0, bg=LOOKS["observe"].background
         )
         self.canvas.pack(fill="both", expand=True)
-        self._make_click_through()
-
-    def _make_click_through(self) -> None:
-        """Mouse events pass through to the game underneath."""
-        try:
-            import ctypes
-
-            self.root.update_idletasks()
-            hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
-            GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_TRANSPARENT = -20, 0x00080000, 0x00000020
-            style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-            ctypes.windll.user32.SetWindowLongW(
-                hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED | WS_EX_TRANSPARENT
-            )
-        except Exception:
-            # A HUD that cannot become click-through is still worth showing;
-            # it simply must not steal clicks it cannot forward.
-            self.root.attributes("-disabled", True)
+        _set_click_through(self.root)
+        self.cursor = AgentCursor(self.root)
+        self.target: tuple[float, float] | None = None
 
     def _apply(self, event: dict[str, Any]) -> None:
         payload = event.get("payload")
@@ -193,6 +308,7 @@ class AgentHud:
         buff = payload.get("buff_remaining")
         self.fields["buff"] = f"buff {_shorten(buff, 8)}" if buff else ""
 
+        self.target = read_target_point(payload)
         self.expanded = True
         self.idle_polls = 0
 
@@ -205,11 +321,16 @@ class AgentHud:
             # Collapse to a hairline after roughly twelve quiet polls.
             if self.expanded and self.state_key != "armed" and self.idle_polls > 12:
                 self.expanded = False
+                self.target = None
         self._render()
         self.root.after(self.poll_ms, self._poll)
 
     def _render(self) -> None:
         look = LOOKS[self.state_key]
+        if self.target is None:
+            self.cursor.hide()
+        else:
+            self.cursor.show(*self.target, look, armed=self.state_key == "armed")
         self.canvas.delete("all")
 
         if not self.expanded:
