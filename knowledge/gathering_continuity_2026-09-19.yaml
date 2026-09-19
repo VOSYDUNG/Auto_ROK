@@ -1,0 +1,266 @@
+schema_version: 1
+snapshot_id: gathering_continuity_2026-09-19
+observed_at: "2026-09-19"
+
+# WHY THIS FILE EXISTS
+#
+# The product is built around the local LLM decision edge.  The harness owns
+# 80% of the loop, but the LLM can only decide well if the game's own economy
+# is represented as measurable facts instead of hardcoded sleeps.  The legacy
+# path (Mouse_key.py Daily_farm) encoded the farm loop as fixed coordinates
+# plus time.sleep(1); it could not reason about throughput at all.
+#
+# This snapshot records the gathering-throughput mechanic as the operator
+# described and demonstrated it, so the mission layer can hold continuous
+# maximum gathering speed across a full 24h cycle without a rhythm break.
+
+provenance:
+  source_surface: operator_description_and_client_screenshots
+  observed_by: operator
+  extractor: teaching_session
+  confidence: 0.9
+  evidence_ref:
+    - operator screenshot: Items panel, BOOSTS tab, item detail pane
+    - operator screenshot: NOTICE confirm dialog for 8-Hour Enhanced Gathering
+    - operator screenshot: Troops panel with two active gathering marches
+    - operator screenshot: march queue indicator 2/5
+  notes: >
+    Values transcribed from a live client owned by the operator.  Item counts
+    are the operator's inventory at observation time and are state, not game
+    constants.  Anything not directly visible is marked unverified.
+
+# ---------------------------------------------------------------------------
+# 1. The throughput objective
+# ---------------------------------------------------------------------------
+objective:
+  id: CONTINUOUS_MAX_GATHER_RATE
+  statement: >
+    Keep every available march queue occupied AND keep the gathering-speed
+    buff active for the whole day, so effective resource rate stays at its
+    maximum 24/24 with no idle gap.
+  two_independent_levers:
+    - lever: queue_occupancy
+      meaning: how many marches are gathering at once
+      observed_surface: march queue indicator, e.g. "2/5"
+    - lever: gather_speed_buff
+      meaning: percentage multiplier applied to every active gathering march
+      observed_surface: Items > BOOSTS, and the buff timer after use
+  rhythm_break_definition: >
+    A rhythm break is any interval where a queue slot is free while troops are
+    idle, or where the gathering-speed buff has lapsed to zero while marches
+    are still gathering.  Both are measurable, both are failures.
+
+# ---------------------------------------------------------------------------
+# 2. Gathering speed buff - the stacking mechanic
+# ---------------------------------------------------------------------------
+gather_speed_buff:
+  item_name: "8-Hour Enhanced Gathering"
+  effect_text_observed: >
+    Increases gathering speed of <all> types of resources by 50% for 8 hours.
+  magnitude_percent: 50
+  base_duration_hours: 8
+
+  stacking:
+    stacks: true
+    rule_observed: >
+      Using one more item while the buff is already active ADDS its duration
+      to the remaining time; it does not refresh to 8h and does not raise the
+      percentage.
+    worked_example_from_client:
+      before_remaining: "08:00:01 (approx, inferred from the result)"
+      used_quantity: 1
+      confirm_text: >
+        "You used 8-Hour Enhanced Gathering x1. Their durations will stack.
+        After, the Gathering Speed buff will last for 16:00:01."
+      after_remaining: "16:00:01"
+    consequence_for_planning: >
+      Because duration stacks and the percentage does not, there is no value
+      in spacing uses out to "catch" an expiry.  Three items cover 24h.  The
+      only real constraint is not letting the buff reach zero.
+
+  quantity_selector:
+    present: true
+    controls_observed: ["-", "1", "+", "Max"]
+    implication: >
+      A single confirmed action can consume many items.  This is a spend-class
+      action and must be bounded by an explicit per-occurrence quantity, never
+      by "Max".
+
+  inventory_at_observation:
+    owned: 14
+    note: state at 2026-09-19, not a constant
+
+  daily_requirement:
+    items_needed_per_24h: 3
+    arithmetic: "3 items x 8h = 24h coverage"
+    confidence: high
+    caveat: >
+      Assumes no other source of gathering-speed buff (alliance/VIP/event) is
+      already contributing.  Unverified whether such sources share this timer.
+
+# ---------------------------------------------------------------------------
+# 3. How the operator applies a buff  (the action path)
+# ---------------------------------------------------------------------------
+apply_buff_path:
+  entry:
+    - method: native_hotkey
+      key: "I"
+      status: operator_stated
+      preference: fastest_if_confirmed
+    - method: hud_button
+      label: "Items"
+      status: observed_in_screenshot
+      note: bottom-right HUD cluster, tooltip reads "Items"
+  steps:
+    - step: open_items_panel
+      result_state: ITEMS_PANEL
+    - step: select_tab
+      tab: "BOOSTS"
+      tabs_observed: [RESOURCES, SPEEDUPS, BOOSTS, EQUIPMENT, ARMAMENTS, OTHER]
+    - step: select_item_in_grid
+      grounding: item tile carries a duration badge and an owned-count badge
+    - step: read_detail_pane
+      fields_observed: [item_name, effect_description, owned_count, quantity_selector]
+      note: this pane is the grounding surface - never act from the grid alone
+    - step: press_use
+      control_label: "USE"
+    - step: confirm_notice_dialog
+      dialog_title: "NOTICE"
+      buttons_observed:
+        - label: "YES"
+          colour: red
+          position: left
+        - label: "NO"
+          colour: blue
+          position: right
+      HAZARD: >
+        YES is red and on the LEFT; NO is blue and on the RIGHT.  This inverts
+        the common convention where blue/right is the affirmative.  Any target
+        grounding must match the text label "YES", never colour or position.
+  postcondition_to_verify: >
+    The confirm dialog states the resulting total buff duration before the
+    action is taken.  That stated duration is the expected postcondition and
+    should be captured as the measured buff expiry.
+
+# ---------------------------------------------------------------------------
+# 4. Other boosts visible in the same panel (inventory context, not tasks)
+# ---------------------------------------------------------------------------
+other_boosts_observed:
+  - name: "8-Hour Peace Shield"
+    effect_text: "Activates a Peace Shield that prevents your city from being attacked. Lasts for 8 hours."
+    owned_at_observation: 2
+    mission_relevance: defensive, out of scope for the gathering slice
+  - note: >
+      The BOOSTS grid held further tiles badged 4h / 8h / 12h / 24h with
+      owned counts 1..36.  Their names were not visible in the capture and are
+      therefore NOT recorded.  They stay UNKNOWN rather than guessed.
+
+# ---------------------------------------------------------------------------
+# 5. Troops panel - the measurement surface for rhythm
+# ---------------------------------------------------------------------------
+troops_panel:
+  title_observed: "Troops"
+  subtitle_observed: "Unrestricted Troop Movement Guide"
+  purpose: >
+    This is the authoritative surface for measuring farm rhythm.  It is the
+    only place that reports, per active march, how long the current node has
+    left to mine.
+  per_row_fields_observed:
+    - field: node_target_coordinates
+      example: "X:1073 Y:586"
+      note: rendered as an underlined link beneath the node icon
+    - field: commander_pair
+      example: "Centurion / Joan of Arc"
+      note: primary / secondary, each with its own level badge
+    - field: commander_levels
+      example: [37, 28]
+    - field: unit_count
+      example: 39757
+      label_observed: "Units"
+    - field: progress_bar
+      note: fills toward completion
+    - field: remaining_time
+      example: "Gathering 03:16:23"
+      SEMANTICS: >
+        This countdown is MINING TIME REMAINING ONLY.  It does not include the
+        march's return travel.  The existing mission layer already encodes this
+        as farm_table_counts=mining_completion_only and
+        travel_time_is_separate=true; this observation confirms it.
+    - field: recall_button
+      note: curved arrow on the right of each row
+      risk: actuate - recalls the march early, never press during a farm cycle
+  rows_observed_at_snapshot:
+    - coords: "X:1073 Y:586"
+      commanders: "Centurion / Joan of Arc"
+      levels: [37, 28]
+      units: 39757
+      remaining: "03:16:23"
+    - coords: "X:1100 Y:583"
+      commanders: "Šárka / Gaius Marius"
+      levels: [37, 27]
+      units: 34245
+      remaining: "01:08:40"
+
+# ---------------------------------------------------------------------------
+# 6. What must be MEASURED, not hardcoded
+# ---------------------------------------------------------------------------
+# The operator's explicit instruction: derive mission rhythm from a persisted
+# measurement database, not from fixed durations in code.  These are the
+# quantities to record per occurrence.
+measured_quantities:
+  - id: march_travel_out_seconds
+    definition: time from MARCH dispatch until the row first reports "Gathering"
+    source: troops_panel row appearance/state change
+    status: not_yet_measured
+  - id: node_mining_seconds
+    definition: the "Gathering HH:MM:SS" countdown at its start value
+    source: troops_panel row
+    status: observable_now
+  - id: march_travel_back_seconds
+    definition: time from mining completion until the queue slot frees
+    source: queue indicator decrement
+    status: not_yet_measured
+    note: >
+      This is the quantity the legacy table omitted entirely.  Total slot
+      occupancy = travel_out + mining + travel_back, and only the middle term
+      is displayed by the game.
+  - id: queue_slot_free_seconds
+    definition: idle time between a slot freeing and the next dispatch
+    source: derived from the two events
+    status: not_yet_measured
+    target: minimise - this is the rhythm break metric
+  - id: gather_buff_remaining_seconds
+    definition: buff expiry, captured from the confirm dialog's stated total
+    source: NOTICE dialog text at apply time, then counted down
+    status: observable_at_apply_time
+
+derivation_rules:
+  - rule: slot_cycle_seconds = march_travel_out + node_mining + march_travel_back
+  - rule: >
+      A dispatch decision should prefer a node whose projected slot_cycle
+      keeps the slot busy without overrunning the remaining buff window,
+      because gathering under buff is worth more per second.
+    status: proposed_not_validated
+  - rule: >
+      Buff top-up must be scheduled from measured expiry, not from wall clock.
+      Trigger when remaining < longest projected slot_cycle still in flight.
+    status: proposed_not_validated
+
+# ---------------------------------------------------------------------------
+# 7. Change detection - the LLM's one non-bounded job
+# ---------------------------------------------------------------------------
+change_detection:
+  principle: >
+    A human player notices when something that always worked stops working, or
+    when a surface disappears for a while.  The local LLM is allowed to raise
+    exactly that signal, and nothing more.
+  retraining_triggers:
+    - trigger: expected_control_absent
+      example: the USE button or the BOOSTS tab is not found on a fresh frame
+    - trigger: expected_label_changed
+      example: item name or effect text differs from this snapshot
+    - trigger: dialog_shape_changed
+      example: the NOTICE confirm dialog gains or loses a button
+    - trigger: surface_absent_for_window
+      example: Courier Station unreachable across several scheduled checks
+  response: emit retraining_required, never guess a substitute target

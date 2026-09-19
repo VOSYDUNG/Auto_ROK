@@ -1,145 +1,138 @@
-# Auto_ROK — Goal
+# Mục tiêu Auto_ROK
 
-## Product goal
+Ngày: 2026-09-19 · Chịu sự điều chỉnh của [`docs/PROJECT_DECLARATION.md`](PROJECT_DECLARATION.md)
 
-Build and validate a CPU/RAM-only Auto_ROK harness for one real Windows
-machine, one signed-in user and one visible Rise of Kingdoms client. Docker,
-virtual machines and Hyper-V are explicitly out of scope.
+---
 
-The harness is the product around which the local LLM is trained and tested.
-It must turn a bounded game situation into a small, trustworthy decision
-problem, execute only a guarded action, and prove the visible result. The
-system is successful only when that loop is deterministic, measurable and
-fail-closed.
+## 1. Mục tiêu sản phẩm
 
-## Local-LLM user story
+Đưa một mô hình ngôn ngữ chạy cục bộ vào vị trí biên quyết định của một vòng lặp vận hành
+Rise of Kingdoms, trên đúng một máy Windows thật, một tài khoản đã đăng nhập, một client
+đang hiển thị, chỉ dùng CPU và RAM.
 
-When the harness has a fresh, provenance-bound observation and more than one
-valid next step, the local LLM receives only the minimal structured context
-and the already-filtered candidate actions. It selects exactly one existing
-`ActionChoice`, or returns `NEEDS_DECISION` when the evidence is insufficient.
-The model never sees an unrestricted desktop-control surface, never invents
-coordinates, and never sends mouse or keyboard input.
+Chủ ngữ là **LLM local**. Harness tồn tại để biến một tình huống game thành một bài toán
+quyết định nhỏ, đáng tin, có bằng chứng — rồi thi hành đúng một hành động đã được chốt
+chặn và chứng minh kết quả nhìn thấy được.
 
-The target model is a local Qwen or GPT-OSS class model. Its reasoning is a
-small decision edge (approximately 10–20% of the loop); deterministic harness
-logic owns the remaining work and all safety decisions.
+Hệ thống chỉ được coi là thành công khi vòng lặp đó **xác định, đo được, và fail-closed**.
 
-The local model service is kept available as an idle observer. “Always on”
-does not mean “always assigned a mission”: the harness sends a bounded packet
-only for a real `NEEDS_DECISION`/`UNKNOWN_STATE` signal. The model may choose an
-existing candidate, abstain, or report a changed game surface; it cannot own a
-clock, schedule, completion flag, currency spend or input dispatch.
+> Lưu ý sửa sai: bản GOAL trước ngày 2026-09-19 viết *"harness là sản phẩm mà LLM local
+> được huấn luyện và kiểm thử xoay quanh nó"*. Đó là đảo ngược. Dự án xoay quanh LLM
+> local; harness là nền 80%.
 
-## Harness contract
+---
 
-The harness owns:
+## 2. User story của LLM local
 
-- fixed, trained client ROIs and CPU-only capture/perception;
-- OCR/CV, state projection and frame provenance;
-- mission graph, policy and candidate filtering;
-- target grounding, input isolation and guarded actuation;
-- occurrence-bound approvals, checkpoints, retry/recovery and cancellation;
-- fresh postcondition verification and immutable evidence.
-- data-driven mission timeline and a local knowledge store for reset,
-  cooldown, event-window and queue-driven task facts.
+Đây là tài liệu trung tâm của dự án, không phải phụ lục.
 
-Coordinates are an observation/performance constraint, not permission to click.
-Every action must still be grounded to the current frame, current occurrence
-and current approval state.
+**Khi** harness có một quan sát tươi, gắn nguồn gốc, và có nhiều hơn một bước đi hợp lệ,
+**thì** LLM local nhận đúng một gói ngữ cảnh có cấu trúc tối thiểu cùng danh sách ứng
+viên đã được lọc sẵn.
 
-## First accepted slice
+Nó trả về đúng một trong ba thứ:
 
-Ship one-character `GATHER_RESOURCE` as the reference vertical slice. Keep
-other missions out of acceptance until they have their own observation,
-policy, action and verification contracts. Use `scripts/run_autorok.py` as the
-canonical entrypoint; legacy Python scripts remain historical evidence only.
-The evidence-bounded state and mission inventory is maintained in
-[`docs/GAME_STATE_MISSION_MATRIX.md`](GAME_STATE_MISSION_MATRIX.md); it is the
-scope guard for understanding the game without promoting unverified branches.
+1. **một `ActionChoice` có sẵn trong danh sách** — không được bịa ra lựa chọn mới;
+2. **`NEEDS_DECISION`** — khi bằng chứng không đủ để chọn;
+3. **`retraining_required`** — khi nhận ra bề mặt game đã thay đổi so với kiến thức đã
+   huấn luyện.
 
-## Active phase — reconnaissance frozen for GATHER; bounded E2E verified
+Nó **không bao giờ** nhìn thấy toạ độ màn hình thô, trạng thái game ẩn, bộ nhớ tiến trình,
+hay một bề mặt điều khiển desktop tự do. Nó **không bao giờ** phát chuột hay phím.
 
-Before adding another action or claiming end-to-end coverage, run one bounded
-field-recon pass over the visible ROK client. The pass collects screenshots and
-capture metadata for the planned states in
-[`config/game_field_reconnaissance_plan.json`](../config/game_field_reconnaissance_plan.json),
-then distills only observed labels, landmarks, transitions, side effects and
-unknowns into [`docs/GAME_FIELD_RECONNAISSANCE.md`](GAME_FIELD_RECONNAISSANCE.md)
-and the state/mission matrix. This is game knowledge acquisition, not a live
-mission run.
+Model mục tiêu thuộc lớp Qwen hoặc GPT-OSS chạy cục bộ. Phần suy luận của nó là một biên
+quyết định nhỏ, khoảng 20% vòng lặp; 80% còn lại và **toàn bộ** quyết định an toàn thuộc
+về logic xác định của harness.
 
-Reconnaissance may open and close safe panels and inspect controls, but it must
-not press MARCH, spend resources, use speedups, change account/character,
-send chat or submit any irreversible action. Every capture remains bound to the
-real client frame; unobserved behavior stays `UNKNOWN_STATE` or `NEEDS_DECISION`.
-Only after the survey packet is complete do we freeze the knowledge map and
-resume E2E tests against the compiled harness.
+### Luôn bật, không luôn có việc
 
-The latest bounded safe pass is
-`workspace/evidence/recon/recon-goal-20260919-02/`. It observed the live city
-and world-map, resource-search, level-control, node-detail and troop-drawer
-path, and explicitly records launch/login, march-confirmation and recovery as
-`not_observed` rather than inferring them. The packet is useful field evidence,
-and is now the knowledge boundary for the accepted GATHER slice. Those three
-unobserved states remain outside the product claim.
+Dịch vụ model chạy thường trực như người quan sát rảnh. "Luôn bật" không có nghĩa "luôn
+được giao nhiệm vụ". Harness chỉ gửi gói khi có tín hiệu `NEEDS_DECISION` hoặc
+`UNKNOWN_STATE` thật. Model không sở hữu đồng hồ, lịch, cờ hoàn thành, quyền tiêu tài
+nguyên, hay kênh phát input.
 
-After that safe pass, a fresh bounded occurrence
-`gather-goal-20260919-04` completed the compiled CPU-only path on the real
-elevated `MASS.exe`: `WORLD_MAP_VIEW` → search → Level 6 FOOD node → troop
-setup → occurrence-bound MARCH. The fresh queue proof is `1/5 → 2/5`, with
-target/foreground guards, a verified receipt and immutable evidence. The live
-path exposed a Windows OCR holdout for the small `Units` label; a fixed CPU
-crop plus duplicate-box rejection was added to `scripts/windows_ocr.ps1` and
-verified on the same frame before MARCH.
+---
 
-The next product layer is implemented as an offline/data-driven mission
-inventory. `config/mission_layer.yaml` and `harness/mission_timeline.py` model
-the single `00:00 UTC`/`07:00 Vietnam` reset, VIP tasks, Courier Station event
-windows, continuous farm queue returns and 30-minute alliance contribution
-cooldown (maximum 20 per reset). `harness/mission_knowledge.py` persists
-time-bounded semantic facts and change/retraining signals in SQLite. The five
-case acceptance artifact is
-`workspace/evidence/mission_layer/acceptance-latest.json`; it passes without
-emitting game input.
+## 3. Hợp đồng harness
 
-## Definition of done
+Harness sở hữu:
 
-Acceptance proceeds in this order:
+- ROI client cố định đã huấn luyện, thu hình và tri giác chỉ bằng CPU;
+- OCR/CV, chiếu trạng thái, nguồn gốc khung hình;
+- đồ thị mission, chính sách, lọc ứng viên;
+- nối đất mục tiêu, cô lập input, actuation có chốt chặn;
+- phê duyệt gắn occurrence, checkpoint, retry/recovery, huỷ lệnh;
+- xác minh hậu điều kiện trên khung hình tươi, và bằng chứng bất biến;
+- dòng thời gian mission dựa trên dữ liệu, và kho kiến thức cục bộ cho các dữ kiện về
+  reset, cooldown, cửa sổ sự kiện và hàng đợi.
 
-1. Complete the bounded field-recon survey and freeze the evidence-bounded
-   state/mission knowledge map.
-2. Direct-host input isolation and passive capture are evidenced on the real
-   Windows desktop, including target binding, stale-frame rejection,
-   cancellation/recovery and zero unintended input.
-3. CPU/corpus and OCR/state holdouts meet their measured thresholds without
-   changing runtime grounding to fuzzy or GPU-dependent behavior.
-4. The local-LLM `NEEDS_DECISION` contract is measured on frame-disjoint
-   holdout cases; transport success alone is not acceptance.
-5. B003 approval is explicitly bound to the current mission occurrence,
-   character and visible troop/commander selection.
-6. One bounded live GATHER tick proves the visible postcondition `Queue used
-   +1`, with cancel/resume/recovery evidence and no out-of-scope replay. **Met
-   for the current occurrence; R3 endurance is still separate.**
-7. The data-driven mission layer passes its five offline acceptance cases and
-   records semantic facts before any new live mission branch is armed. **Met.**
-8. Only after the preceding gates pass may endurance testing begin.
+**Toạ độ là ràng buộc quan sát/hiệu năng, không phải giấy phép để bấm.** Mọi hành động
+vẫn phải được nối đất vào khung hình hiện tại, occurrence hiện tại và trạng thái phê
+duyệt hiện tại.
 
-Any stale, missing, ambiguous, mismatched or unverifiable evidence stops the
-loop. No live input is emitted before the relevant gate and approval are
-present.
+---
 
-R3 repetition is separately operator-authorized: the readiness audit accepts
-only `workspace/evidence/gather/R3_ENDURANCE_AUTHORIZATION.json` scoped to the
-active GATHER occurrence contract and bounded by `max_additional_runs`.
-Per-tick runtime evidence is append-only; a generated-path collision fails
-closed instead of overwriting an earlier record.
+## 4. Lát cắt đang nhận
 
-## Non-goals
+`GATHER_RESOURCE` một nhân vật là lát cắt dọc tham chiếu. Các mission khác chưa được đưa
+vào nghiệm thu cho tới khi có hợp đồng quan sát, chính sách, hành động và xác minh của
+riêng chúng.
 
-- no Docker, VM, Hyper-V or GPU execution path;
-- no unrestricted autonomous desktop agent;
-- no process-memory reading or game injection;
-- no acceptance based only on HTTP/model transport, a dispatch receipt, or a
-  generic OCR ratio;
-- no reuse of an old approval or replay outside the current occurrence.
+Nhánh mission thứ hai `CLAIM_ALLIANCE_TERRITORY_RSS` đã có mặt ở mức **partial** và đang
+bị chặn bởi blocker `A001` — chữ ký hoàn thành sau nút Claim chưa được huấn luyện.
+
+Bản đồ trạng thái/mission có ràng buộc bằng chứng nằm ở
+[`docs/GAME_STATE_MISSION_MATRIX.md`](GAME_STATE_MISSION_MATRIX.md); nó là hàng rào phạm
+vi, ngăn việc nâng cấp các nhánh chưa được xác minh.
+
+Entrypoint duy nhất: `scripts/run_gather_tick.py`.
+
+---
+
+## 5. Định nghĩa hoàn thành — G1 đến G6
+
+Đây là **hệ đánh số duy nhất** của dự án. Nó được thi hành bằng máy, không bằng lời:
+`scripts/audit_goal_readiness.py` đọc bằng chứng thật trong `workspace/evidence/` và trả
+về pass/blocked cho từng cổng.
+
+| Cổng | Nội dung |
+|---|---|
+| **G1** | Cô lập input trên host Windows thật: ràng buộc đúng cửa sổ đích, foreground ổn định, từ chối khung hình cũ, huỷ lệnh/khôi phục được, và không có input ngoài ý muốn |
+| **G2** | Ngưỡng CPU và OCR/trạng thái đạt trên tập holdout, mà không hạ đường nối đất runtime xuống mức mờ hoặc phụ thuộc GPU |
+| **G3** | Hợp đồng `NEEDS_DECISION` của LLM local được đo trên các ca holdout rời khung hình. Chỉ gọi được model thì không phải nghiệm thu |
+| **G4** | Phê duyệt B003 gắn tường minh vào occurrence, nhân vật, và lựa chọn quân/tướng đang nhìn thấy |
+| **G5** | Một tick GATHER có giới hạn chứng minh được hậu điều kiện nhìn thấy `Queue used +1`, kèm bằng chứng huỷ/tiếp tục/khôi phục, không replay ngoài phạm vi |
+| **G6** | Chỉ sau khi G1–G5 đạt mới được chạy endurance, và chỉ khi có uỷ quyền tường minh của người vận hành |
+
+Bằng chứng cũ, thiếu, mơ hồ, lệch nhau hay không kiểm chứng được đều **dừng vòng lặp**.
+Không phát input trước khi cổng liên quan và phê duyệt tương ứng có mặt.
+
+### Điều kiện của G6
+
+Lặp R3 phải được người vận hành uỷ quyền riêng. Bản audit chỉ chấp nhận file
+`workspace/evidence/gather/R3_ENDURANCE_AUTHORIZATION.json` gắn đúng hợp đồng occurrence
+GATHER đang hoạt động và có `max_additional_runs` tường minh. Bằng chứng runtime mỗi tick
+là append-only; đường dẫn trùng thì fail-closed chứ không ghi đè bản ghi cũ.
+
+---
+
+## 6. Mục tiêu năng suất của lát cắt GATHER
+
+Ngoài việc đạt G1–G6, lát cắt GATHER có một mục tiêu vận hành đo được:
+
+- **lấp đầy hàng đợi hành quân** — đưa chỉ số `n/5` lên `5/5`;
+- **giữ buff tăng tốc thu thập không về 0** trong suốt chu kỳ 24h.
+
+Hai đòn bẩy này độc lập và đều có thể gãy nhịp độc lập. Cách tính và cách đo nằm ở
+[`knowledge/gathering_continuity_2026-09-19.yaml`](../knowledge/gathering_continuity_2026-09-19.yaml).
+
+---
+
+## 7. Không thuộc phạm vi
+
+- không Docker, máy ảo, Hyper-V, không đường chạy GPU;
+- không tác tử desktop tự do không giới hạn;
+- không đọc bộ nhớ tiến trình, không chèn code vào game;
+- không nghiệm thu chỉ dựa trên việc gọi được model qua HTTP, một biên nhận gửi lệnh, hay
+  một tỉ lệ OCR chung chung;
+- không tái dùng phê duyệt cũ hay replay cũ ngoài occurrence hiện tại.

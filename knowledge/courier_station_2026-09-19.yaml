@@ -1,0 +1,139 @@
+schema_version: 1
+snapshot_id: courier_station_2026-09-19
+observed_at: "2026-09-19"
+
+# The Courier Station is the operator's named source of the gathering-speed
+# items that keep the farm rhythm unbroken.  It is a time-windowed, stock-
+# limited, spend-class surface, so it needs its own bounded contract: the
+# harness may observe and claim what is free, but every gem purchase is a
+# spend decision that stays with the operator.
+
+provenance:
+  source_surface: operator_description_and_client_screenshots
+  observed_by: operator
+  extractor: teaching_session
+  confidence: 0.85
+  evidence_ref:
+    - operator screenshot: city view with the Courier Station building banner
+    - operator screenshot: "MYSTERIOUS MERCHANT'S BOUTIQUE" full stock
+    - operator screenshot: same panel after purchases, tiles read "Sold Out"
+    - operator screenshot: same panel scrolled to further sections
+    - operator screenshot: after one refresh, chances 5/5 -> 4/5
+
+building:
+  name_observed: "Courier Station"
+  location: inside the city view
+  banner: blue label rendered above the building
+  adjacent_controls_observed:
+    - icon: information
+    - icon: shopping_cart
+      note: presumed entry to the merchant panel, unverified which one opens it
+
+panel:
+  title_observed: "MYSTERIOUS MERCHANT'S BOUTIQUE"
+  header_fields:
+    - field: time_remaining
+      example: "01:59:58"
+      SEMANTICS: >
+        Counts down toward the next automatic stock rotation.  The observed
+        value started just under 2 hours, which is consistent with a 2-hour
+        cycle, but only one cycle was observed - treat the period as
+        UNVERIFIED until measured across at least two rotations.
+    - field: refresh_chances
+      example_before: "5/5"
+      example_after: "4/5"
+      SEMANTICS: manual re-rolls available this cycle
+    - field: free_claim
+      example: "FREE 1/1"
+      SEMANTICS: >
+        A free claim available once per cycle, rendered as a blue button in
+        the same slot where the paid "Refresh" button appears once the free
+        one is consumed.
+  manual_refresh:
+    observed_cost: 100
+    currency: gems
+    effect: re-rolls the visible stock and decrements refresh_chances by 1
+    evidence: "the button read 'Refresh 100' while chances showed 4/5"
+
+sections_observed:
+  - name: Resources
+    tiles_per_row: 4
+  - name: Speedups
+    tiles_per_row: 4
+  - name: Boosts
+    tiles_per_row: 4
+    relevance: >
+      This is the section that can supply gathering-speed items; see
+      knowledge/gathering_continuity_2026-09-19.yaml
+  - name: Other
+    tiles_per_row: 4
+
+tile_structure:
+  fields:
+    - field: discount_badge
+      example_values: ["-10%", "-20%", "-30%", "-40%", "-50%", "-60%", "-70%", "-80%", "-90%"]
+      position: top-left corner of the tile
+    - field: quantity_or_duration
+      note: resources show an amount (e.g. 50,000 / 112,500 / 150,000); speedups and boosts show a duration (5m / 60m / 8h / 12h)
+    - field: stack_count
+      note: small number in the lower-right of the item art
+    - field: price
+      note: rendered under the tile with its own currency icon
+    - field: sold_out_state
+      rendered_as: tile greys out and the price row is replaced by the text "Sold Out"
+      SEMANTICS: >
+        Per-tile, per-cycle.  Observed directly: tiles that were purchasable
+        in one capture read "Sold Out" in the next capture of the same cycle.
+
+currencies_observed:
+  - icon: red_gem
+    name: gems
+    note: the premium currency; every purchase priced in gems is a spend action
+  - icon: resource_token
+    name: unidentified_resource_currency
+    status: UNVERIFIED
+    note: >
+      Some tiles were priced in a non-gem currency (values such as 120,000 /
+      135,000 / 105,000).  The icon was not legible enough to name the
+      resource with confidence, so it is deliberately left unidentified
+      rather than guessed.
+
+price_variance_observed:
+  note: >
+    The same nominal item appeared at different gem prices across refreshes -
+    for example a 60m speedup stack of 10 was priced at 600 gems under a -50%
+    badge and a stack of 6 at 144 gems under -80%.  Price is therefore a
+    function of the rolled discount, not a constant.  Any purchase policy must
+    read the current tile, never a remembered price.
+
+operator_schedule:
+  statement_from_operator: >
+    The station should be visited at points during the day - the operator
+    named roughly 07:00 and 12:00 local time as examples.
+  status: PARTIAL - operator gave examples, not a complete schedule
+  open_question: >
+    Whether the intended cadence is (a) fixed local clock times, or (b) driven
+    by the panel's own time_remaining rotation, or (c) simply "whenever a
+    gathering-item stock appears".  This must be settled before the task is
+    armed; it changes the scheduler shape.
+  reset_reference:
+    game_reset: "00:00 UTC"
+    same_instant_local: "07:00 Asia/Ho_Chi_Minh"
+    note: the operator's "7h sáng" example coincides with the daily reset
+
+bounded_contract:
+  observe:
+    risk: observe
+    allowed: read stock, discounts, prices, sold-out state, timers
+  claim_free:
+    risk: claim
+    allowed_conditionally: true
+    precondition: the FREE control is present and reads an unconsumed count
+  purchase:
+    risk: spend
+    allowed: false
+    rationale: >
+      Gems are a finite premium currency and prices re-roll.  GOAL.md forbids
+      acceptance based on a dispatch receipt alone, and a purchase cannot be
+      undone.  Purchases remain an operator decision; the harness may surface
+      a ranked candidate list and nothing more.
