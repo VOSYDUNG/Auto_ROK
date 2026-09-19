@@ -132,12 +132,23 @@ def _capture_options(hwnd: int) -> dict[str, Any]:
             "minimum_update_interval": None, "dirty_region": None, "window_hwnd": hwnd}
 
 
-def capture_rok_client(output: str | Path, *, timeout_seconds: float = 10.0) -> dict[str, Any]:
-    """Persist one current client-area frame without activation or input."""
+def capture_rok_client(
+    output: str | Path,
+    *,
+    timeout_seconds: float = 10.0,
+    title: str = "Rise of Kingdoms",
+    exe: str = "MASS.exe",
+) -> dict[str, Any]:
+    """Persist one current client-area frame without activation or input.
+
+    The window is identified by title/exe so the same passive capture path can
+    be pointed at a non-game window.  The defaults keep every existing caller
+    on the ROK client unchanged.
+    """
     if not 0.1 <= timeout_seconds <= 30.0:
         raise WindowsCaptureError("timeout_seconds must be between 0.1 and 30")
     output = Path(output)
-    target = discover_rok_window()
+    target = discover_rok_window(title=title, exe=exe)
     before = _snapshot(target)
 
     try:

@@ -1,0 +1,274 @@
+schema_version: 1
+snapshot_id: farming_workflow_2026-09-19
+observed_at: "2026-09-19"
+
+# WHY THIS FILE EXISTS
+#
+# The operator's correction on 2026-09-19: "ta không chỉ xây harness còn xây
+# quy trình nữa" - we are not only building a harness, we are building the
+# work process.  Everything recorded here is business process, not UI
+# mechanics.  The harness is the toolbox; this file is the job the toolbox is
+# used for.
+#
+# This is the layer the previous implementation never had.  The legacy
+# Mouse_key.py Daily_farm proved one lifecycle on the happy path and froze on
+# every exception, because it encoded clicks and had no concept of a goal.
+
+provenance:
+  source_surface: operator_description
+  observed_by: operator
+  extractor: teaching_session
+  confidence: 0.9
+  notes: >
+    Process described by the operator, not yet observed by the harness.  Items
+    marked NEEDS_CONFIRMATION are places where the description could be read
+    more than one way and the operator has not yet settled it.
+
+# ---------------------------------------------------------------------------
+# 1. Mission shape - quota over a horizon, delivery as a SEPARATE job
+# ---------------------------------------------------------------------------
+mission_model:
+  shape: quota_over_horizon
+  origin: >
+    The operator issues a mission from front-line information - for example
+    the kingdom is approaching a war phase and resources must be staged.
+  worked_example:
+    horizon_days: 10
+    net_required_after_tax:
+      food: 3_000_000_000
+      wood: 3_000_000_000
+      stone: 3_000_000_000
+      gold: 5_000_000_000
+    gross_must_exceed_net: true
+    reason: >
+      The stated figures are what must be RECEIVED after tax.  Gross farmed
+      must therefore exceed them so the delivered amount lands exactly on
+      target.
+
+  CRITICAL_CORRECTION_FROM_OPERATOR: >
+    A mission is TWO jobs, not one.  Job 1 is accumulate.  Job 2 is deliver.
+    They are separated in time, like real farming: farm for three months, then
+    deliver once.  Delivery happens only when the quota is met.
+    This is NOT "farm some, deliver some" in a continuous trickle.  The
+    operator raised this explicitly because that misreading was likely.
+
+  jobs:
+    - id: ACCUMULATE
+      cadence: continuous over the horizon
+      completion: net-equivalent stock reaches the quota
+    - id: DELIVER
+      cadence: once, on quota completion
+      risk: transfer of assets, not reversible
+      authority: agent_acts_under_a_per_delivery_ceiling
+      operator_statement: "Agent tự giao, nhưng có trần mỗi lần"
+      rule: >
+        The agent performs the delivery itself, but each single delivery is
+        bounded by an explicit ceiling set by the operator.  A delivery that
+        would exceed the ceiling is split, or escalated - never silently
+        enlarged.
+      ceiling_value: NEEDS_CONFIRMATION - the operator has not yet given the
+        number, and the capability must stay disarmed until they do
+      required_guards:
+        - the ceiling is read from configuration, never inferred
+        - the recipient is grounded on the current frame, never remembered
+        - the delivered amount is verified against the visible post-transfer
+          stock, because a dispatch receipt is not proof of transfer
+        - tax is applied to the net target, so gross delivered exceeds the
+          number the operator quoted
+
+# ---------------------------------------------------------------------------
+# 2. The account cycle - this is a process, not a UI sequence
+# ---------------------------------------------------------------------------
+account_cycle:
+  principle: scale must not be hardcoded
+  operator_statement: >
+    Hand it an account file plus the descriptive information already held
+    about each account; it enters the character check, and persists an account
+    profile from what it sees.
+
+  rotation_is_two_level:
+    level_1: switch CHARACTER inside the signed-in account
+    level_2: switch ACCOUNT, only once every character is exhausted
+    operator_statement: >
+      "hết nhân vật là sẽ tới đổi tài khoản => phần cũ hardcode nên chúng ta
+      giờ building phải cải tiến"
+    mechanism_level_1:
+      path: Settings > Character
+      credentials_required: false
+      legacy_reference: Avatar.py change_account walked this same path
+      build_priority: FIRST
+    mechanism_level_2:
+      credentials_required: true
+      build_priority: LATER
+      constraint: >
+        Credentials must never be stored in the repository in plain text and
+        must never be typed by the assistant.  If this capability is built,
+        the secret belongs in the Windows Credential Manager, entered once by
+        the operator, read by the harness at runtime.
+
+  current_scale:
+    accounts: 2
+    operator_statement: "hiện tại khung tôi đang có là 2x4"
+    reading: 2 accounts x 4 characters = 8 farming characters
+    status: NEEDS_CONFIRMATION - the 2x4 shorthand is read as accounts x
+      characters; the operator should correct this if it means something else
+    marches_per_character: 5
+    implied_total_marches_per_full_rotation: 40
+    design_rule: scale is a runtime input, never a constant in code
+
+  per_character_batch:
+    marches: 5
+    rule: >
+      One character, all five marches home, then enter.  The agent does not
+      re-enter a character that still has troops in the field.
+    operator_statement: "Quy tắc là 1 acc 5 đạo về hết thì log vào"
+
+    why_it_is_a_process_not_a_loop:
+      operator_statement: >
+        "không phải 5 đạo lúc nào nó cũng về cùng lúc ... lấy thời gian đội
+        quân lâu nhất khấu hao"
+      rule: >
+        The five marches do not return together.  The cycle length is set by
+        the SLOWEST march, and that is the figure the schedule amortises
+        against.  The other four slots idle for the remainder - that idle tail
+        is the cost of the batch, and it is covered by rotating to the next
+        character rather than by re-entering early.
+
+    cycle_length:
+      derivation_target: >
+        Must ultimately be derived from observed gathering speed, per the
+        measure-do-not-hardcode principle.
+      operator_empirical_baseline:
+        source: operator's own experience as a farmer, not yet machine-measured
+        precondition: the 50% gathering-speed boost must be active
+        entries:
+          - profile: city_hall_25, full farm build, strong levels
+            return_after: "2h00 - 2h30"
+          - profile: lower-level farm
+            return_after: "3h30 - 4h00"
+      how_to_use_it: >
+        Seed the scheduler with the operator baseline so the agent is useful on
+        day one, then replace it per character with the measured value as
+        real cycles complete.  The baseline is a starting estimate with a named
+        source, not a hardcoded constant.
+      hard_dependency: >
+        Both baselines assume the 50% boost is live.  If the buff lapses, the
+        cycle stretches and the schedule is wrong.  This is why buff continuity
+        is a scheduling input, not just a throughput nicety.
+
+# ---------------------------------------------------------------------------
+# 3. Measuring progress toward the quota
+# ---------------------------------------------------------------------------
+progress_measurement:
+  operator_guidance: >
+    There is more than one place to read a resource total, and they do not
+    agree.  Choosing the wrong one silently corrupts quota tracking.
+
+  surfaces:
+    - surface: top_header_total
+      example_rendering: "3.3B"
+      property: ROUNDED
+      usable_for_quota: false
+      reason: rounding error makes it unfit for a billion-scale quota
+
+    - surface: bag_resource_total
+      path: bag / inventory > resources
+      property: INCLUDES UNOPENED RESOURCE ITEMS
+      usable_for_quota: false
+      reason: >
+        The bag figure sums held resource items together with actual stock.
+        Items are not yet resources.  Either subtract them, or read the
+        surface that excludes them.
+
+    - surface: resource_detail_view
+      path: bag / inventory > resources > detail
+      property: exact, excludes items
+      usable_for_quota: PREFERRED
+      status: NEEDS_CONFIRMATION - the operator described this surface but the
+        harness has not yet grounded it
+
+  derived_rule: >
+    Quota progress must be read from an exact, item-excluded surface.  A
+    rounded header value may be used as a cheap cross-check only, never as
+    the number of record.
+
+# ---------------------------------------------------------------------------
+# 4. Default daily goal - what it does with no mission assigned
+# ---------------------------------------------------------------------------
+# Operator principle: operator input CHANGES the agent's decisions, it does
+# not STOP its operation.  With no assigned mission the agent still has a
+# standing goal.
+default_daily_goal:
+  standing_objectives:
+    - id: QUEUE_FULL
+      statement: keep every march queue slot occupied
+    - id: BUFF_NONZERO
+      statement: gathering-speed buff never reaches zero
+      reference: knowledge/gathering_continuity_2026-09-19.yaml
+    - id: DAILY_SET
+      statement: claim VIP, claim VIP gifts, check Courier Station
+    - id: ALLIANCE_CITIZEN
+      statement: >
+        perform alliance donation on its natural 30-minute recovery rhythm,
+        "như một công dân" - as a citizen of the alliance, not as a burst
+    - id: RESOURCE_BALANCE
+      statement: keep the four resources in the target ratio
+
+  target_ratio:
+    value: [1, 1, 1, 2]
+    mapping: NEEDS_CONFIRMATION
+    likely_mapping:
+      food: 1
+      wood: 1
+      stone: 1
+      gold: 2
+    rationale: >
+      The mission worked example asks for 5b gold against 3b of each other
+      resource, which is consistent with gold carrying the double weight.
+      Not yet confirmed by the operator.
+
+  search_policy:
+    normal:
+      statement: search node levels from high to low, holding the 1:1:1:2 ratio
+      rationale: higher level nodes yield more per march
+    scarcity_fallback:
+      trigger: >
+        A competitive kingdom where searches return no node.  The operator
+        named this explicitly as a condition the agent must handle rather than
+        stall on.
+      rule: >
+        Drop the level requirement and relax the resource-type preference.
+        The governing objective becomes: fill the remaining queue slots.  Any
+        march sent to farm is acceptable.
+      operator_statement: >
+        "khi quá khan hiếm thì quy tắc là lấp đầy hàng đợi còn lại là có gửi
+        troop đi farm là được"
+      design_significance: >
+        This is the first explicitly stated GRACEFUL DEGRADATION rule in the
+        project.  It is the pattern that separates this agent from the legacy
+        script: when the preferred plan is unavailable, fall back to a weaker
+        but still-productive goal instead of freezing.
+
+# ---------------------------------------------------------------------------
+# 5. Architectural consequence - fail-closed action, never-stopping loop
+# ---------------------------------------------------------------------------
+# The current harness is built to STOP on any uncertainty: fail-closed,
+# blocked, NEEDS_DECISION, wait for approval.  The operator's requirement is
+# the opposite at the loop level: the agent must always have something to do.
+#
+# Proposed reconciliation, pending operator confirmation:
+#
+#   - Action level  : fail-closed is kept.  If a specific action cannot be
+#                     grounded and approved, that action is not taken.
+#   - Loop level    : never stop.  A blocked action demotes the agent to the
+#                     next weaker goal - scarcity fallback, then daily set,
+#                     then observe - rather than halting the run.
+#   - Operator input: steers which goal is active.  It is not a stop signal.
+#
+# The legacy Mouse_key.py had neither property: it could not verify an action
+# and it could not degrade, so any exception froze the lifecycle.
+architectural_consequence:
+  status: PROPOSED - awaiting operator confirmation
+  fail_closed_scope: action
+  never_stop_scope: loop
+  operator_input_role: steering_not_halting
