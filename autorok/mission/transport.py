@@ -14,6 +14,19 @@ only visible after the resources have already left the account.
 
 The capacity is a single pool shared by all four resources, not a per-resource
 allowance: filling it with food alone left nothing for wood, stone or gold.
+
+Two further facts from the operator on 2026-09-20, both of which changed the
+model rather than filling it in:
+
+  * Transport runs occupy the SAME five march slots as gathering - "số xe là 5,
+    tùy queue farm của chúng ta có".  There is no second queue.  Every delivery
+    run is a farm slot temporarily not farming.
+  * The 31 minutes on the observed panel is ONE WAY, and it was a deliberately
+    distant test.  A nearby recipient costs at most about 10 seconds each way.
+
+Those two together make teleporting close the highest-leverage action in the
+whole delivery job: the same 175 runs per character take about 29 minutes near
+and about 90 hours far, on two slots.
 """
 from __future__ import annotations
 
@@ -150,6 +163,39 @@ class TransportLoad:
     @property
     def is_full(self) -> bool:
         return self.net_total == self.post.net_capacity
+
+
+#: Observed one-way travel times.  Distance dominates everything else in the
+#: delivery plan, so the plan is built around getting close first.
+NEAR_ONE_WAY_SECONDS = 10
+OBSERVED_FAR_ONE_WAY_SECONDS = 31 * 60
+
+
+def travel_seconds(one_way_seconds: int, *, round_trip: bool = True) -> int:
+    """Slot occupancy for one transport run."""
+    if one_way_seconds <= 0:
+        raise TransportError("one_way_seconds must be positive")
+    return one_way_seconds * (2 if round_trip else 1)
+
+
+def campaign_seconds(
+    runs: int,
+    *,
+    one_way_seconds: int = NEAR_ONE_WAY_SECONDS,
+    slots: int = 1,
+) -> float:
+    """How long ``runs`` take when ``slots`` of the five are given to transport.
+
+    This is the number that decides whether a delivery is a coffee break or a
+    multi-day campaign, and it is driven almost entirely by distance.
+    """
+    if runs < 0:
+        raise TransportError("runs must not be negative")
+    if not 1 <= slots <= 5:
+        raise TransportError("slots must be between 1 and 5 - the shared march pool")
+    if runs == 0:
+        return 0.0
+    return runs * travel_seconds(one_way_seconds) / slots
 
 
 def plan_runs(

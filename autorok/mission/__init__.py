@@ -25,6 +25,7 @@ from autorok.mission.fleet import (
     Fleet,
     FleetError,
     March,
+    MarchPurpose,
 )
 from autorok.mission.transport import (
     LEVEL_25,
@@ -60,6 +61,7 @@ __all__ = [
     "Fleet",
     "FleetError",
     "March",
+    "MarchPurpose",
     "Order",
     "OrderError",
     "ResourceKind",

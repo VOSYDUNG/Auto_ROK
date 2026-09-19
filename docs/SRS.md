@@ -192,7 +192,10 @@ không có dữ liệu để đề xuất.
 
 | Mã | Mệnh đề | Tiêu chí chấp nhận | Nguồn | Trạng thái |
 |---|---|---|---|---|
-| DEL-001 | Năng lực giao = sức chứa/chuyến × số xe | Chợ cấp 25 → **10.000.000 net/chuyến**; số xe vẫn chưa đọc | F17 | **MỘT PHẦN** · `test_mission_transport` |
+| DEL-001 | Năng lực giao = sức chứa/chuyến × số slot dành cho vận chuyển | Chợ cấp 25 → **10.000.000 net/chuyến**; **5 slot dùng chung với farm** | F17 | **ĐÃ GIẢI** · `test_mission_transport` |
+| DEL-010 | Vận chuyển dùng **chung 5 slot** với farm, không phải hàng đợi riêng | Slot đã cấp cho vận chuyển thì không farm được | F14, F17 | ĐÃ KIỂM |
+| DEL-011 | Thời gian đi là **một chiều**, phụ thuộc khoảng cách | Gần ≤10s/chiều · xa quan sát được 31 phút/chiều | F17 | ĐÃ KIỂM |
+| DEL-012 | **Tele lại gần TRƯỚC khi giao** | Cùng 175 chuyến: ~29 phút gần so với ~90 giờ xa, chênh ~180 lần | F17 | **CHƯA XÂY** — cần client |
 | DEL-002 | Tele lại gần là chi phí trả **trước**, nằm trong kế hoạch | Kế hoạch giao gồm bước tele | F17 | KHOÁ |
 | DEL-003 | Người nhận nối đất trên khung hiện tại, không nhớ | Người nhận cũ không được tái dùng | F17 | KHOÁ |
 | DEL-004 | Số đã giao xác minh bằng tồn kho sau chuyển | Biên nhận không đủ | F17 | KHOÁ |
@@ -218,10 +221,10 @@ không có dữ liệu để đề xuất.
 | ACT actuation | 6 | 6 | — | — | — |
 | EVI bằng chứng | 4 | 4 | — | — | — |
 | SAF an toàn | 6 | 3 | 1 | 2 | — |
-| DEL giao hàng | 10 | 3 | — | — | 7 |
-| **Tổng** | **80** | **51** | **2** | **20** | **7** |
+| DEL giao hàng | 12 | 6 | — | 1 | 5 |
+| **Tổng** | **83** | **55** | **2** | **21** | **5** |
 
-**Đọc bảng này:** 51/80 yêu cầu đã có test đang chạy. Phần chưa xây tập trung đúng bốn chỗ —
+**Đọc bảng này:** 55/83 yêu cầu đã có test đang chạy. Phần chưa xây tập trung đúng bốn chỗ —
 **thang suy giảm** (LAD-007…010), **tầng chiến lược của LLM** (LLM-005…009),
 **onboarding** (ONB-001…004), và **lịch biểu động** (MIS-013…016). Ba nhóm đầu là P1 trong
 `BUILD_PLAN`; nhóm thứ tư là mới, sinh ra từ buổi 2026-09-20.
@@ -251,7 +254,7 @@ Không dùng dịch vụ CI. Mọi kiểm tra chạy trên máy người vận h
 | SC-01…SC-05 | duyệt hoặc sửa ngưỡng tôi đề xuất |
 | SC-06 | sản lượng ngày thực tế người vận hành đạt được |
 | MIS-015 | trần thời gian mỗi lượt vào nhân vật — **sau khi đo**, không chốt trước |
-| DEL-010 | **số xe mỗi nhân vật** — quyết định thông lượng giao |
+| DEL-012 | tele lại gần bằng cách nào (vật phẩm? giới hạn?) — cần quan sát |
 
 Đã có đáp án ngày 2026-09-20: ~~DEL-005 thuế~~ (8%) · ~~MIS-013 cách đọc tồn kho~~ ·
 ~~DEL-006 ngữ nghĩa sức chứa~~ · ~~§7 phép tính 1.522~~.
@@ -281,8 +284,22 @@ và 8 nhân vật chạy song song:
 | 2 | 3,72B | 3,8 ngày |
 | 3 | 5,57B | 2,5 ngày |
 
-Vừa khít chân trời 10 ngày ngay cả với một xe. Ẩn số còn lại là **số xe mỗi nhân vật**
-(`DEL-010`) và thời gian 31 phút là một chiều hay khứ hồi.
+### Cập nhật 2026-09-20 — bảng trên đã lỗi thời
+
+Hai câu trả lời của người vận hành làm bảng trên sai: **số xe chính là 5 slot farm** (không
+có hàng đợi riêng), và **31 phút là một chiều, ở cự ly xa cố ý**. Gần thì tối đa 10s/chiều.
+
+| Khoảng cách | 175 chuyến/nhân vật, 2/5 slot |
+|---|---|
+| **Gần (10s/chiều)** | **≈29 phút** |
+| Xa (31 phút/chiều) | ≈90 giờ |
+
+Chênh **~180 lần**. Nên hành động có đòn bẩy cao nhất trong cả việc giao hàng là **tele lại
+gần**, không phải tối ưu cách xếp hàng hay thứ tự chuyến.
+
+Và vì slot dùng chung, mỗi chuyến vận chuyển là một slot **không farm**. Bù lại: một slot
+dành cho vận chuyển gần trong đúng một chu kỳ farm (2h15) chuyển được ~405 chuyến ≈ **4,0B**
+— đổi một chu kỳ farm lấy 4 tỉ tài nguyên là đổi rất lợi.
 
 Cả ba luật số học đã ghim bằng test trong `tests/test_mission_transport.py`, dùng đúng các
 con số đọc từ client.

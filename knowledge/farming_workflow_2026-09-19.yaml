@@ -111,12 +111,47 @@ mission_model:
           hàng hóa, và hàng đợi đó tương ứng với số xe chuyển hàng luôn"
         model:
           driver: trading_post_level
-          transport_queue_size: equals the number of transport carts
-          note: >
-            This is a SECOND queue, independent of the five march queues used
-            for gathering.  The agent now has two capacity-limited queues with
-            different drivers, and the delivery schedule is bounded by the
-            transport one.
+          slots: SHARED with gathering - see correction below
+
+        CORRECTION_2026-09-20:
+          previously_recorded: >
+            "This is a SECOND queue, independent of the five march queues used
+            for gathering."  That was WRONG.
+          operator_statement: >
+            "số xe là 5, tùy queue farm của chúng ta có"
+          corrected_model: >
+            Transport runs occupy the SAME five march slots as gathering.
+            There is no second queue.  Every delivery run is a farm slot that
+            is temporarily not farming, so delivery and gathering contend for
+            one pool of five.
+          consequence: >
+            A delivery campaign has a real cost in forgone gathering, and the
+            scheduler must allocate the five slots between the two purposes
+            rather than treating them as independent budgets.
+          implementation: autorok/mission/fleet.py MarchPurpose
+
+        travel_time:
+          OBSERVED_2026-09-20:
+            far_case:
+              one_way_seconds: 1860
+              rendering: "Transport 00:31:00"
+              note: >
+                The operator states this is ONE WAY, and that it was a
+                deliberately distant test target.
+            near_case:
+              one_way_seconds_max: 10
+              operator_statement: >
+                "ở gần thường chỉ tốn tối đa 10s/1 chiều"
+          why_this_dominates_the_plan: >
+            The same 175 runs per character take about 29 minutes near and
+            about 90 hours far, on two slots.  Distance is worth roughly 180x,
+            which makes teleporting close the single highest-leverage action in
+            the whole delivery job - far more valuable than any packing or
+            ordering optimisation.
+          consequence_for_the_plan: >
+            Get close FIRST, then deliver.  A delivery plan that starts sending
+            before closing the distance is not a slow plan, it is a different
+            plan by two orders of magnitude.
 
         OBSERVED_2026-09-20:
           surface: city view > Trading Post > info (i) button

@@ -158,3 +158,81 @@ def test_negative_amounts_are_refused():
         TransportLoad({ResourceKind.FOOD: -1}, LEVEL_25)
     with pytest.raises(TransportError):
         LEVEL_25.gross_for_net(-1)
+
+
+def test_transport_uses_the_same_five_slots_as_gathering():
+    """There is no second queue - a delivery run is a farm slot not farming."""
+    from datetime import datetime, timedelta, timezone
+
+    from autorok.mission import (
+        MARCHES_PER_CHARACTER,
+        Character,
+        March,
+        MarchPurpose,
+        OPERATOR_BASELINE_STRONG,
+    )
+
+    now = datetime(2026, 9, 20, tzinfo=timezone.utc)
+    character = Character("char-1", "acc-1", OPERATOR_BASELINE_STRONG)
+
+    for slot in range(3):
+        character.dispatch(
+            March(slot, ResourceKind.GOLD, now, now + timedelta(hours=2))
+        )
+    for slot in (3, 4):
+        character.dispatch(
+            March(slot, None, now, now + timedelta(seconds=20),
+                  purpose=MarchPurpose.TRANSPORT)
+        )
+
+    assert character.is_queue_full
+    assert character.slots_used_for(MarchPurpose.GATHER) == 3
+    assert character.slots_used_for(MarchPurpose.TRANSPORT) == 2
+    assert (
+        character.slots_used_for(MarchPurpose.GATHER)
+        + character.slots_used_for(MarchPurpose.TRANSPORT)
+        == MARCHES_PER_CHARACTER
+    )
+
+
+def test_a_gathering_march_must_name_its_resource_and_a_transport_must_not():
+    from datetime import datetime, timedelta, timezone
+
+    from autorok.mission import FleetError, March, MarchPurpose
+
+    now = datetime(2026, 9, 20, tzinfo=timezone.utc)
+    later = now + timedelta(minutes=1)
+
+    with pytest.raises(FleetError):
+        March(0, None, now, later)
+    with pytest.raises(FleetError):
+        March(0, ResourceKind.GOLD, now, later, purpose=MarchPurpose.TRANSPORT)
+
+
+def test_distance_decides_whether_delivery_is_minutes_or_days():
+    from autorok.mission.transport import (
+        NEAR_ONE_WAY_SECONDS,
+        OBSERVED_FAR_ONE_WAY_SECONDS,
+        campaign_seconds,
+    )
+
+    runs_per_character = LEVEL_25.runs_for_net(14_000_000_000) // 8
+    assert runs_per_character == 175
+
+    near = campaign_seconds(runs_per_character, one_way_seconds=NEAR_ONE_WAY_SECONDS, slots=2)
+    far = campaign_seconds(
+        runs_per_character, one_way_seconds=OBSERVED_FAR_ONE_WAY_SECONDS, slots=2
+    )
+
+    assert near / 60 == pytest.approx(29.2, abs=0.5)
+    assert far / 3600 == pytest.approx(90.4, abs=0.5)
+    assert far / near == pytest.approx(186, abs=1)
+
+
+def test_campaign_cannot_claim_more_than_the_five_shared_slots():
+    from autorok.mission.transport import campaign_seconds
+
+    with pytest.raises(TransportError):
+        campaign_seconds(10, slots=6)
+    with pytest.raises(TransportError):
+        campaign_seconds(10, slots=0)

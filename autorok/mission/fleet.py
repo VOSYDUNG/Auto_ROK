@@ -68,14 +68,28 @@ OPERATOR_BASELINE_WEAK = CycleEstimate(
 )
 
 
+class MarchPurpose(str, Enum):
+    """What a march slot is being used for.
+
+    Gathering and resource transport draw on the SAME five slots - the
+    operator: "số xe là 5, tùy queue farm của chúng ta có".  There is no
+    separate transport queue, so every delivery run is a farm slot not being
+    used to farm.
+    """
+
+    GATHER = "GATHER"
+    TRANSPORT = "TRANSPORT"
+
+
 @dataclass(frozen=True)
 class March:
-    """One dispatched gathering march."""
+    """One occupied march slot - gathering or transporting."""
 
     slot: int
-    kind: ResourceKind
+    kind: ResourceKind | None
     dispatched_at: datetime
     expected_home_at: datetime
+    purpose: MarchPurpose = MarchPurpose.GATHER
 
     def __post_init__(self) -> None:
         if not 0 <= self.slot < MARCHES_PER_CHARACTER:
@@ -84,6 +98,13 @@ class March:
             raise FleetError("march timestamps must be timezone-aware")
         if self.expected_home_at <= self.dispatched_at:
             raise FleetError("expected_home_at must be after dispatched_at")
+        if self.purpose is MarchPurpose.GATHER and self.kind is None:
+            raise FleetError("a gathering march must name the resource it gathers")
+        if self.purpose is MarchPurpose.TRANSPORT and self.kind is not None:
+            raise FleetError(
+                "a transport run carries a shared load, so it must not name a "
+                "single resource - see autorok.mission.transport.TransportLoad"
+            )
 
 
 @dataclass
@@ -106,6 +127,14 @@ class Character:
     @property
     def is_queue_full(self) -> bool:
         return self.free_slots == 0
+
+    def slots_used_for(self, purpose: MarchPurpose) -> int:
+        """How many of the five slots are committed to one purpose.
+
+        Transport and gathering contend for the same pool, so a delivery
+        campaign is visible here as gathering capacity temporarily given up.
+        """
+        return sum(1 for march in self.marches if march.purpose is purpose)
 
     def dispatch(self, march: March) -> None:
         if self.is_queue_full:
