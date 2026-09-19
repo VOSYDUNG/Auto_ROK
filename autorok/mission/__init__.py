@@ -26,6 +26,13 @@ from autorok.mission.fleet import (
     FleetError,
     March,
 )
+from autorok.mission.transport import (
+    LEVEL_25,
+    TradingPost,
+    TransportError,
+    TransportLoad,
+    plan_runs,
+)
 from autorok.mission.order import (
     DEFAULT_RATIO,
     DeliveryLedger,
@@ -38,6 +45,7 @@ from autorok.mission.order import (
 
 __all__ = [
     "DEFAULT_RATIO",
+    "LEVEL_25",
     "MARCHES_PER_CHARACTER",
     "OPERATOR_BASELINE_STRONG",
     "OPERATOR_BASELINE_WEAK",
@@ -56,8 +64,12 @@ __all__ = [
     "OrderError",
     "ResourceKind",
     "SlotAssignment",
+    "TradingPost",
+    "TransportError",
+    "TransportLoad",
     "allocate_by_ratio",
     "is_degraded",
+    "plan_runs",
     "plan_slots",
     "shortfall_rate",
 ]

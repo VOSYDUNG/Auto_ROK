@@ -192,12 +192,15 @@ không có dữ liệu để đề xuất.
 
 | Mã | Mệnh đề | Tiêu chí chấp nhận | Nguồn | Trạng thái |
 |---|---|---|---|---|
-| DEL-001 | Năng lực giao = hàng mỗi lượt (cấp Chợ) × số xe | Chợ cấp 25 → **10.000.000/chuyến** (đã đọc 2026-09-20); số xe chưa đọc | F17 | **MỘT PHẦN** |
+| DEL-001 | Năng lực giao = sức chứa/chuyến × số xe | Chợ cấp 25 → **10.000.000 net/chuyến**; số xe vẫn chưa đọc | F17 | **MỘT PHẦN** · `test_mission_transport` |
 | DEL-002 | Tele lại gần là chi phí trả **trước**, nằm trong kế hoạch | Kế hoạch giao gồm bước tele | F17 | KHOÁ |
 | DEL-003 | Người nhận nối đất trên khung hiện tại, không nhớ | Người nhận cũ không được tái dùng | F17 | KHOÁ |
 | DEL-004 | Số đã giao xác minh bằng tồn kho sau chuyển | Biên nhận không đủ | F17 | KHOÁ |
 | DEL-005 | Thuế | **8%** tại Chợ cấp 25, đọc từ panel info | F13 | **ĐÃ CÓ SỐ** |
-| DEL-006 | Ngữ nghĩa sức chứa 10M: trước hay sau thuế | phải chốt; lệch 800.000 mỗi chuyến | F17 | **CẦN XÁC NHẬN** |
+| DEL-006 | Sức chứa 10M là **số thực nhận**, người gửi trả 10.869.565 | Panel: 10.869.565 − 869.565 = 10.000.000, thanh đầy | F17 | **ĐÃ GIẢI** · `test_mission_transport` |
+| DEL-007 | Thuế tính bằng **số nguyên**: `floor(gross × pct / 100)` | `gross × 0,92` lệch 1 đơn vị trên chính ca quan sát được | F17 | ĐÃ KIỂM |
+| DEL-008 | Sức chứa là **một bể dùng chung** cho cả 4 loại tài nguyên | Đổ đầy bằng ngô thì không còn chỗ cho gỗ/đá/vàng | F17 | ĐÃ KIỂM |
+| DEL-009 | Số chuyến = net / sức chứa, **không** gross rồi mới chia | Gross trước làm phồng kế hoạch ~8% (1.522 thay vì 1.400) | F17 | ĐÃ KIỂM |
 
 ---
 
@@ -215,10 +218,10 @@ không có dữ liệu để đề xuất.
 | ACT actuation | 6 | 6 | — | — | — |
 | EVI bằng chứng | 4 | 4 | — | — | — |
 | SAF an toàn | 6 | 3 | 1 | 2 | — |
-| DEL giao hàng | 6 | — | — | — | 6 |
-| **Tổng** | **76** | **48** | **2** | **20** | **6** |
+| DEL giao hàng | 10 | 3 | — | — | 7 |
+| **Tổng** | **80** | **51** | **2** | **20** | **7** |
 
-**Đọc bảng này:** 48/76 yêu cầu đã có test đang chạy. Phần chưa xây tập trung đúng bốn chỗ —
+**Đọc bảng này:** 51/80 yêu cầu đã có test đang chạy. Phần chưa xây tập trung đúng bốn chỗ —
 **thang suy giảm** (LAD-007…010), **tầng chiến lược của LLM** (LLM-005…009),
 **onboarding** (ONB-001…004), và **lịch biểu động** (MIS-013…016). Ba nhóm đầu là P1 trong
 `BUILD_PLAN`; nhóm thứ tư là mới, sinh ra từ buổi 2026-09-20.
@@ -247,33 +250,39 @@ Không dùng dịch vụ CI. Mọi kiểm tra chạy trên máy người vận h
 |---|---|
 | SC-01…SC-05 | duyệt hoặc sửa ngưỡng tôi đề xuất |
 | SC-06 | sản lượng ngày thực tế người vận hành đạt được |
-| DEL-006 | sức chứa 10M là trước hay sau thuế |
-| — | phép tính đơn hàng mẫu ra **1.522 chuyến**; xem §7 |
 | MIS-015 | trần thời gian mỗi lượt vào nhân vật — **sau khi đo**, không chốt trước |
+| DEL-010 | **số xe mỗi nhân vật** — quyết định thông lượng giao |
 
-~~DEL-005 thuế~~ và ~~MIS-013 cách đọc tồn kho~~ đã có đáp án ngày 2026-09-20.
+Đã có đáp án ngày 2026-09-20: ~~DEL-005 thuế~~ (8%) · ~~MIS-013 cách đọc tồn kho~~ ·
+~~DEL-006 ngữ nghĩa sức chứa~~ · ~~§7 phép tính 1.522~~.
 
 ---
 
-## 7. Một phép tính cần kiểm lại trước khi xây
+## 7. Phép tính đơn hàng — đã đóng
 
-Đơn hàng mẫu của người vận hành — 3B ngô, 3B gỗ, 3B đá, 5B vàng **thực nhận** — quy ra:
+Nghi vấn "1.522 chuyến" nêu ngày 2026-09-19 đã được ảnh Resource Assistance giải quyết.
+
+**Sai ở đâu:** tôi gross-up rồi mới chia cho sức chứa. Nhưng sức chứa **đã là số thực
+nhận**, nên chia thẳng:
 
 ```
-net    = 14.000.000.000
-thuế   = 8%
-gross  = 14.000.000.000 / 0,92 = 15.217.391.305
-chuyến = 15.217.391.305 / 10.000.000 ≈ 1.522
+net cần giao : 14.000.000.000
+sức chứa     : 10.000.000 net/chuyến
+số chuyến    : 1.400          (không phải 1.522)
+tồn kho cần  : 15.217.391.304 gross
 ```
 
-**1.522 chuyến vận chuyển.** Con số này lớn tới mức nhiều khả năng một đầu vào đang bị đọc
-sai. Các khả năng, chưa cái nào được xác nhận:
+**Và 1.400 chuyến không hề vô lý.** Với thời gian đi 31 phút quan sát được, giả định khứ hồi
+và 8 nhân vật chạy song song:
 
-1. Sức chứa 10.000.000 là **mỗi xe**, và có nhiều xe mỗi chuyến;
-2. Đơn hàng mẫu chỉ là ví dụ minh hoạ, không phải quy mô thật;
-3. Một tuyến giao khác không đi qua Chợ có sức chứa lớn hơn;
-4. Con số 10M áp cho một loại tài nguyên, không phải tổng.
+| Số xe / nhân vật | Toàn đội mỗi ngày | Xong 14B sau |
+|---|---|---|
+| 1 | 1,86B | **7,5 ngày** |
+| 2 | 3,72B | 3,8 ngày |
+| 3 | 5,57B | 2,5 ngày |
 
-Tôi **không đoán và không mã hoá** cái nào. Nếu xây phần giao hàng dựa trên giả định sai ở
-đây thì sai số dồn lại, và nó chỉ lộ ra **sau khi tài nguyên đã rời tài khoản** — không lấy
-lại được.
+Vừa khít chân trời 10 ngày ngay cả với một xe. Ẩn số còn lại là **số xe mỗi nhân vật**
+(`DEL-010`) và thời gian 31 phút là một chiều hay khứ hồi.
+
+Cả ba luật số học đã ghim bằng test trong `tests/test_mission_transport.py`, dùng đúng các
+con số đọc từ client.
