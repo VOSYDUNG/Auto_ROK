@@ -1,0 +1,95 @@
+schema_version: 1
+snapshot_id: teleport_and_delivery_path_2026-09-20
+observed_at: "2026-09-20"
+
+# Closes DEL-012.  Teleporting close is the highest-leverage action in the
+# whole delivery job - the same 175 runs take about 29 minutes near and about
+# 90 hours far.  This file records how the move is actually performed.
+
+provenance:
+  source_surface: operator_screenshots_of_live_client
+  observed_by: operator
+  extractor: teaching_session
+  confidence: 0.9
+
+# ---------------------------------------------------------------------------
+# 1. Selecting a destination tile
+# ---------------------------------------------------------------------------
+destination_tile:
+  surface: world map, tap a tile
+  panel_fields_observed:
+    - field: coordinates
+      rendering: "X:505 Y:646"
+      position: panel header
+    - field: occupancy
+      observed_value: "Unoccupied"
+      significance: a tile must be free before a city can be moved onto it
+    - field: owner
+      label: "Owner"
+      observed_value: "[Pi96]"
+      significance: alliance tag of the territory holder
+  controls_observed:
+    - label: "Teleport"
+    - label: "March"
+  HAZARD: >
+    Teleport and March sit side by side, same size, same colour.  March sends
+    troops; Teleport moves the city.  Grounding must be on the exact text
+    label, never on position or colour - the same rule the Items confirm
+    dialog needed.
+
+# ---------------------------------------------------------------------------
+# 2. The two teleport items
+# ---------------------------------------------------------------------------
+teleport_items:
+  - id: TARGETED_TELEPORT
+    name_observed: "Targeted Teleport"
+    effect_text: >
+      Teleports your city to a designated location on the map (cannot be used
+      when fighting against a rallied army).
+    owned_at_observation: 77
+    reach: anywhere on the map
+    usage_instruction_observed: >
+      "Move your city to your desired spot and tap TELEPORT."
+    note: >
+      The instruction implies the destination is chosen by moving the view
+      first, then confirming - not by typing coordinates.
+
+  - id: TERRITORIAL_TELEPORT
+    name_observed: "Territorial Teleport"
+    effect_text: >
+      Teleports your city to a designated location in alliance territory on
+      the map (cannot be used when fighting against a rallied army).
+    owned_at_observation: 5
+    reach: alliance territory only
+    control_observed: single "TELEPORT" button
+
+  shared_restriction:
+    text: cannot be used when fighting against a rallied army
+    consequence: >
+      A teleport can be refused by game state the agent did not cause.  This is
+      a fail-closed case: if the move is refused, the delivery plan must not
+      proceed as though the distance had been closed, because the run would
+      then cost 31 minutes each way instead of 10 seconds.
+
+  supply_consideration:
+    observed_counts: {targeted: 77, territorial: 5}
+    note: >
+      Teleports are a consumable stock, not a free action.  A delivery campaign
+      that teleports per run would exhaust them; the move belongs once at the
+      start of a campaign, not per transport.
+
+# ---------------------------------------------------------------------------
+# 3. Consequence for the delivery plan
+# ---------------------------------------------------------------------------
+delivery_plan_shape:
+  ordering: >
+    1. Confirm the recipient's position.
+    2. Pick a free tile near them and verify it reads Unoccupied.
+    3. Teleport once.
+    4. Run the transport campaign at near distance.
+    5. Optionally teleport back.
+  rationale: >
+    Distance is worth about 180x, and teleports are consumable, so the move is
+    made once per campaign and amortised over every run in it.
+  status: PROPOSED - the ordering follows from the measured numbers, but no
+    step of it has been executed or verified against the client yet

@@ -87,6 +87,8 @@ không có dữ liệu để đề xuất.
 | OCR-002 | Nối đất mục tiêu theo **nhãn chữ chính xác**, không theo màu hay vị trí | Mục tiêu khai báo không khớp chữ thì không nối đất | F02, F11 | ĐÃ KIỂM |
 | OCR-003 | Một khung hoàn tất dưới **400 ms** | Đo trên corpus hiện có | N02 | **CHƯA ĐẠT** — đo được 4.525 ms |
 | OCR-004 | Tối ưu OCR không được đổi kết quả | Đầu ra sau tối ưu giống hệt trước trên toàn corpus | N02 | CHƯA XÂY |
+| OCR-005 | Đầu ra OCR phải là **UTF-8**, không phụ thuộc locale máy | Tên có dấu (`Šárka`) đọc được; đổi locale không làm gãy | F02 | **CHƯA XÂY** — hiện xuất cp1252 |
+| OCR-006 | Đọc được chỉ số hàng đợi trên world map | `1/5` tại `x≈1321…1338, y≈116…125` phải ra đúng | F07 | **CHƯA XÂY** — hiện không đọc được |
 
 ### 3.3 Trạng thái — STA
 
@@ -96,6 +98,7 @@ không có dữ liệu để đề xuất.
 | STA-002 | Thiếu bằng chứng → `UNKNOWN_STATE`, không đoán | Bằng chứng rỗng không bao giờ cho ra trạng thái cụ thể | F03 | ĐÃ KIỂM |
 | STA-003 | Bằng chứng cạnh tranh → `AMBIGUOUS_STATE` | Hai ứng viên điểm sát nhau thì không chọn | F03 | ĐÃ KIỂM |
 | STA-004 | Bề mặt tiền cảnh che kết quả nền | Overlay hiện thì không trả CITY/WORLD nền | F03 | ĐÃ KIỂM · `test_alliance_main_view_suppression` |
+| STA-005 | Hàng đợi nối đất theo **vị trí**, cấm bắt `n/5` toàn khung | Chuỗi `(5/5)` của nhiệm vụ Trade Deal không được nhận là hàng đợi | F07 | **CHƯA XÂY** — mồi giả đã quan sát thấy |
 
 ### 3.4 Order và đội hình — MIS
 
@@ -195,7 +198,10 @@ không có dữ liệu để đề xuất.
 | DEL-001 | Năng lực giao = sức chứa/chuyến × số slot dành cho vận chuyển | Chợ cấp 25 → **10.000.000 net/chuyến**; **5 slot dùng chung với farm** | F17 | **ĐÃ GIẢI** · `test_mission_transport` |
 | DEL-010 | Vận chuyển dùng **chung 5 slot** với farm, không phải hàng đợi riêng | Slot đã cấp cho vận chuyển thì không farm được | F14, F17 | ĐÃ KIỂM |
 | DEL-011 | Thời gian đi là **một chiều**, phụ thuộc khoảng cách | Gần ≤10s/chiều · xa quan sát được 31 phút/chiều | F17 | ĐÃ KIỂM |
-| DEL-012 | **Tele lại gần TRƯỚC khi giao** | Cùng 175 chuyến: ~29 phút gần so với ~90 giờ xa, chênh ~180 lần | F17 | **CHƯA XÂY** — cần client |
+| DEL-012 | **Tele lại gần TRƯỚC khi giao** | Cùng 175 chuyến: ~29 phút gần so với ~90 giờ xa, chênh ~180 lần | F17 | **CÁCH ĐÃ CÓ** (2026-09-20) |
+| DEL-013 | Teleport là **vật phẩm tiêu hao**, tele một lần mỗi chiến dịch | Targeted 77 · Territorial 5; tele mỗi chuyến sẽ cạn | F17 | CHƯA XÂY |
+| DEL-014 | Ô đích phải đọc `Unoccupied` trước khi tele | Ô có chủ thì không tele được | F17 | CHƯA XÂY |
+| DEL-015 | `Teleport` và `March` nối đất theo **nhãn chữ** | Hai nút cạnh nhau, cùng kích thước và màu; bấm nhầm là gửi quân | F17, F11 | CHƯA XÂY |
 | DEL-002 | Tele lại gần là chi phí trả **trước**, nằm trong kế hoạch | Kế hoạch giao gồm bước tele | F17 | KHOÁ |
 | DEL-003 | Người nhận nối đất trên khung hiện tại, không nhớ | Người nhận cũ không được tái dùng | F17 | KHOÁ |
 | DEL-004 | Số đã giao xác minh bằng tồn kho sau chuyển | Biên nhận không đủ | F17 | KHOÁ |
@@ -212,8 +218,8 @@ không có dữ liệu để đề xuất.
 | Nhóm | Tổng | ĐÃ KIỂM | CHƯA KIỂM | CHƯA XÂY | KHOÁ / chờ |
 |---|---|---|---|---|---|
 | CAP thu hình | 6 | 6 | — | — | — |
-| OCR | 4 | 2 | — | 2 | — |
-| STA trạng thái | 4 | 4 | — | — | — |
+| OCR | 6 | 2 | — | 4 | — |
+| STA trạng thái | 5 | 4 | — | 1 | — |
 | MIS order/đội hình | 16 | 12 | — | 4 | — |
 | LAD suy giảm | 10 | 6 | — | 4 | — |
 | LLM biên quyết định | 9 | 4 | 1 | 4 | — |
@@ -221,10 +227,10 @@ không có dữ liệu để đề xuất.
 | ACT actuation | 6 | 6 | — | — | — |
 | EVI bằng chứng | 4 | 4 | — | — | — |
 | SAF an toàn | 6 | 3 | 1 | 2 | — |
-| DEL giao hàng | 12 | 6 | — | 1 | 5 |
-| **Tổng** | **83** | **55** | **2** | **21** | **5** |
+| DEL giao hàng | 15 | 6 | — | 4 | 5 |
+| **Tổng** | **89** | **55** | **2** | **27** | **5** |
 
-**Đọc bảng này:** 55/83 yêu cầu đã có test đang chạy. Phần chưa xây tập trung đúng bốn chỗ —
+**Đọc bảng này:** 55/89 yêu cầu đã có test đang chạy. Phần chưa xây tập trung đúng bốn chỗ —
 **thang suy giảm** (LAD-007…010), **tầng chiến lược của LLM** (LLM-005…009),
 **onboarding** (ONB-001…004), và **lịch biểu động** (MIS-013…016). Ba nhóm đầu là P1 trong
 `BUILD_PLAN`; nhóm thứ tư là mới, sinh ra từ buổi 2026-09-20.
@@ -254,7 +260,6 @@ Không dùng dịch vụ CI. Mọi kiểm tra chạy trên máy người vận h
 | SC-01…SC-05 | duyệt hoặc sửa ngưỡng tôi đề xuất |
 | SC-06 | sản lượng ngày thực tế người vận hành đạt được |
 | MIS-015 | trần thời gian mỗi lượt vào nhân vật — **sau khi đo**, không chốt trước |
-| DEL-012 | tele lại gần bằng cách nào (vật phẩm? giới hạn?) — cần quan sát |
 
 Đã có đáp án ngày 2026-09-20: ~~DEL-005 thuế~~ (8%) · ~~MIS-013 cách đọc tồn kho~~ ·
 ~~DEL-006 ngữ nghĩa sức chứa~~ · ~~§7 phép tính 1.522~~.
