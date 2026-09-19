@@ -1,0 +1,334 @@
+schema_version: 3
+layer: operator
+
+principles:
+  collect_game_visible_facts_first: true
+  ask_human_only_for_non_game_personalization: true
+  derived_fields_require_evidence: true
+  historical_values_are_snapshots_not_timeless_truth: true
+  native_capabilities_are_account_facts_not_workflow_rules: true
+  store_offers_are_time_scoped_observations: true
+  community_market_signals_set_schema_priority_not_truth: true
+  market_value_is_not_runtime_policy: true
+
+operator_profile:
+  identity:
+    governor_name:
+      type: string
+      source: visible_game_ui
+    character_label:
+      type: string
+      source: visible_game_ui
+    governor_id:
+      type: string
+      source: visible_game_ui
+    civilization:
+      type: string
+      source: visible_game_ui
+    account_binding_methods:
+      type: list
+      notes: "Record only binding methods visibly exposed by the client/account UI. Never store credentials."
+
+  progression:
+    power:
+      type: integer
+      source: visible_game_ui
+    kingdom_percentile_text:
+      type: string
+      source: visible_game_ui
+      notes: "Store the wording/number shown by UI; do not invent a percentile if not visible."
+    highest_power:
+      type: integer
+      source: visible_game_ui
+    vip_level:
+      type: integer
+    current_kingdom_or_season:
+      type: string
+    t5_readiness:
+      type: mapping
+      notes: "Derived from visible technology/building/troop progression; do not infer from power alone."
+    power_breakdown:
+      building:
+        type: integer
+      technology:
+        type: integer
+      troop:
+        type: integer
+      commander:
+        type: integer
+    category_ratings:
+      type: mapping
+      notes: "Ratings shown by More Info, e.g. building/technology/troops/commanders/equipment/armaments."
+
+  combat:
+    kill_points:
+      type: integer
+    victory:
+      type: integer
+    defeat:
+      type: integer
+    dead:
+      type: integer
+    scout_times:
+      type: integer
+    acclaim:
+      type: integer
+    highest_acclaim:
+      type: integer
+    kvk_history:
+      type: list
+      notes: "Temporal snapshots when visible; do not collapse multiple KVKs into one timeless statistic."
+
+  economy_support:
+    resources_gathered:
+      type: integer
+    resource_assistance:
+      type: integer
+    alliance_help_times:
+      type: integer
+
+  reserves_and_liquidity:
+    gems:
+      type: integer
+    legendary_sculptures_gold_heads:
+      type: integer
+    action_point_reserve:
+      type: integer
+    speedups:
+      type: mapping
+      fields:
+        universal_days: number
+        training_days: number
+        healing_days: number
+        building_days: number
+        research_days: number
+      notes: "Preserve category breakdown when visible; total days alone hides operational readiness."
+    resources:
+      type: mapping
+      fields:
+        food: integer
+        wood: integer
+        stone: integer
+        gold: integer
+        selectable_or_combined: integer
+    migration:
+      type: mapping
+      fields:
+        passport_pages: integer
+        alliance_credits: integer
+        migration_ready: boolean
+    seasonal_currency:
+      type: mapping
+      fields:
+        season_coins: integer
+        conquest_coins: integer
+    legendary_materials:
+      type: integer
+
+  equipment_readiness:
+    legendary_equipment_count:
+      type: integer
+    talented_legendary_equipment_count:
+      type: integer
+    legendary_accessory_count:
+      type: integer
+    epic_accessory_count:
+      type: integer
+    iconic_or_awakened_state:
+      type: mapping
+    complete_march_sets:
+      type: list
+      notes: "Represent complete usable sets by troop/role, not just total item count."
+
+  armament_readiness:
+    usable_set_count:
+      type: integer
+    sets:
+      type: list
+      item_schema:
+        role_or_troop_tag: string
+        formation: string
+        approximate_stat_quality: mapping
+        rare_inscription_count: integer
+        legendary_inscription_count: integer
+    total_rare_inscriptions:
+      type: integer
+    total_legendary_inscriptions:
+      type: integer
+    notes:
+      - "Armament quality is role-specific and RNG-sensitive; raw count is insufficient."
+
+  commander_readiness:
+    source_model: commander_intelligence_schema
+    fields:
+      owned_commanders: list
+      expertised_commanders: list
+      partial_skill_states: mapping
+      current_meta_usable_pairs: list
+      role_coverage: mapping
+
+  alliance:
+    tag_and_name:
+      type: string
+    alliance_power:
+      type: integer
+    leader_name:
+      type: string
+    territory_count:
+      type: integer
+    gift_level:
+      type: integer
+    member_count:
+      type: integer
+    member_capacity:
+      type: integer
+    operator_rank:
+      type: string
+      allowed_examples:
+        - leader
+        - rank_4_officer
+        - rank_3
+        - rank_2
+        - rank_1
+      notes: "Must be observed by locating current governor in Alliance Members UI; do not infer only from rank counts."
+
+  account_ecosystem:
+    farm_accounts:
+      type: list
+      item_schema:
+        label: string
+        power: integer
+        role: string
+      notes: "Farm accounts change operational capacity and should be modeled separately from main-character combat power."
+
+  kingdom_environment:
+    kingdom_id:
+      type: string
+    seed_class:
+      type: string
+    kvk_state:
+      type: string
+    alliance_strength_context:
+      type: mapping
+    gold_chest_frequency_signal:
+      type: string
+      notes: "Community/operator shorthand such as low/medium/high; retain source and confidence."
+
+  session_context:
+    action_points_current:
+      type: integer
+    action_points_max:
+      type: integer
+
+  commerce_and_native_capabilities:
+    active_offers:
+      type: list
+      item_schema:
+        offer_id:
+          type: string
+        display_name:
+          type: string
+        observed_price_text:
+          type: string
+        validity_text:
+          type: string
+        reward_summary:
+          type: mapping
+        observed_at:
+          type: datetime
+        source_surface:
+          type: string
+      notes:
+        - "Offer price and contents are snapshot observations only; they may vary by region/account/store/update."
+        - "Do not promote one screenshot price into a permanent market rule."
+
+    native_capabilities:
+      type: mapping
+      known_capability_ids:
+        AUTO_PEACEKEEPING:
+          type: boolean
+        AUTO_HELP:
+          type: boolean
+        AUTO_TRANSLATION:
+          type: boolean
+      capability_fact_schema:
+        enabled:
+          type: boolean
+        entitlement_source:
+          type: string
+        observed_at:
+          type: datetime
+        source_surface:
+          type: string
+        confidence:
+          type: number
+      notes:
+        - "A capability may be bundled with a visible subscription/offer, but entitlement must be observed for the current account before runtime treats it as available."
+        - "Native capability availability describes what the account can use; mission policy decides whether it should be used."
+
+history_snapshot:
+  required:
+    - observed_at
+    - operator_identity
+  optional:
+    - event_or_kvk_id
+    - kingdom_context
+    - alliance_context
+    - role_rank
+    - progression
+    - combat
+    - economy_support
+    - reserves_and_liquidity
+    - equipment_readiness
+    - armament_readiness
+    - commander_readiness
+    - account_ecosystem
+    - kingdom_environment
+    - commerce_and_native_capabilities
+    - source_evidence
+
+derived_profile:
+  fields:
+    alliance_position:
+      evidence_required: true
+    progression_distribution:
+      evidence_required: true
+    combat_activity_signal:
+      evidence_required: true
+    gathering_activity_signal:
+      evidence_required: true
+    economy_support_signal:
+      evidence_required: true
+    alliance_contribution_signal:
+      evidence_required: true
+    historical_event_signal:
+      evidence_required: true
+    native_automation_coverage:
+      evidence_required: true
+      notes: "Summarize which routine activity classes are already covered by account-native automation."
+    account_quality_vector:
+      evidence_required: true
+      dimensions:
+        - progression_maturity
+        - combat_history
+        - reserve_optionalilty
+        - equipment_readiness
+        - armament_readiness
+        - commander_depth
+        - migration_mobility
+        - farm_network_capacity
+        - kingdom_environment_fit
+      notes:
+        - "Keep dimensions separate. Do not collapse into one opaque score in V1."
+        - "A future valuation model must be versioned, explainable and separate from mission runtime."
+
+provenance:
+  required_fields:
+    - source_surface
+    - observed_at
+    - confidence
+  optional_fields:
+    - frame_id
+    - evidence_ref
+    - extractor
+    - notes

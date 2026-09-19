@@ -1,0 +1,36 @@
+schema_version: 1
+snapshot_date: "2026-09-14"
+source_type: operator_screenshot
+scope: account-visible-commerce-and-native-capabilities
+
+observed_offer:
+  display_name: "30-Day Gem Supply"
+  observed_price_text: "USD 4.99"
+  validity_text: "Validity: 30 Days"
+  reward_summary:
+    gems_total_text: "RECEIVE 2,200"
+    daily_supply_reset_text: "Fresh Supplies Daily At 00:00 UTC"
+  exclusive_features_visible:
+    - AUTO_PEACEKEEPING
+    - AUTO_HELP
+    - AUTO_TRANSLATION
+
+normalization:
+  capability_labels:
+    "Auto Peacekeeping": AUTO_PEACEKEEPING
+    "Auto Help": AUTO_HELP
+    "Auto Translation": AUTO_TRANSLATION
+
+interpretation_rules:
+  - "Treat price, reward amount, validity and bundle contents as an observed offer snapshot, not timeless truth."
+  - "Do not infer that the current account owns/enables the capabilities merely because the store offer advertises them."
+  - "Runtime capability availability requires separate entitlement/active-state observation for the current operator account."
+  - "If a native capability is confirmed active, AUTO_ROK may expose it as an execution option; mission policy decides whether to use it."
+
+operator_layer_fields:
+  offer_snapshot:
+    - commerce_and_native_capabilities.active_offers
+  entitlement_candidates:
+    - commerce_and_native_capabilities.native_capabilities.AUTO_PEACEKEEPING
+    - commerce_and_native_capabilities.native_capabilities.AUTO_HELP
+    - commerce_and_native_capabilities.native_capabilities.AUTO_TRANSLATION

@@ -1,0 +1,225 @@
+schema_version: 1
+snapshot_id: ROK_META_2026_09_14
+snapshot_date: "2026-09-14"
+status: researched_snapshot
+scope: "Current commander/pairing market snapshot for AUTO_ROK account-fit configuration. This is not a permanent truth table."
+
+sources:
+  - id: TIERBUFF_PAIRING_METHOD_2026_09_09
+    published: "2026-09-09"
+    type: current_methodology
+    note: "Pair by job, season, skill state, troop type, equipment and replacement timing; primary/secondary order matters."
+  - id: LDSHOP_PAIRINGS_2026_08_31
+    published: "2026-08-31"
+    type: current_meta_pairings
+  - id: ALLCLASH_PAIRINGS_2026_08_04
+    published: "2026-08-04"
+    type: current_meta_pairings
+  - id: GURUGAMER_ROSTER_2026_08
+    published: "2026-08-12"
+    type: current_roster_catalog
+    note: "Reports more than 130 commanders and separates Legendary/Epic/Elite/Advanced."
+  - id: ROKGUIDES_ROSTER_2026_07_01
+    published: "2026-07-01"
+    type: english_roster_reference
+  - id: COMMUNITY_GATHERING_2026_04_05
+    type: community_consensus
+    note: "Recent 2026 player discussions used only for practical gathering priority signals, not authoritative game facts."
+  - id: COMMUNITY_FORTS_2025_12_2026_02
+    type: community_consensus
+    note: "Recent fort-rally discussions consistently identify Minamoto/Cao Cao as a strong dedicated fort pair; F2P alternatives vary by investment."
+
+method:
+  - "Rank by role; do not produce one universal commander rank."
+  - "Prefer cross-source agreement for CURRENT_META labels."
+  - "Mark very new pairings as EMERGING until enough time/testing accumulates."
+  - "Operator inventory, season, skill state, equipment, formation and troop availability can override market rank."
+
+roles:
+  GATHERING:
+    ranking_method: "practical resource-gathering utility; community consensus + Gathering specialization"
+    priority_groups:
+      - tier: S
+        commanders:
+          - Seondeok
+          - Constance
+        rationale: "Seondeok is repeatedly highlighted as an end-game gathering priority; Constance remains a high-value early/accessible gatherer."
+      - tier: A_PLUS
+        commanders:
+          - Pepin
+          - Casimir
+          - Matilda of Flanders
+          - Joan of Arc
+        rationale: "Strong practical gathering value depending on expertise, account stage and secondary utility."
+      - tier: A
+        commanders:
+          - Cleopatra VII
+          - Ishida Mitsunari
+          - Gaius Marius
+          - Sarka
+          - Wak Chanil Ajaw
+          - Tamar
+          - Centurion
+        rationale: "Useful dedicated gatherers or early/flexible gathering slots; exact resource specialization should be read from current client skills."
+    operator_rules:
+      - "Do not spend premium universal Legendary Sculptures merely to satisfy a gathering ranking."
+      - "For five-march farming, prefer using all viable gathering commanders rather than forcing one pair across every resource."
+
+  BARBARIAN_FORT_RALLY:
+    ranking_method: "dedicated PvE fort rally effectiveness and accessibility"
+    pairings:
+      - primary: Minamoto no Yoshitsune
+        secondary: Cao Cao
+        tier: S
+        confidence: 0.92
+        trend_status: ESTABLISHED
+        account_fit: "spender/developed account; Peacekeeping primary + cavalry/PvE synergy"
+      - primary: Aethelflaed
+        secondary: Cao Cao
+        tier: A
+        confidence: 0.78
+        trend_status: ACCESSIBLE
+        account_fit: "developed F2P/low spend fallback when Minamoto investment is not justified"
+      - primary: Boudica
+        secondary: Aethelflaed
+        tier: A_MINUS
+        confidence: 0.72
+        trend_status: EARLY_F2P
+        account_fit: "early accessible Peacekeeping option"
+      - primary: Boudica
+        secondary: Cao Cao
+        tier: A_MINUS
+        confidence: 0.70
+        trend_status: EARLY_F2P
+        account_fit: "budget PvE option if Cao Cao skill state is already usable"
+    hard_note: "Fort pair quality still depends on rally capacity, technology, troop tier, gear/armaments, skill states and fort level."
+
+  OPEN_FIELD:
+    kingdom_stage: "Season of Conquest unless otherwise noted"
+    pairings:
+      - primary: Qin Shi Huang
+        secondary: Zhuge Liang
+        troop_type: ARCHER
+        tier: S_PLUS
+        confidence: 0.94
+        trend_status: CURRENT_META
+      - primary: Sun Tzu Prime
+        secondary: Bai Qi
+        troop_type: INFANTRY
+        tier: S_PLUS
+        confidence: 0.93
+        trend_status: CURRENT_META
+      - primary: Arthur Pendragon
+        secondary: Achilles
+        troop_type: CAVALRY
+        tier: S_PLUS
+        confidence: 0.90
+        trend_status: ESTABLISHED_META
+      - primary: Hermann Prime
+        secondary: Alp Arslan
+        troop_type: ARCHER
+        tier: S
+        confidence: 0.90
+        trend_status: CURRENT_META
+      - primary: Liu Che
+        secondary: Philip II
+        troop_type: INFANTRY
+        tier: S
+        confidence: 0.87
+        trend_status: CURRENT_META
+      - primary: Arthur Pendragon
+        secondary: Ivan IV
+        troop_type: CAVALRY
+        tier: S
+        confidence: 0.76
+        trend_status: EMERGING
+        note: "Ivan IV is a newer 2026 release; placement is still settling."
+      - primary: William Marshal
+        secondary: Gang Gamchan
+        troop_type: CAVALRY
+        tier: A_PLUS
+        confidence: 0.70
+        trend_status: EMERGING
+        note: "Very recent option; do not disassemble a finished meta march solely to chase recency."
+    early_game_bridges:
+      - primary: Bjorn Ironside
+        secondary: Sun Tzu
+        role: "early Infantry/F2P"
+      - primary: Aethelflaed
+        secondary: Sun Tzu
+        role: "accessible AoE/support"
+      - primary: Pelagius
+        secondary: Baibars
+        role: "accessible Cavalry"
+
+  RALLY_PVP:
+    pairings:
+      - primary: William Marshal
+        secondary: Subutai
+        tier: S_PLUS
+        confidence: 0.82
+        trend_status: NEW_META_TO_WATCH
+      - primary: Ivar the Boneless
+        secondary: Bai Qi
+        tier: S
+        confidence: 0.80
+        trend_status: SPECIALIST
+      - primary: Arthur Pendragon
+        secondary: Subutai
+        tier: S
+        confidence: 0.75
+        trend_status: SPECIALIST
+    operator_gate: "Only recommend expensive rally-specialist investment if Operator Layer identifies the account as an actual rally leader or role candidate."
+
+  GARRISON:
+    pairings:
+      - primary: Dido
+        secondary: Henry
+        tier: S
+        confidence: 0.82
+        trend_status: ESTABLISHED_SPECIALIST
+      - primary: Eleanor of Aquitaine
+        secondary: Jan Zizka
+        tier: S
+        confidence: 0.80
+        trend_status: SPECIALIST
+      - primary: Lapulapu
+        secondary: Heraclius
+        tier: A_PLUS
+        confidence: 0.78
+        trend_status: CITY_DEFENSE_SPECIALIST
+      - primary: Choe Yeong
+        secondary: Zenobia
+        tier: A_PLUS
+        confidence: 0.72
+        trend_status: SPECIALIZED_ARCHER_DEFENSE
+    operator_gate: "Do not prioritize garrison-only investment unless alliance position/responsibility requires it."
+
+account_fit_join:
+  required_operator_inputs:
+    - current_kingdom_or_season
+    - alliance_position
+    - owned_commanders
+    - commander_levels
+    - commander_star_levels
+    - commander_skill_states
+    - commander_expertise_when_visible
+    - available_troop_types_and_tiers
+  valuable_optional_inputs:
+    - commander_equipment
+    - formations
+    - armaments
+    - march_queue_capacity
+    - rally_capacity
+    - historical_usage
+  output_examples:
+    - "best currently usable gathering lineup"
+    - "best currently usable Barbarian Fort pair"
+    - "best complete open-field march(es) without duplicate commanders"
+    - "meta upgrade candidates versus current account gaps"
+    - "role-inappropriate investments to avoid"
+
+refresh:
+  next_review_by: "2026-10-14"
+  invalidate_on_new_commander_release: true
+  invalidate_on_balance_change: true
