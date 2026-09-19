@@ -8,9 +8,15 @@ flows:
     mission: DAILY
     status: training
     description: "Claim accumulated alliance territory resources as a daily maintenance task."
-    entry_state_family: MAIN_GAME_VIEW
+    entry_states:
+      - CITY_VIEW
+      - WORLD_MAP_VIEW
     transitions:
-      - from: MAIN_GAME_VIEW
+      - from: CITY_VIEW
+        action: OPEN_ALLIANCE
+        execution: native_shortcut
+        expect: [ALLIANCE_HOME]
+      - from: WORLD_MAP_VIEW
         action: OPEN_ALLIANCE
         execution: native_shortcut
         expect: [ALLIANCE_HOME]

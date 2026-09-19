@@ -1,0 +1,12 @@
+[
+  {
+    "target_id": "ALLIANCE_TERRITORY_ENTRY",
+    "labels": ["Territory"],
+    "allow_unscored_exact": true
+  },
+  {
+    "target_id": "TERRITORY_RSS_CLAIM",
+    "labels": ["Claim"],
+    "allow_unscored_exact": true
+  }
+]

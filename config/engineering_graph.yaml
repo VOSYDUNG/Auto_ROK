@@ -238,7 +238,7 @@ nodes:
 
   - id: city_world_visual_detector
     kind: perception
-    responsibility: Produce current-frame semantic/layout evidence sufficient to distinguish CITY_VIEW and WORLD_MAP_VIEW from real pixels while suppressing foreground gather surfaces.
+    responsibility: Produce current-frame semantic/layout evidence sufficient to distinguish CITY_VIEW and WORLD_MAP_VIEW from real pixels while suppressing trained foreground mission surfaces.
     authority: canonical
     status: implemented
     path: harness/main_view_detector.py
@@ -254,6 +254,7 @@ nodes:
       - workspace/evidence/cpu/live-followup-20260918-03.json
       - workspace/evidence/cpu/live-followup-20260918-04.json
       - workspace/runs/live-timing-20260918-01/run.json
+      - tests/test_alliance_main_view_suppression.py
 
   - id: main_view_training_profile
     kind: evidence
@@ -691,7 +692,7 @@ nodes:
 
   - id: live_replay_evidence
     kind: evidence
-    responsibility: Prove the composed vertical slice against real captured game frames and guarded live actuation using the canonical replay evidence validator.
+    responsibility: Prove the composed GATHER vertical slice against real captured game frames and guarded live actuation using the canonical replay evidence validator.
     authority: evidence
     status: implemented
     path: harness/gather_replay_evidence.py
@@ -700,6 +701,53 @@ nodes:
       - scripts/validate_gather_replay.py
       - workspace/evidence/gather/gather-054e1be092ffb2cbc270
       - workspace/evidence/gather/gather-596d20bfddd42eb077af
+
+  - id: alliance_claim_contract
+    kind: config
+    responsibility: Declares the bounded CITY/WORLD to Alliance Home to Alliance Territory to Claim transition sequence without inventing a post-claim completion rule.
+    authority: canonical
+    status: implemented
+    path: config/mission_flows.yaml
+    evidence:
+      - tests/test_alliance_mission_loader.py
+      - tests/test_alliance_runtime_contracts.py
+
+  - id: alliance_claim_targets
+    kind: config
+    responsibility: Declares only the trained Territory entry and Claim OCR target labels used by the alliance claim branch.
+    authority: canonical
+    status: implemented
+    path: config/alliance_ocr_targets.json
+    evidence:
+      - tests/test_alliance_mission_loader.py
+      - tests/test_alliance_runtime_contracts.py
+
+  - id: alliance_claim_classifier
+    kind: perception
+    responsibility: Classifies CITY_VIEW, WORLD_MAP_VIEW, ALLIANCE_HOME and ALLIANCE_TERRITORY only from current-frame trained evidence and fails closed on missing or competing evidence.
+    authority: canonical
+    status: implemented
+    path: harness/alliance_state_classifier.py
+    evidence:
+      - tests/test_alliance_state_classifier.py
+      - tests/test_alliance_main_view_suppression.py
+
+  - id: alliance_claim_cli
+    kind: composition
+    responsibility: Composes one guarded CLAIM_ALLIANCE_TERRITORY_RSS tick using live capture, OCR phrases, main-view evidence, deterministic alliance classification, semantic targets, safe screen mapping and durable checkpointing.
+    authority: canonical
+    status: implemented
+    path: scripts/run_alliance_claim_tick.py
+    evidence:
+      - tests/test_alliance_runtime_contracts.py
+      - .github/workflows/alliance-claim.yml
+
+  - id: alliance_post_claim_training
+    kind: evidence
+    responsibility: Supply and validate the real post-Claim visual signature required to promote a verified Claim dispatch into mission completion.
+    authority: evidence
+    status: blocked
+    blocker: A001
 
 edges:
   - {from: mission_layer_config, to: mission_timeline, relation: declares_cadence_and_reset}
@@ -792,8 +840,25 @@ edges:
   - {from: gather_cli, to: gather_runtime_evidence, relation: emits}
   - {from: troop_selection_policy_approval, to: live_replay_evidence, relation: supplies_policy_provenance}
   - {from: gather_runtime_evidence, to: live_replay_evidence, relation: validates}
+  - {from: alliance_claim_contract, to: mission_compiler, relation: compiles_through}
+  - {from: alliance_claim_targets, to: ocr_semantics, relation: configures_targets}
+  - {from: ocr_semantics, to: alliance_claim_classifier, relation: supplies_alliance_text}
+  - {from: city_world_visual_detector, to: alliance_claim_classifier, relation: supplies_main_view_evidence}
+  - {from: alliance_claim_classifier, to: state_adapter, relation: feeds}
+  - {from: alliance_claim_contract, to: deterministic_selector, relation: constrains}
+  - {from: alliance_claim_contract, to: mission_engine, relation: constrains}
+  - {from: mission_runner, to: alliance_claim_cli, relation: composed_by}
+  - {from: alliance_claim_targets, to: alliance_claim_cli, relation: configures}
+  - {from: alliance_claim_classifier, to: alliance_claim_cli, relation: classifies_for}
+  - {from: alliance_claim_cli, to: alliance_post_claim_training, relation: exposes_post_claim_evidence}
 
-blockers: []
+blockers:
+
+  - id: A001
+    title: Alliance territory post-Claim completion signature is not trained
+    class: perception_training
+    blocks: [alliance_post_claim_training]
+    falsification: A real guarded Claim run supplies the fresh post-action frame and before/after evidence needed to define a deterministic completion predicate; held-out replay then distinguishes Claim-available from Claim-completed without relying on dispatch alone.
 
 coverage:
   active_vertical_slice: GATHER_RESOURCE
@@ -835,7 +900,7 @@ coverage:
     mission_live_pass_observation: covered
     local_llm_always_on_boundary: covered
   other_mission_branches:
-    CLAIM_ALLIANCE_TERRITORY_RSS: not_covered_end_to_end
+    CLAIM_ALLIANCE_TERRITORY_RSS: partial
     SWITCH_CHARACTER: not_covered_end_to_end
     BARBARIAN_FORT_RALLY: training_only
     EVENT_COORDINATION: not_covered_end_to_end
