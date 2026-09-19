@@ -445,7 +445,7 @@ nodes:
     responsibility: Displays append-only local LLM and harness telemetry as a click-through shadow HUD without granting model or overlay any input authority.
     authority: operator
     status: partial
-    path: scripts/run_local_agent_overlay.py
+    path: scripts/run_agent_hud.py
     evidence:
       - harness/overlay_events.py
       - scripts/run_local_llm_live_shadow.py
