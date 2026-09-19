@@ -1,0 +1,114 @@
+schema_version: 1
+
+# Canonical game reset is 00:00 UTC.  The same boundary is 07:00 in Vietnam;
+# the display timezone is metadata, not a second scheduler.
+clock:
+  reset_timezone: UTC
+  reset_hour: 0
+  reset_minute: 0
+  display_timezone: Asia/Ho_Chi_Minh
+  cpu_only: true
+
+missions:
+  - mission_id: DAILY_ACCOUNT_CARE
+    frequency: daily
+    reset_timezone: UTC
+    reset_hour: 0
+    reset_minute: 0
+    due_offset_seconds: 0
+    display_timezone: Asia/Ho_Chi_Minh
+    priority: 10
+  - mission_id: RESOURCE_CONTINUITY
+    frequency: continuous
+    reset_timezone: UTC
+    reset_hour: 0
+    reset_minute: 0
+    display_timezone: Asia/Ho_Chi_Minh
+    priority: 20
+  - mission_id: ALLIANCE_CREDIT
+    frequency: interval
+    reset_timezone: UTC
+    reset_hour: 0
+    reset_minute: 0
+    display_timezone: Asia/Ho_Chi_Minh
+    priority: 30
+  - mission_id: COURIER_STATION
+    frequency: event_window
+    reset_timezone: UTC
+    reset_hour: 0
+    reset_minute: 0
+    display_timezone: Asia/Ho_Chi_Minh
+    priority: 40
+
+tasks:
+  - task_id: CLAIM_VIP
+    mission_id: DAILY_ACCOUNT_CARE
+    cadence: daily
+    priority: 10
+    prerequisite_facts: [vip.claim_available]
+    expected_capabilities: [VIP, CLAIM]
+    risk: claim
+    decision_types: [claim_or_abstain]
+    idempotency: occurrence
+  - task_id: CLAIM_VIP_GIFTS
+    mission_id: DAILY_ACCOUNT_CARE
+    cadence: daily
+    priority: 20
+    prerequisite_facts: [vip.gifts_available]
+    expected_capabilities: [VIP_GIFTS, CLAIM]
+    risk: claim
+    decision_types: [claim_or_abstain]
+    idempotency: occurrence
+  - task_id: FARM_RESOURCE
+    mission_id: RESOURCE_CONTINUITY
+    cadence: continuous
+    priority: 10
+    expected_capabilities: [RESOURCE_SEARCH, TROOP_MARCH]
+    risk: actuate
+    decision_types: [resource_and_commander_choice]
+    idempotency: event
+  - task_id: ALLIANCE_CONTRIBUTION
+    mission_id: ALLIANCE_CREDIT
+    cadence: interval
+    priority: 30
+    cooldown_seconds: 1800
+    max_per_reset: 20
+    expected_capabilities: [ALLIANCE, CONTRIBUTION]
+    risk: actuate
+    decision_types: [contribute_or_abstain]
+    idempotency: event
+    availability_fact: alliance.contribution_status
+  - task_id: COURIER_STATION_CHECK
+    mission_id: COURIER_STATION
+    cadence: event_window
+    priority: 40
+    expected_capabilities: [COURIER_STATION, FREE_CLAIM]
+    risk: observe
+    decision_types: [claim_free_or_review_purchase]
+    idempotency: event
+  - task_id: BUY_COURIER_ITEM
+    mission_id: COURIER_STATION
+    cadence: event_window
+    priority: 50
+    expected_capabilities: [COURIER_STATION, ITEM_PURCHASE]
+    risk: spend
+    decision_types: [purchase_or_abstain]
+    idempotency: event
+
+knowledge:
+  source_precedence:
+    - direct_ui_observation
+    - repeated_operator_observation
+    - human_training
+    - derived
+  unknown_state_policy: NEEDS_DECISION
+  missing_capability_policy: retraining_required
+  farm_table_counts: mining_completion_only
+  travel_time_is_separate: true
+
+local_llm:
+  lifecycle: always_on_observer
+  mission_intake: harness_escalation_only
+  receives_only: [mission_graph, task_signal, semantic_facts, bounded_candidates]
+  authority: bounded_choice_and_change_feedback
+  harness_owns: [schedule, freshness, grounding, policy, actuation, verification]

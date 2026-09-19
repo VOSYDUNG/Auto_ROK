@@ -7,6 +7,7 @@ from typing import Any, Mapping, Sequence
 
 from harness.mission_loader import CompiledMission
 from harness.mission_runtime import ActionChoice, MissionContext, MissionTool, ToolFeedback, ToolSnapshot
+from harness.task_graph import Transition
 
 
 class EngineDecision(str, Enum):
@@ -165,33 +166,137 @@ class MissionEngine:
                 )
 
         after = self.tool.observe(context)
-        if not after.frame_id or after.frame_id == snapshot.frame_id:
-            return EngineStepResult(EngineDecision.REOBSERVE, snapshot, choice, feedback, after, "post-observation is not fresh")
+        return self._verify_after_snapshot(
+            context,
+            snapshot,
+            choice,
+            feedback,
+            after,
+            transition,
+            required_preconditions,
+            typed_contract,
+            self_loop,
+            loop_key,
+        )
 
-        verified_feedback = _promote_verified_feedback(feedback, snapshot, after, choice)
-        completion_requested = transition.completion_edge or feedback.completed
+    def verify_after_snapshot(
+        self,
+        context: MissionContext,
+        before: ToolSnapshot,
+        choice: ActionChoice,
+        feedback: ToolFeedback,
+        after: ToolSnapshot,
+    ) -> EngineStepResult:
+        """Verify a previously dispatched action against a later fresh frame.
+
+        This path is observation-only: it never calls ``execute``.  It exists
+        for animated panels and delayed map transitions where the immediate
+        post-action frame is fresh but not yet the declared transition.
+        """
+        if before.mission_id != context.mission_id or before.task_id != context.task_id:
+            return EngineStepResult(
+                EngineDecision.BLOCKED,
+                before,
+                choice,
+                feedback,
+                after,
+                "pending verification snapshot identity does not match mission context",
+            )
+        if after.mission_id != context.mission_id or after.task_id != context.task_id:
+            return EngineStepResult(
+                EngineDecision.BLOCKED,
+                before,
+                choice,
+                feedback,
+                after,
+                "pending verification post-observation identity does not match mission context",
+            )
+        try:
+            transition = self.compiled.flow.transition_for(before.state, choice.action_id)
+        except ValueError:
+            return EngineStepResult(EngineDecision.BLOCKED, before, choice, feedback, after, "compiled flow is ambiguous")
+        if transition is None:
+            return EngineStepResult(EngineDecision.REJECT_CHOICE, before, choice, feedback, after, "pending action is not declared for its source state")
+        if transition.requires_target and (
+            choice.target_id is None or choice.target_id not in transition.target_ids
+        ):
+            return EngineStepResult(EngineDecision.REJECT_CHOICE, before, choice, feedback, after, "pending action lacks its declared target")
+        required_preconditions = self.compiled.transition_preconditions.get(
+            f"{transition.from_state}:{transition.action_id}", ()
+        )
+        missing_preconditions = _missing_preconditions(before.facts, required_preconditions)
+        if missing_preconditions:
+            return EngineStepResult(
+                EngineDecision.BLOCKED,
+                before,
+                choice,
+                feedback,
+                after,
+                "pending verification lost precondition evidence: " + "; ".join(missing_preconditions),
+            )
+        typed_contract = _typed_action_contract(before, choice.action_id)
+        self_loop = before.state in transition.expect_states
+        loop_key = (context.run_id, before.state, choice.action_id)
+        return self._verify_after_snapshot(
+            context,
+            before,
+            choice,
+            feedback,
+            after,
+            transition,
+            required_preconditions,
+            typed_contract,
+            self_loop,
+            loop_key,
+        )
+
+    def _verify_after_snapshot(
+        self,
+        context: MissionContext,
+        before: ToolSnapshot,
+        choice: ActionChoice,
+        feedback: ToolFeedback,
+        after: ToolSnapshot,
+        transition: Transition,
+        required_preconditions: tuple[str, ...],
+        typed_contract: Mapping[str, Any] | None,
+        self_loop: bool,
+        loop_key: tuple[str, str, str],
+    ) -> EngineStepResult:
+        if not after.frame_id or after.frame_id == before.frame_id:
+            return EngineStepResult(EngineDecision.REOBSERVE, before, choice, feedback, after, "post-observation is not fresh")
+        if not feedback.success or feedback.code not in {"DISPATCHED", "VERIFIED"}:
+            return EngineStepResult(
+                EngineDecision.REOBSERVE,
+                before,
+                choice,
+                feedback,
+                after,
+                "action feedback is not eligible for post-action verification",
+            )
+        if feedback.code == "DISPATCHED":
+            receipt_error = _dispatch_receipt_error(feedback.facts, before, choice)
+            if receipt_error is not None:
+                return EngineStepResult(EngineDecision.REOBSERVE, before, choice, feedback, after, receipt_error)
+
+        verified_feedback = _promote_verified_feedback(feedback, before, after, choice)
+        completion_requested = bool(getattr(transition, "completion_edge", False)) or feedback.completed
         state_matches = self.compiled.flow.accepts_observation(transition, after.state)
 
         if completion_requested:
             completion_matches = _completion_matches(
                 self.compiled.completion,
                 required_preconditions,
-                snapshot,
+                before,
                 after,
                 verified_feedback,
             )
             if completion_matches:
-                return EngineStepResult(
-                    EngineDecision.COMPLETE,
-                    snapshot,
-                    choice,
-                    verified_feedback,
-                    after,
-                )
+                return EngineStepResult(EngineDecision.COMPLETE, before, choice, verified_feedback, after)
             if not state_matches:
                 return EngineStepResult(
                     EngineDecision.REOBSERVE,
-                    snapshot,
+                    before,
                     choice,
                     verified_feedback,
                     after,
@@ -199,7 +304,7 @@ class MissionEngine:
                 )
             return EngineStepResult(
                 EngineDecision.REOBSERVE,
-                snapshot,
+                before,
                 choice,
                 verified_feedback,
                 after,
@@ -209,7 +314,7 @@ class MissionEngine:
         if not state_matches:
             return EngineStepResult(
                 EngineDecision.REOBSERVE,
-                snapshot,
+                before,
                 choice,
                 verified_feedback,
                 after,
@@ -218,25 +323,11 @@ class MissionEngine:
 
         typed_error = _typed_postcondition_error(typed_contract, choice, after)
         if typed_error is not None:
-            return EngineStepResult(
-                EngineDecision.REOBSERVE,
-                snapshot,
-                choice,
-                verified_feedback,
-                after,
-                typed_error,
-            )
+            return EngineStepResult(EngineDecision.REOBSERVE, before, choice, verified_feedback, after, typed_error)
 
         if self_loop:
             self._verified_self_loops.add(loop_key)
-
-        return EngineStepResult(
-            EngineDecision.CONTINUE,
-            snapshot,
-            choice,
-            verified_feedback,
-            after,
-        )
+        return EngineStepResult(EngineDecision.CONTINUE, before, choice, verified_feedback, after)
 
 
 def _missing_preconditions(

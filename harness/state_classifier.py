@@ -89,6 +89,23 @@ def _matches(item: Evidence, expected: str) -> bool:
     return any(value == expected or value.rstrip(":") == expected for value in _text(item))
 
 
+def _matches_drawer_queue_anchor(item: Evidence) -> bool:
+    """Accept a bounded queue ROI anchor when digits are unreadable.
+
+    The dispatch drawer can expose a current-frame ``Queue`` token while the
+    small ``0/5`` glyph is lost by Windows OCR.  The queue counter itself is
+    still required for completion evidence by ``gather_facts``; this fallback
+    only lets the state machine reach the drawer's next guarded action when
+    the card and its queue ROI are otherwise positively grounded.
+    """
+    if _matches(item, "Queue X/5"):
+        return True
+    return (
+        _matches(item, "Queue")
+        and item.metadata.get("acquisition") in {"ocr_march_queue_region", "ocr_troop_drawer_region"}
+    )
+
+
 class StateClassifier:
     """Classify only the seven gather-flow state IDs plus fail-closed outcomes."""
 
@@ -99,8 +116,10 @@ class StateClassifier:
         candidates: list[tuple[str, tuple[Evidence, ...]]] = []
         for state_id, required in _STATE_RULES.items():
             matched: list[Evidence] = []
-            for expected in required:
+            for index, expected in enumerate(required):
                 item = next((candidate for candidate in evidence if _matches(candidate, expected)), None)
+                if state_id == "TROOP_DISPATCH_DRAWER" and expected == "Queue X/5":
+                    item = next((candidate for candidate in evidence if _matches_drawer_queue_anchor(candidate)), None)
                 if item is None:
                     break
                 matched.append(item)

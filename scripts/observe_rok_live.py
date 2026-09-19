@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -62,11 +63,16 @@ def main(argv: list[str] | None = None) -> int:
         capture_path = run_dir / "capture.json"
         ocr_path = run_dir / "ocr.json"
         scene_path = run_dir / "scene.json"
+        timing_ms: dict[str, float] = {}
+        total_started = time.perf_counter()
 
         stage = "capture"
+        started = time.perf_counter()
         capture = capture_rok_client(image, timeout_seconds=args.timeout_seconds)
+        timing_ms["capture"] = round((time.perf_counter() - started) * 1000.0, 3)
         _write_json(capture_path, capture)
         stage = "ocr"
+        started = time.perf_counter()
         completed = subprocess.run(
             ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
              str(ROOT / "scripts" / "windows_ocr.ps1"), "-Image", str(image),
@@ -76,18 +82,24 @@ def main(argv: list[str] | None = None) -> int:
         if completed.returncode != 0:
             raise WindowsCaptureError(completed.stderr.strip() or f"Windows OCR exited {completed.returncode}")
         ocr = json.loads(completed.stdout, strict=False)
+        timing_ms["ocr"] = round((time.perf_counter() - started) * 1000.0, 3)
         _write_json(ocr_path, ocr)
         stage = "projection"
+        started = time.perf_counter()
         projected = project_observation(capture, ocr, image, _candidate_specs(args.candidates),
                                         now=datetime.now(timezone.utc), max_age_seconds=args.max_age_seconds)
+        timing_ms["projection"] = round((time.perf_counter() - started) * 1000.0, 3)
+        timing_ms["total"] = round((time.perf_counter() - total_started) * 1000.0, 3)
         _write_json(scene_path, asdict(projected))
         _write_json(run_dir / "run.json", {"schema_version": 1, "status": projected.status,
                     "stage": "complete", "frame_id": capture["frame"]["id"],
                     "image_sha256": capture["frame"]["image_sha256"],
                     "artifacts": {"image": str(image), "capture": str(capture_path),
-                                  "ocr": str(ocr_path), "scene": str(scene_path)}, "cost": None})
+                                  "ocr": str(ocr_path), "scene": str(scene_path)},
+                    "timing_ms": timing_ms, "cost": None})
         print(json.dumps({"status": projected.status, "frame_id": capture["frame"]["id"],
-                          "ocr_elements": len(ocr["elements"]), "run_dir": str(run_dir)}))
+                          "ocr_elements": len(ocr["elements"]), "timing_ms": timing_ms,
+                          "run_dir": str(run_dir)}))
         return 0 if projected.status == "READY" else 3
     except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError,
             WindowsCaptureError, ObservationBridgeError, ValueError) as exc:

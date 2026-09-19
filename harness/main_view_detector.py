@@ -10,9 +10,11 @@ from dataclasses import dataclass, replace
 import json
 import math
 from pathlib import Path
+import re
 from typing import Callable, Mapping, Sequence
 
 from harness.contracts import Evidence, Observation
+from harness.cpu_roi import CpuRoiError, CpuRoiProfile, load_default_cpu_roi_profile
 from harness.mission_runtime import MissionContext
 from harness.mission_tool import ObservationBundle, ObservationProvider
 
@@ -23,7 +25,6 @@ _SUPPORTED = {CITY_VIEW, WORLD_MAP_VIEW}
 _FOREGROUND_MARKERS = {
     "search",
     "resource point",
-    "gather",
     "dispatch a new troop from your city",
     "new troop",
     "march",
@@ -131,21 +132,49 @@ def classify_signature(vector: Sequence[float], profile: MainViewProfile) -> Mai
     return MainViewMatch(best.state_id, best_distance, second_distance, "matched")
 
 
-def extract_visual_signature(image_path: str | Path) -> tuple[float, ...]:
-    """Extract a coarse layout/color/edge signature from one client screenshot."""
+def extract_visual_signature(
+    image_path: str | Path,
+    *,
+    roi_profile: CpuRoiProfile | None = None,
+) -> tuple[float, ...]:
+    """Extract a lighting-tolerant CPU signature from the central client ROI.
+
+    The previous HSV signature treated the live darkened city view as a map.
+    The current signature deliberately normalizes grayscale illumination and
+    keeps only per-cell intensity/edge statistics.  This is deterministic
+    OpenCV CPU work; OpenCL and CUDA are explicitly disabled before processing.
+    """
     try:
         import cv2  # type: ignore
         import numpy as np  # type: ignore
     except ImportError as exc:  # pragma: no cover - live dependency
         raise RuntimeError("OpenCV/numpy are required for main-view visual signatures") from exc
 
+    # OpenCV may otherwise use an OpenCL implementation opportunistically.
+    # Keep all feature extraction on the CPU as required by this host profile.
+    if hasattr(cv2, "setUseOptimized"):
+        cv2.setUseOptimized(True)
+    # setUseOptimized(True) may re-enable OpenCL on some OpenCV builds, so this
+    # switch must be applied afterwards and on every extraction call.
+    if hasattr(cv2, "ocl"):
+        cv2.ocl.setUseOpenCL(False)
+
     image = cv2.imread(str(Path(image_path)), cv2.IMREAD_COLOR)
     if image is None or image.ndim != 3:
         raise ValueError("main-view detector could not decode the current frame")
+
+    profile = roi_profile or load_default_cpu_roi_profile()
+    try:
+        image, _resolved = profile.crop(image, "signature_canvas")
+    except CpuRoiError as exc:
+        raise ValueError(f"main-view CPU ROI is unavailable: {exc}") from exc
     image = cv2.resize(image, (160, 90), interpolation=cv2.INTER_AREA)
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV).astype("float32")
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(gray, 80, 160)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY).astype("float32") / 255.0
+    gray = (gray - float(gray.mean())) / (float(gray.std()) + 1e-6)
+    # Canny expects an 8-bit image.  Min/max normalization preserves edges
+    # while the feature statistics above remain invariant to global lighting.
+    gray_for_edges = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX).astype("uint8")
+    edges = cv2.Canny(gray_for_edges, 80, 160)
 
     features: list[float] = []
     rows, cols = 3, 4
@@ -154,11 +183,9 @@ def extract_visual_signature(image_path: str | Path) -> tuple[float, ...]:
         for col in range(cols):
             y1, y2 = row * cell_h, (row + 1) * cell_h if row < rows - 1 else image.shape[0]
             x1, x2 = col * cell_w, (col + 1) * cell_w if col < cols - 1 else image.shape[1]
-            cell = hsv[y1:y2, x1:x2]
+            cell = gray[y1:y2, x1:x2]
             edge_cell = edges[y1:y2, x1:x2]
-            for channel, scale in ((0, 180.0), (1, 255.0), (2, 255.0)):
-                values = cell[:, :, channel] / scale
-                features.extend((float(values.mean()), float(values.std())))
+            features.extend((float(cell.mean()), float(cell.std())))
             features.append(float(np.mean(edge_cell > 0)))
     return _unit(tuple(features))
 
@@ -172,7 +199,16 @@ def _visible_markers(bundle: ObservationBundle) -> set[str]:
     raw = bundle.scene.facts.get("raw_text")
     if isinstance(raw, str):
         folded = raw.casefold()
-        markers.update(marker for marker in _FOREGROUND_MARKERS if marker in folded)
+        # Match complete words/phrases only.  Substring matching makes the
+        # ordinary city-building label ``Research`` look like the foreground
+        # ``SEARCH`` panel and suppresses the trained CITY_VIEW signal.  A
+        # bare ``Gather`` is intentionally not a marker: the city quest
+        # ``Gather resources from the map`` is visible in the normal CITY_VIEW.
+        markers.update(
+            marker
+            for marker in _FOREGROUND_MARKERS
+            if re.search(rf"(?<!\w){re.escape(marker)}(?!\w)", folded) is not None
+        )
     return markers
 
 
@@ -185,10 +221,15 @@ class MainViewVisualObservationProvider:
         profile: MainViewProfile,
         *,
         extractor: Callable[[str | Path], Sequence[float]] = extract_visual_signature,
+        roi_profile: CpuRoiProfile | None = None,
     ) -> None:
         self.inner = inner
         self.profile = profile
-        self.extractor = extractor
+        self.roi_profile = roi_profile or load_default_cpu_roi_profile()
+        if extractor is extract_visual_signature:
+            self.extractor = lambda path: extract_visual_signature(path, roi_profile=self.roi_profile)
+        else:
+            self.extractor = extractor
 
     def observe(self, context: MissionContext) -> ObservationBundle:
         bundle = self.inner.observe(context)
@@ -207,7 +248,19 @@ class MainViewVisualObservationProvider:
             facts["main_view_detector"] = {"status": "unavailable", "reason": "image_path_missing"}
             return ObservationBundle(bundle.observation, replace(bundle.scene, facts=facts))
 
-        match = classify_signature(self.extractor(image_path), self.profile)
+        try:
+            match = classify_signature(self.extractor(image_path), self.profile)
+            roi_facts = self.roi_profile.describe("signature_canvas", bundle.observation.window_size)
+        except (CpuRoiError, ValueError) as exc:
+            facts["main_view_detector"] = {
+                "status": "unresolved",
+                "state_id": None,
+                "reason": "cpu_roi_unavailable",
+                "error": str(exc),
+                "source": "trained_visual_signature",
+                "processing_device": "cpu",
+            }
+            return ObservationBundle(bundle.observation, replace(bundle.scene, facts=facts))
         facts["main_view_detector"] = {
             "status": "matched" if match.state_id else "unresolved",
             "state_id": match.state_id,
@@ -215,6 +268,8 @@ class MainViewVisualObservationProvider:
             "second_distance": match.second_distance,
             "reason": match.reason,
             "source": "trained_visual_signature",
+            "processing_device": "cpu",
+            "roi": roi_facts,
         }
         if match.state_id is None:
             return ObservationBundle(bundle.observation, replace(bundle.scene, facts=facts))

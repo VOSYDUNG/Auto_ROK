@@ -142,3 +142,102 @@ def test_runner_blocks_final_march_for_missing_gameplay_precondition(tmp_path):
     assert result.status is CheckpointStatus.NEEDS_DECISION
     assert tool.executions == []
     assert "precondition evidence missing" in result.reason
+
+
+def test_runner_persists_gather_completion_baseline_from_queue_observation(tmp_path):
+    context = MissionContext("GATHER_RESOURCE", "one-character", "run-baseline")
+    tool = FakeTool((
+        snapshot(
+            "f1",
+            "TROOP_DISPATCH_DRAWER",
+            actions=(AllowedAction("CREATE_NEW_TROOP", True, ("NEW_TROOP",)),),
+            targets=("NEW_TROOP",),
+            facts={
+                "march_queue_used": 0,
+                "march_queue_capacity": 5,
+                "march_queue_source": "visible_ocr_queue_anchor",
+                "character_id": "char-a",
+            },
+        ),
+        snapshot("f2", "NEW_TROOP_SETUP"),
+    ))
+
+    result = MissionRunner(compiled(), tool, JsonMissionStore(tmp_path)).tick(context)
+
+    assert result.status is CheckpointStatus.RUNNING
+    stored = JsonMissionStore(tmp_path).load(context)
+    assert stored is not None
+    assert stored.completion_baseline == {
+        "predicate_id": "march_queue_used_increased",
+        "counter_fact": "march_queue_used",
+        "counter_value": 0,
+        "capacity": 5,
+        "source_frame_id": "f1",
+        "source": "visible_ocr_queue_anchor",
+        "character_id": "char-a",
+    }
+
+
+def test_runner_resumes_delayed_completion_without_second_dispatch(tmp_path):
+    context = MissionContext("GATHER_RESOURCE", "one-character", "run-delayed")
+    store = JsonMissionStore(tmp_path)
+    last = AllowedAction("MARCH_WITH_CURRENT_SELECTION", True, ("TROOP_MARCH",))
+    before_facts = {
+        "character_id": "char-a",
+        "completion_baseline": {
+            "predicate_id": "march_queue_used_increased",
+            "counter_fact": "march_queue_used",
+            "counter_value": 0,
+            "capacity": 5,
+            "source_frame_id": "queue-frame",
+            "source": "visible_ocr_queue_anchor",
+            "character_id": "char-a",
+        },
+        "precondition_evidence": {
+            "troop/commander selection policy is valid for this mission": True,
+        },
+    }
+
+    class DelayedTool(FakeTool):
+        def execute(self, context, before, choice):
+            self.executions.append(choice)
+            return ToolFeedback(
+                True,
+                "DISPATCHED",
+                facts={
+                    "receipt": {
+                        "before_frame_id": before.frame_id,
+                        "action_id": choice.action_id,
+                        "target_id": choice.target_id,
+                        "bounded_arguments": {},
+                        "non_interference_confirmed": True,
+                        "character_id": "char-a",
+                    },
+                },
+            )
+
+    first_tool = DelayedTool((
+        snapshot("before", "NEW_TROOP_SETUP", actions=(last,), targets=("TROOP_MARCH",), facts=before_facts),
+        snapshot("settling", "UNKNOWN_STATE"),
+    ))
+    first = MissionRunner(compiled(), first_tool, store).tick(context)
+    assert first.status is CheckpointStatus.REOBSERVE
+    assert [item.action_id for item in first_tool.executions] == ["MARCH_WITH_CURRENT_SELECTION"]
+    assert first.checkpoint.pending_verification is not None
+
+    second_tool = DelayedTool((
+        snapshot(
+            "after",
+            "MARCH_IN_PROGRESS",
+            facts={
+                "march_queue_used": 1,
+                "march_queue_capacity": 5,
+                "march_queue_source": "visible_ocr_march_queue_region",
+                "character_id": "char-a",
+            },
+        ),
+    ))
+    second = MissionRunner(compiled(), second_tool, store).tick(context)
+    assert second.status is CheckpointStatus.COMPLETE
+    assert second.checkpoint.pending_verification is None
+    assert second_tool.executions == []

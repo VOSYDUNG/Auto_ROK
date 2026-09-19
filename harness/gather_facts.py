@@ -10,7 +10,9 @@ from harness.mission_tool import ObservationBundle, ObservationProvider
 
 
 _QUEUE = re.compile(r"\bqueue\s*(\d{1,2})\s*/\s*(\d{1,2})\b", re.IGNORECASE)
+_QUEUE_RATIO = re.compile(r"(?<!\d)(\d{1,2})\s*/\s*(\d{1,2})(?!\d)")
 _LEVEL = re.compile(r"\b(?:level|lvl|lv\.?)\s*[:\-]?\s*(\d{1,2})\b", re.IGNORECASE)
+_QUEUE_ROI_ACQUISITIONS = frozenset({"ocr_march_queue_region"})
 
 
 def _texts(bundle: ObservationBundle) -> Iterable[str]:
@@ -31,13 +33,48 @@ def extract_march_queue(bundle: ObservationBundle) -> tuple[int, int] | None:
         text = evidence.value if isinstance(evidence.value, str) else evidence.label
         if not isinstance(text, str):
             continue
-        for used_raw, capacity_raw in _QUEUE.findall(text):
+        explicit = _QUEUE.findall(text)
+        ratios = explicit
+        if not explicit and evidence.metadata.get("acquisition") in _QUEUE_ROI_ACQUISITIONS:
+            ratios = _QUEUE_RATIO.findall(text)
+            if not ratios:
+                # Windows.Media.Ocr can render the thin slash in the fixed
+                # queue glyph as a middle ``1`` (for example ``1/5`` ->
+                # ``115``).  This normalization is permitted only for the
+                # dedicated queue ROI and only for the exact three-digit
+                # shape; it never applies to full-frame OCR or date-like text.
+                compact = re.fullmatch(r"([0-9])1([0-9])", text.strip())
+                if compact:
+                    ratios = [(compact.group(1), compact.group(2))]
+        for used_raw, capacity_raw in ratios:
             used, capacity = int(used_raw), int(capacity_raw)
             if 0 <= used <= capacity <= 20:
                 pairs.add((used, capacity))
     if len(pairs) != 1:
         return None
     return next(iter(pairs))
+
+
+def march_queue_source(bundle: ObservationBundle) -> str | None:
+    """Return provenance for the unique queue fact, never for a bare ratio."""
+    pair = extract_march_queue(bundle)
+    if pair is None:
+        return None
+    for evidence in bundle.observation.evidence:
+        text = evidence.value if isinstance(evidence.value, str) else evidence.label
+        if not isinstance(text, str):
+            continue
+        if evidence.metadata.get("acquisition") not in _QUEUE_ROI_ACQUISITIONS:
+            continue
+        ratios = _QUEUE_RATIO.findall(text)
+        if not ratios:
+            compact = re.fullmatch(r"([0-9])1([0-9])", text.strip())
+            if compact:
+                ratios = [(compact.group(1), compact.group(2))]
+        for used_raw, capacity_raw in ratios:
+            if (int(used_raw), int(capacity_raw)) == pair:
+                return "visible_ocr_march_queue_region"
+    return "visible_ocr_queue_anchor"
 
 
 def extract_visible_resource_level(bundle: ObservationBundle) -> int | None:
@@ -82,7 +119,7 @@ class GatherFactObservationProvider:
         queue = extract_march_queue(bundle)
         if queue is not None:
             facts["march_queue_used"], facts["march_queue_capacity"] = queue
-            facts["march_queue_source"] = "visible_ocr_queue_anchor"
+            facts["march_queue_source"] = march_queue_source(bundle) or "visible_ocr_queue_anchor"
         level = extract_visible_resource_level(bundle)
         if level is not None:
             facts["selected_search_level"] = level

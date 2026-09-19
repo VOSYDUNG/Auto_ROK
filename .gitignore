@@ -11,3 +11,7 @@ workspace/
 *.gguf
 .env
 .venv/
+
+# Pytest scratch basetemps produced by bounded harness runs.
+.pytest-tmp-*/
+.pytest-tmp-*.json

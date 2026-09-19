@@ -43,6 +43,10 @@ class MissionCheckpoint:
     verified_self_loops: Sequence[tuple[str, str, str]] = field(default_factory=tuple)
     updated_at: str | None = None
     completion_baseline: Mapping[str, Any] | None = None
+    # A successful dispatch whose fresh post-action frame is still settling.
+    # This is deliberately durable so a caller-driven next tick can verify it
+    # without selecting or emitting the action a second time.
+    pending_verification: Mapping[str, Any] | None = None
 
     def matches(self, context: MissionContext) -> bool:
         return (
@@ -146,6 +150,12 @@ class JsonMissionStore:
             loops.append((item[0], item[1], item[2]))
         try:
             status = CheckpointStatus(payload.get("status", CheckpointStatus.RUNNING.value))
+            pending_raw = payload.get("pending_verification")
+            if pending_raw is not None and not isinstance(pending_raw, Mapping):
+                raise RuntimeError("pending_verification must be an object or null")
+            baseline_raw = payload.get("completion_baseline")
+            if baseline_raw is not None and not isinstance(baseline_raw, Mapping):
+                raise RuntimeError("completion_baseline must be an object or null")
             return MissionCheckpoint(
                 mission_id=str(payload["mission_id"]),
                 task_id=str(payload["task_id"]),
@@ -160,7 +170,8 @@ class JsonMissionStore:
                 last_reason=payload.get("last_reason"),
                 verified_self_loops=tuple(loops),
                 updated_at=payload.get("updated_at"),
-                completion_baseline=payload.get("completion_baseline"),
+                completion_baseline=dict(baseline_raw) if isinstance(baseline_raw, Mapping) else None,
+                pending_verification=dict(pending_raw) if isinstance(pending_raw, Mapping) else None,
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise RuntimeError("malformed mission checkpoint payload") from exc

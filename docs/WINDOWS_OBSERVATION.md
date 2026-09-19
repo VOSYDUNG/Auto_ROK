@@ -33,6 +33,30 @@ The run directory contains `rok-client.png`, `capture.json`, `ocr.json`,
 `scene.json`, and `run.json`. Exit `0` is a valid projection, `3` is
 `NEEDS_DECISION`, and `2` is a failed stage with exact error evidence.
 
+The main-view detector then processes only the validated client-relative
+`signature_canvas` ROI from `config/cpu_rois.yaml`.  Its grayscale/edge
+features run with OpenCL and CUDA disabled; the ROI is a processing boundary,
+not a click coordinate.
+
+## New Troop OCR holdout
+
+On the real 1366×768 client, Windows.Media.Ocr can omit the small `Units` word
+in the New Troop summary while still returning `New Troop`, `MARCH` and
+`Total Power`. `scripts/windows_ocr.ps1` now enables a bounded CPU-only crop
+`[600,450,435,185]` at scale 4 when the current frame has the New Troop/MARCH
+anchors. Returned boxes are mapped back to client pixels, deduplicated against
+the full-frame pass, and tagged `ocr_new_troop_summary_region`; no semantic
+target or coordinate is compiled from the crop. This repaired the live
+`gather-goal-20260919-04` occurrence without weakening the fail-closed state or
+target rules.
+
+For the bounded CPU OCR experiment, `run_gather_tick.py` accepts
+`--ocr-backend rapidocr_fixed_roi_experiment`.  This keeps the Windows OCR
+payload as the base, overlays only the fixed resource-category row, verifies
+the same frame hash, and records `CPUExecutionProvider`; the default backend
+remains `windows`, and the optional path is fail-closed and not an armed-live
+promotion.
+
 Primary sources:
 
 - https://pypi.org/project/windows-capture/2.0.1/

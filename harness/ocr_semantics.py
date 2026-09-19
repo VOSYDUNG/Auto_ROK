@@ -205,6 +205,8 @@ class OcrSemanticObservationProvider:
         for fallback_index, item in enumerate(observation.evidence):
             if item.source != "ocr" or item.bbox is None:
                 continue
+            if item.metadata.get("semantic_excluded") is True:
+                continue
             value = item.value if isinstance(item.value, str) else item.label
             if not isinstance(value, str) or not value.strip():
                 continue

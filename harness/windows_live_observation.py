@@ -32,6 +32,7 @@ class WindowsLiveObservationProvider:
         candidates: Sequence[CandidateSpec] = (),
         powershell: str = "powershell.exe",
         ocr_script: str | Path | None = None,
+        ocr_backend: str = "windows",
         timeout_seconds: float = 10.0,
         max_age_seconds: float = 30.0,
     ) -> None:
@@ -39,6 +40,12 @@ class WindowsLiveObservationProvider:
         self.candidates = tuple(candidates)
         self.powershell = powershell
         self.ocr_script = Path(ocr_script).resolve() if ocr_script else Path(__file__).resolve().parents[1] / "scripts" / "windows_ocr.ps1"
+        if ocr_backend not in {"windows", "rapidocr_fixed_roi_experiment"}:
+            raise ValueError(
+                "ocr_backend must be 'windows' or 'rapidocr_fixed_roi_experiment'"
+            )
+        self.ocr_backend = ocr_backend
+        self._rapidocr_backend = None
         self.timeout_seconds = timeout_seconds
         self.max_age_seconds = max_age_seconds
         self._previous_timestamp: float | None = None
@@ -83,6 +90,8 @@ class WindowsLiveObservationProvider:
                     completed.stderr.strip() or f"Windows OCR exited {completed.returncode}"
                 )
             ocr = json.loads(completed.stdout, strict=False)
+            if self.ocr_backend == "rapidocr_fixed_roi_experiment":
+                ocr = self._overlay_rapidocr(capture, image, ocr)
             self._write_json(ocr_path, ocr)
             projected = project_observation(
                 capture,
@@ -131,6 +140,33 @@ class WindowsLiveObservationProvider:
             },
         )
         return ObservationBundle(projected.observation, scene)
+
+    def _overlay_rapidocr(self, capture: dict, image: Path, original: object) -> object:
+        """Apply the optional fixed-ROI backend without changing default OCR."""
+        try:
+            from harness.rapidocr_fixed_roi import (
+                RapidOcrFixedRoiBackend,
+                RapidOcrFixedRoiError,
+                overlay_ocr_payload,
+            )
+            if self._rapidocr_backend is None:
+                self._rapidocr_backend = RapidOcrFixedRoiBackend()
+            frame = capture.get("frame", {})
+            report = self._rapidocr_backend.recognize_image(
+                image,
+                frame_id=frame.get("id"),
+                expected_sha256=frame.get("image_sha256"),
+            )
+            report["capture_binding_verified"] = True
+            if not isinstance(original, dict):
+                raise LiveObservationError("Windows OCR result is not a JSON object")
+            return overlay_ocr_payload(original, report)
+        except LiveObservationError:
+            raise
+        except Exception as exc:
+            # Keep the optional path fail-closed; the default Windows OCR path
+            # is never silently replaced after a backend failure.
+            raise LiveObservationError(f"RapidOCR fixed-ROI backend failed: {exc}") from exc
 
     def _run_dir(self, context: MissionContext) -> Path:
         identity = "\0".join((context.mission_id, context.task_id, context.run_id))

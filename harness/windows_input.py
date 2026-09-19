@@ -14,6 +14,51 @@ class WindowsInputError(RuntimeError):
     pass
 
 
+class _SendInputMouseInput(ctypes.Structure):
+    _fields_ = [
+        ("dx", wintypes.LONG),
+        ("dy", wintypes.LONG),
+        ("mouseData", wintypes.DWORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", ctypes.c_size_t),
+    ]
+
+
+class _SendInputKeyboardInput(ctypes.Structure):
+    _fields_ = [
+        ("wVk", wintypes.WORD),
+        ("wScan", wintypes.WORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", ctypes.c_size_t),
+    ]
+
+
+class _SendInputHardwareInput(ctypes.Structure):
+    _fields_ = [
+        ("uMsg", wintypes.DWORD),
+        ("wParamL", wintypes.WORD),
+        ("wParamH", wintypes.WORD),
+    ]
+
+
+class _SendInputUnion(ctypes.Union):
+    _fields_ = [
+        ("mi", _SendInputMouseInput),
+        ("ki", _SendInputKeyboardInput),
+        ("hi", _SendInputHardwareInput),
+    ]
+
+
+class _SendInput(ctypes.Structure):
+    _anonymous_ = ("union",)
+    _fields_ = [
+        ("type", wintypes.DWORD),
+        ("union", _SendInputUnion),
+    ]
+
+
 class Win32InputBackend(Protocol):
     def move_to(self, x: int, y: int) -> None: ...
     def left_click(self) -> None: ...
@@ -22,7 +67,24 @@ class Win32InputBackend(Protocol):
 
 
 class CtypesWin32InputBackend:
-    """Thin user32 wrapper. It never activates or focuses a window."""
+    """Thin user32 wrapper. It never activates or focuses a window.
+
+    ``keybd_event``/``mouse_event`` are legacy compatibility shims and are not
+    reliably delivered to a DirectX game.  Use the native ``SendInput`` API so
+    the actuator follows the same foreground-only guard while emitting normal
+    user-level input packets.  Coordinates are still moved with
+    ``SetCursorPos`` because the guard owns the screen mapping and bounds.
+    """
+
+    _INPUT_MOUSE = 0
+    _INPUT_KEYBOARD = 1
+    _MOUSEEVENTF_LEFTDOWN = 0x0002
+    _MOUSEEVENTF_LEFTUP = 0x0004
+    _KEYEVENTF_KEYUP = 0x0002
+
+    _MOUSEINPUT = _SendInputMouseInput
+    _KEYBDINPUT = _SendInputKeyboardInput
+    _INPUT = _SendInput
 
     _VK = {
         "ENTER": 0x0D,
@@ -47,6 +109,12 @@ class CtypesWin32InputBackend:
         self.user32.SetThreadDesktop.restype = wintypes.BOOL
         self.user32.SetCursorPos.argtypes = [ctypes.c_int, ctypes.c_int]
         self.user32.SetCursorPos.restype = wintypes.BOOL
+        self.user32.SendInput.argtypes = [
+            wintypes.UINT,
+            ctypes.POINTER(self._INPUT),
+            ctypes.c_int,
+        ]
+        self.user32.SendInput.restype = wintypes.UINT
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         kernel32.GetCurrentProcess.restype = wintypes.HANDLE
         kernel32.GetCurrentThreadId.restype = wintypes.DWORD
@@ -78,8 +146,29 @@ class CtypesWin32InputBackend:
             raise WindowsInputError(f"SetCursorPos failed (win32_error={error})")
 
     def left_click(self) -> None:
-        self.user32.mouse_event(0x0002, 0, 0, 0, 0)
-        self.user32.mouse_event(0x0004, 0, 0, 0, 0)
+        events = (
+            self._INPUT(
+                type=self._INPUT_MOUSE,
+                mi=self._MOUSEINPUT(dwFlags=self._MOUSEEVENTF_LEFTDOWN),
+            ),
+            self._INPUT(
+                type=self._INPUT_MOUSE,
+                mi=self._MOUSEINPUT(dwFlags=self._MOUSEEVENTF_LEFTUP),
+            ),
+        )
+        self._send(events)
+
+    def _send(self, events: tuple[_SendInput, ...]) -> None:
+        if not events:
+            return
+        array_type = self._INPUT * len(events)
+        sent = int(self.user32.SendInput(len(events), array_type(*events), ctypes.sizeof(self._INPUT)))
+        if sent != len(events):
+            error = ctypes.get_last_error()
+            self.diagnostics["send_input_error"] = error
+            raise WindowsInputError(
+                f"SendInput sent {sent}/{len(events)} events (win32_error={error})"
+            )
 
     def _vk(self, key: str) -> int:
         normalized = key.upper()
@@ -90,10 +179,18 @@ class CtypesWin32InputBackend:
         raise WindowsInputError(f"unsupported keyboard key: {key!r}")
 
     def key_down(self, key: str) -> None:
-        self.user32.keybd_event(self._vk(key), 0, 0, 0)
+        event = self._INPUT(
+            type=self._INPUT_KEYBOARD,
+            ki=self._KEYBDINPUT(wVk=self._vk(key)),
+        )
+        self._send((event,))
 
     def key_up(self, key: str) -> None:
-        self.user32.keybd_event(self._vk(key), 0, 0x0002, 0)
+        event = self._INPUT(
+            type=self._INPUT_KEYBOARD,
+            ki=self._KEYBDINPUT(wVk=self._vk(key), dwFlags=self._KEYEVENTF_KEYUP),
+        )
+        self._send((event,))
 
 
 class WindowsHumanInputActuator:

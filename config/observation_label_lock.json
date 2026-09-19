@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "status": "locked",
+  "measurement_class": "critical_field_ocr_screening",
+  "label_policy": "Expected critical fields are bound to persisted frame ids and image hashes. Operator review and the dated independent visual review are recorded before R1a measurement.",
+  "lock_requirements": {
+    "minimum_reviewers": 2,
+    "independence_required": true
+  },
+  "reviewers": [
+    {
+      "reviewer_id": "operator-record-20260918",
+      "role": "operator",
+      "independent": false,
+      "reviewed_at": "2026-09-18T00:00:00Z",
+      "scope": "existing operator-reviewed corpus label_basis and visible search-panel frames"
+    },
+    {
+      "reviewer_id": "codex-visual-review-20260919",
+      "role": "independent_visual_reviewer",
+      "independent": true,
+      "reviewed_at": "2026-09-18T17:26:44Z",
+      "scope": "12 persisted PNGs inspected before OCR output; visible RESOURCE_SEARCH_PANEL state and five fixed category labels confirmed against frame id and image hash"
+    }
+  ],
+  "entries": [
+    {
+      "id": "search-b002-current",
+      "expected_state": "RESOURCE_SEARCH_PANEL",
+      "capture_frame_id": "rok-20260915T050047038146Z-22fdc4bf8959",
+      "image_sha256": "22fdc4bf8959e5f3b6e0a8baf9f15d1bcbc022cb95aa00b2ab3e3e5ae453bac7",
+      "critical_target_ids": ["SEARCH_EXECUTE", "SEARCH_CATEGORY_FOOD", "SEARCH_CATEGORY_WOOD", "SEARCH_CATEGORY_STONE", "SEARCH_CATEGORY_GOLD"],
+      "review_status": "independently_locked"
+    },
+    {
+      "id": "search-b002-level2",
+      "expected_state": "RESOURCE_SEARCH_PANEL",
+      "capture_frame_id": "rok-20260915T050108535198Z-13068daad0e8",
+      "image_sha256": "13068daad0e87470fbfb0a5a1e0b663be846a0a614da4cfcafe211260df37945",
+      "critical_target_ids": ["SEARCH_EXECUTE", "SEARCH_CATEGORY_FOOD", "SEARCH_CATEGORY_WOOD", "SEARCH_CATEGORY_STONE", "SEARCH_CATEGORY_GOLD"],
+      "review_status": "independently_locked"
+    },
+    {
+      "id": "search-b002-level4",
+      "expected_state": "RESOURCE_SEARCH_PANEL",
+      "capture_frame_id": "rok-20260915T050308727020Z-ec7611cedf9e",
+      "image_sha256": "ec7611cedf9e813721c347e72fa42a27c0edbbae9b2c293ae62089d3db145a55",
+      "critical_target_ids": ["SEARCH_EXECUTE", "SEARCH_CATEGORY_FOOD", "SEARCH_CATEGORY_WOOD", "SEARCH_CATEGORY_STONE", "SEARCH_CATEGORY_GOLD"],
+      "review_status": "independently_locked"
+    },
+    {
+      "id": "search-b002-level5",
+      "expected_state": "RESOURCE_SEARCH_PANEL",
+      "capture_frame_id": "rok-20260915T050318733111Z-25b6edc68f28",
+      "image_sha256": "25b6edc68f28cd66be7be07275e7d9a5cd164b5876dfb7961ed9b2ea01fcad40",
+      "critical_target_ids": ["SEARCH_EXECUTE", "SEARCH_CATEGORY_FOOD", "SEARCH_CATEGORY_WOOD", "SEARCH_CATEGORY_STONE", "SEARCH_CATEGORY_GOLD"],
+      "review_status": "independently_locked"
+    },
+    {
+      "id": "search-b002-level6",
+      "expected_state": "RESOURCE_SEARCH_PANEL",
+      "capture_frame_id": "rok-20260915T050327468559Z-13552fc23e42",
+      "image_sha256": "13552fc23e42801238bde9df28abb1a162605ff926c49946302f1f524f6f947f",
+      "critical_target_ids": ["SEARCH_EXECUTE", "SEARCH_CATEGORY_FOOD", "SEARCH_CATEGORY_WOOD", "SEARCH_CATEGORY_STONE", "SEARCH_CATEGORY_GOLD"],
+      "review_status": "independently_locked"
+    },
+    {
+      "id": "search-b003-probe1",
+      "expected_state": "RESOURCE_SEARCH_PANEL",
+      "capture_frame_id": "rok-20260915T054307484266Z-7a6a03265ebd",
+      "image_sha256": "7a6a03265ebd4e548b9b3d1b854c57d2c548241517ee7d048bc0916e2aaccb52",
+      "critical_target_ids": ["SEARCH_EXECUTE", "SEARCH_CATEGORY_FOOD", "SEARCH_CATEGORY_WOOD", "SEARCH_CATEGORY_STONE", "SEARCH_CATEGORY_GOLD"],
+      "review_status": "independently_locked"
+    },
+    {
+      "id": "search-b002-test-live-now",
+      "expected_state": "RESOURCE_SEARCH_PANEL",
+      "capture_frame_id": "rok-20260915T050213909149Z-e096641d9cdf",
+      "image_sha256": "e096641d9cdfb6f6c32e5d66d27966c8a7a4696863c92ea0c8e773e0a8f8b39d",
+      "critical_target_ids": ["SEARCH_EXECUTE", "SEARCH_CATEGORY_FOOD", "SEARCH_CATEGORY_WOOD", "SEARCH_CATEGORY_STONE", "SEARCH_CATEGORY_GOLD"],
+      "review_status": "independently_locked"
+    },
+    {
+      "id": "search-b001-pure1-holdout",
+      "expected_state": "RESOURCE_SEARCH_PANEL",
+      "capture_frame_id": "rok-20260915T043329601920Z-1de027aa4e43",
+      "image_sha256": "1de027aa4e43b93fd97c6015d402cd842b1bffed710d186d0c7cb9dde32d58ee",
+      "critical_target_ids": ["SEARCH_EXECUTE", "SEARCH_CATEGORY_FOOD", "SEARCH_CATEGORY_WOOD", "SEARCH_CATEGORY_STONE", "SEARCH_CATEGORY_GOLD"],
+      "review_status": "independently_locked"
+    },
+    {
+      "id": "search-b001-overlay-holdout",
+      "expected_state": "RESOURCE_SEARCH_PANEL",
+      "capture_frame_id": "rok-20260915T043211264666Z-d643208e21f7",
+      "image_sha256": "d643208e21f7b2592f5e9a81abd6dc47feaf76d4e04b8f27a5cfdee3bc4bd735",
+      "critical_target_ids": ["SEARCH_EXECUTE", "SEARCH_CATEGORY_FOOD", "SEARCH_CATEGORY_WOOD", "SEARCH_CATEGORY_STONE", "SEARCH_CATEGORY_GOLD"],
+      "review_status": "independently_locked"
+    },
+    {
+      "id": "search-b002-level1-holdout",
+      "expected_state": "RESOURCE_SEARCH_PANEL",
+      "capture_frame_id": "rok-20260915T050445571688Z-66abc61c4ad5",
+      "image_sha256": "66abc61c4ad5559ca47225f4eba779788539f3566919162c67ccb3e53d4a5527",
+      "critical_target_ids": ["SEARCH_EXECUTE", "SEARCH_CATEGORY_FOOD", "SEARCH_CATEGORY_WOOD", "SEARCH_CATEGORY_STONE", "SEARCH_CATEGORY_GOLD"],
+      "review_status": "independently_locked"
+    },
+    {
+      "id": "search-b002-level3-holdout",
+      "expected_state": "RESOURCE_SEARCH_PANEL",
+      "capture_frame_id": "rok-20260915T050507604394Z-a223e5352a17",
+      "image_sha256": "a223e5352a17640a5930f885b2f43d982b56cd7d1cf9453448f64ab4db6d748e",
+      "critical_target_ids": ["SEARCH_EXECUTE", "SEARCH_CATEGORY_FOOD", "SEARCH_CATEGORY_WOOD", "SEARCH_CATEGORY_STONE", "SEARCH_CATEGORY_GOLD"],
+      "review_status": "independently_locked"
+    },
+    {
+      "id": "search-b002-level6-holdout",
+      "expected_state": "RESOURCE_SEARCH_PANEL",
+      "capture_frame_id": "rok-20260915T050530554008Z-1fa43d92564e",
+      "image_sha256": "1fa43d92564eacd02ea2e4f8756d2ec7d65b545023ae37231d52a715e6fabbe2",
+      "critical_target_ids": ["SEARCH_EXECUTE", "SEARCH_CATEGORY_FOOD", "SEARCH_CATEGORY_WOOD", "SEARCH_CATEGORY_STONE", "SEARCH_CATEGORY_GOLD"],
+      "review_status": "independently_locked"
+    }
+  ]
+}

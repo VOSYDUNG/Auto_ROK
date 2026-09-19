@@ -1,0 +1,57 @@
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from harness.cpu_roi import CpuRoiError, CpuRoiProfile
+
+
+PROFILE = Path(__file__).parents[1] / "config" / "cpu_rois.yaml"
+
+
+def test_cpu_roi_profile_is_explicitly_cpu_only():
+    profile = CpuRoiProfile.load(PROFILE)
+    assert profile.processing_backend["device"] == "cpu"
+    assert profile.processing_backend["allow_opencl"] is False
+    assert profile.processing_backend["allow_cuda"] is False
+    assert profile.resolve("signature_canvas", (1366, 768)).rect.as_list() == [109, 61, 1148, 614]
+
+
+def test_roi_scales_with_same_aspect_ratio_and_returns_copy():
+    profile = CpuRoiProfile.load(PROFILE)
+    image = np.zeros((384, 683, 3), dtype=np.uint8)
+    crop, resolved = profile.crop(image, "signature_canvas")
+    assert resolved.source_client_size == (683, 384)
+    assert crop.shape[:2] == (resolved.rect.height, resolved.rect.width)
+    assert crop.shape[:2] == (308, 574)
+    assert not np.shares_memory(crop, image)
+
+
+def test_roi_rejects_implausible_window_aspect_ratio():
+    profile = CpuRoiProfile.load(PROFILE)
+    with pytest.raises(CpuRoiError, match="aspect ratio"):
+        profile.resolve("signature_canvas", (1280, 800))
+
+
+def test_roi_description_preserves_processing_boundary():
+    profile = CpuRoiProfile.load(PROFILE)
+    description = profile.describe("center_canvas", (1366, 768))
+    assert description["coordinate_space"] == "client_pixels"
+    assert description["processing_device"] == "cpu"
+    assert description["opencl_enabled"] is False
+    assert description["cuda_enabled"] is False
+
+
+def test_visual_signature_turns_opencl_off_before_processing(tmp_path):
+    import cv2
+
+    from harness.main_view_detector import extract_visual_signature
+
+    image = np.zeros((768, 1366, 3), dtype=np.uint8)
+    cv2.rectangle(image, (250, 120), (1050, 560), (80, 160, 210), thickness=-1)
+    path = tmp_path / "frame.png"
+    assert cv2.imwrite(str(path), image)
+    if hasattr(cv2, "ocl"):
+        cv2.ocl.setUseOpenCL(True)
+    extract_visual_signature(path)
+    assert not hasattr(cv2, "ocl") or cv2.ocl.useOpenCL() is False

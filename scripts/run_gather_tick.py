@@ -17,6 +17,10 @@ sys.path.insert(0, str(ROOT))
 
 from harness.action_surface import TRAINED_NATIVE_SHORTCUTS  # noqa: E402
 from harness.gather_facts import GatherFactObservationProvider  # noqa: E402
+from harness.host_input_isolation import (  # noqa: E402
+    HostInputIsolationEvidence,
+    HostInputIsolationEvidenceError,
+)
 from harness.gather_replay_evidence import (  # noqa: E402
     build_gather_tick_evidence,
     save_gather_tick_evidence,
@@ -29,12 +33,14 @@ from harness.mission_runtime import MissionContext  # noqa: E402
 from harness.mission_store import CheckpointStatus, JsonMissionStore  # noqa: E402
 from harness.mission_tool import BoundedMissionTool, HumanInterfaceActionProvider  # noqa: E402
 from harness.ocr_semantics import OcrSemanticObservationProvider, OcrTargetSpec  # noqa: E402
+from harness.overlay_events import OverlayEventWriter  # noqa: E402
 from harness.policy_overlay import PolicyEvidenceObservationProvider  # noqa: E402
 from harness.resource_level_control import (  # noqa: E402
     GatherScreenMappedActionSurface,
     ResourceLevelControlObservationProvider,
     ResourceLevelProfile,
 )
+from harness.r3_endurance_authorization import load_reserved_ticket  # noqa: E402
 from harness.troop_policy import TroopSelectionApproval  # noqa: E402
 from harness.windows_input import WindowsHumanInputActuator  # noqa: E402
 from harness.windows_interference_guard import WindowsForegroundInterferenceGuard  # noqa: E402
@@ -84,6 +90,75 @@ def _local_llm_provider(path: str | None) -> OpenAICompatibleDecisionProvider | 
     return OpenAICompatibleDecisionProvider.from_mapping(value)
 
 
+def _local_llm_summary(provider: OpenAICompatibleDecisionProvider | None) -> dict[str, object]:
+    if provider is None:
+        return {
+            "configured": False,
+            "model": None,
+            "model_output": None,
+            "last_error": None,
+            "usage": None,
+            "request_sha256": None,
+            "request_bytes": None,
+            "request_elapsed_ms": None,
+        }
+    return {
+        "configured": True,
+        "model": provider.model,
+        "model_output": provider.last_model_output,
+        "last_error": provider.last_error,
+        "usage": provider.last_usage,
+        "request_sha256": provider.last_request_sha256,
+        "request_bytes": provider.last_request_bytes,
+        "request_elapsed_ms": provider.last_request_elapsed_ms,
+    }
+
+
+def _host_input_isolation_summary(path: str | None, context: MissionContext) -> dict[str, object]:
+    """Load and assess direct one-user host evidence for this occurrence."""
+    if path is None:
+        return {
+            "provided": False,
+            "ready": False,
+            "trace_path": None,
+            "environment": "windows_host_direct",
+            "reasons": ["no direct-host input-isolation evidence supplied"],
+        }
+    source = Path(path).resolve()
+    evidence_root = (ROOT / "workspace" / "evidence").resolve()
+    if not source.is_relative_to(evidence_root):
+        raise ValueError("direct-host input-isolation evidence must be under workspace/evidence")
+    try:
+        raw = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read direct-host input-isolation evidence: {source}: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise ValueError("direct-host input-isolation evidence must be a JSON object")
+    # Accept either the raw trace or the assessment output, while always
+    # re-assessing the trace here.
+    trace = raw.get("evidence") if isinstance(raw.get("evidence"), dict) else raw
+    try:
+        evidence = HostInputIsolationEvidence.from_dict(trace)
+    except HostInputIsolationEvidenceError as exc:
+        raise ValueError(f"invalid direct-host input-isolation evidence: {exc}") from exc
+    ready, assessment_reasons = evidence.assess()
+    reasons = list(assessment_reasons)
+    if evidence.run_id != context.run_id:
+        reasons.append("direct-host trace run_id does not match the current mission occurrence")
+    ready = not reasons
+    return {
+        "provided": True,
+        "ready": ready,
+        "trace_path": str(source),
+        "evidence_id": evidence.evidence_id,
+        "session_id": evidence.session_id,
+        "environment": evidence.environment,
+        "run_id": evidence.run_id,
+        "unexpected_input_events": evidence.unexpected_input_events,
+        "reasons": reasons,
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-id", required=True)
@@ -107,6 +182,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="operator-trained resource level slider profile",
     )
     parser.add_argument("--workspace-root", default=str(ROOT / "workspace" / "runtime"))
+    parser.add_argument(
+        "--ocr-backend",
+        choices=("windows", "rapidocr_fixed_roi_experiment"),
+        default="windows",
+        help="observation OCR backend; RapidOCR option is experiment-only and keeps Windows OCR as the base",
+    )
     parser.add_argument("--checkpoint-root", default=str(ROOT / "workspace" / "checkpoints"))
     parser.add_argument(
         "--evidence-root",
@@ -124,8 +205,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--arm-live", action="store_true")
     parser.add_argument(
+        "--r3-repetition",
+        action="store_true",
+        help="require a fresh append-only R3 reservation before this live tick",
+    )
+    parser.add_argument(
+        "--r3-reservation-ledger",
+        help="append-only R3 reservation ledger required by --r3-repetition",
+    )
+    parser.add_argument(
+        "--input-isolation-evidence",
+        help="raw or assessed windows_host_direct trace JSON; required and ready before --arm-live",
+    )
+    parser.add_argument(
+        "--guest-isolation-evidence",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
         "--local-llm-config",
         help="optional repository-local OpenAI-compatible config; used only for NEEDS_DECISION candidates",
+    )
+    parser.add_argument(
+        "--overlay-events",
+        help="optional workspace JSONL event stream for the operator shadow HUD",
     )
     parser.add_argument("--min-target-confidence", type=float, default=0.90)
     return parser
@@ -140,6 +242,20 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError(
                 "use either --troop-policy-approval or --approve-current-troop-selection, not both"
             )
+        if args.guest_isolation_evidence:
+            raise ValueError(
+                "GUEST_MODE_OUT_OF_SCOPE: use --input-isolation-evidence for direct one-user host mode"
+            )
+        if args.r3_repetition and not args.arm_live:
+            raise ValueError("R3_REPETITION_REQUIRES_LIVE_ARM")
+        if args.r3_repetition and not args.r3_reservation_ledger:
+            raise ValueError("R3_REPETITION_REQUIRES_RESERVATION_LEDGER")
+        overlay_writer: OverlayEventWriter | None = None
+        if args.overlay_events:
+            overlay_path = Path(args.overlay_events).resolve()
+            if not overlay_path.is_relative_to((ROOT / "workspace").resolve()):
+                raise ValueError("overlay events must be under workspace")
+            overlay_writer = OverlayEventWriter(overlay_path)
 
         compiled = compile_mission(
             ROOT / "config" / "mission_flows.yaml",
@@ -148,6 +264,17 @@ def main(argv: list[str] | None = None) -> int:
             {"resource_type": args.resource_type, "resource_level": args.resource_level},
         )
         context = MissionContext("GATHER_RESOURCE", args.task_id, args.run_id)
+        r3_reservation: dict[str, object] | None = None
+        if args.r3_repetition:
+            reservation_path = Path(args.r3_reservation_ledger).resolve()
+            evidence_root = (ROOT / "workspace" / "evidence").resolve()
+            if not reservation_path.is_relative_to(evidence_root):
+                raise ValueError("R3 reservation ledger must be under workspace/evidence")
+            r3_reservation = load_reserved_ticket(reservation_path, run_id=context.run_id)
+        host_input_isolation = _host_input_isolation_summary(args.input_isolation_evidence, context)
+        if args.arm_live and host_input_isolation.get("ready") is not True:
+            reasons = "; ".join(str(item) for item in host_input_isolation.get("reasons", []))
+            raise ValueError("LIVE_ARM_REQUIRES_READY_HOST_INPUT_ISOLATION" + (f": {reasons}" if reasons else ""))
         candidate_specs = _candidate_specs(args.candidates)
         main_view_profile = MainViewProfile.load(args.main_view_profile)
         resource_level_profile = ResourceLevelProfile.load(args.resource_level_profile)
@@ -170,7 +297,10 @@ def main(argv: list[str] | None = None) -> int:
 
         # Provenance -> OCR semantics -> trained visual/layout evidence -> trained
         # typed controls -> visible facts -> occurrence-bound operator policy.
-        observations = WindowsLiveObservationProvider(args.workspace_root)
+        observations = WindowsLiveObservationProvider(
+            args.workspace_root,
+            ocr_backend=args.ocr_backend,
+        )
         observations = OcrSemanticObservationProvider(observations, candidate_specs)
         observations = MainViewVisualObservationProvider(observations, main_view_profile)
         observations = ResourceLevelControlObservationProvider(observations, resource_level_profile)
@@ -202,10 +332,13 @@ def main(argv: list[str] | None = None) -> int:
             character_id=args.character_id,
             result=result,
             live_armed=bool(args.arm_live),
+            host_input_isolation=host_input_isolation,
             policy_approval=approval_summary,
             main_view_profile_trained=bool(main_view_profile.prototypes),
             resource_level_profile_trained=resource_level_profile.trained,
         )
+        local_llm = _local_llm_summary(decision_provider)
+        evidence_record["runtime"]["local_llm"] = local_llm
         evidence_path = save_gather_tick_evidence(args.evidence_root, evidence_record)
 
         payload = {
@@ -217,6 +350,7 @@ def main(argv: list[str] | None = None) -> int:
             "decision": result.checkpoint.last_decision,
             "reason": result.reason,
             "live_armed": bool(args.arm_live),
+            "host_input_isolation": host_input_isolation,
             "policy_approved": bool(approval_summary.get("bound_to_occurrence")),
             "policy_approval_id": approval_summary.get("approval_id"),
             "policy_approval_source": approval_summary.get("source"),
@@ -226,6 +360,9 @@ def main(argv: list[str] | None = None) -> int:
             "main_view_profile_trained": bool(main_view_profile.prototypes),
             "resource_level_profile_trained": resource_level_profile.trained,
             "local_llm_model": decision_provider.model if decision_provider is not None else None,
+            "local_llm": local_llm,
+            "r3_repetition": bool(args.r3_repetition),
+            "r3_reservation": r3_reservation,
         }
         if result.selection is not None:
             payload["selection"] = result.selection.decision.value
@@ -236,6 +373,26 @@ def main(argv: list[str] | None = None) -> int:
                     "target_id": result.selection.choice.target_id,
                     "arguments": dict(result.selection.choice.arguments),
                 }
+        if overlay_writer is not None:
+            overlay_writer.emit(
+                "gather_tick",
+                {
+                    "run_id": context.run_id,
+                    "status": payload["status"],
+                    "state": payload["state"],
+                    "frame_id": payload["frame_id"],
+                    "harness": {
+                        "status": payload["status"],
+                        "state": payload["state"],
+                        "frame_id": payload["frame_id"],
+                        "decision": payload.get("decision"),
+                        "choice": payload.get("choice"),
+                        "selection": payload.get("selection"),
+                    },
+                    "local_llm": local_llm,
+                    "evidence_path": str(evidence_path),
+                },
+            )
         print(json.dumps(payload, ensure_ascii=False))
 
         if result.status in {CheckpointStatus.RUNNING, CheckpointStatus.COMPLETE}:

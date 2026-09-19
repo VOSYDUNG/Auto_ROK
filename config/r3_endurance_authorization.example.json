@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "scope": "r3_live_gather_repetition",
+  "approved": false,
+  "mission_id": "GATHER_RESOURCE",
+  "task_id": "one-character",
+  "character_id": "char-direct-01",
+  "approved_by": "<operator identity>",
+  "approved_at": "<ISO-8601 timestamp with UTC offset>",
+  "max_additional_runs": 8
+}

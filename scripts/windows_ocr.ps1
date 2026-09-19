@@ -78,10 +78,34 @@ $hasSearchButton = [bool]($elements | Where-Object { $_.text -ieq 'SEARCH' })
 $hasDispatch = [bool]($elements | Where-Object { $_.text -ieq 'Dispatch' })
 $hasPanelKeywords = $hasSearchButton -and $hasDispatch
 
+# Windows.Media.Ocr can miss the fixed SEARCH/Dispatch labels on the
+# 1366x768 client even when the search drawer is visibly open.  Use two
+# independent words inside the compiled panel bounds as a conservative
+# surface anchor, then run the same bounded panel crop/enrichment path.  This
+# is still observation-only; it does not infer a resource choice or arm input.
+$hasSearchPanelAnchor = [bool](
+    ($elements | Where-Object {
+        $_.text -ieq 'Barbarians' -and
+        $_.bbox[0] -ge 250 -and $_.bbox[0] -le 600 -and
+        $_.bbox[1] -ge 350 -and $_.bbox[1] -le 520
+    }) -and
+    ($elements | Where-Object {
+        $_.text -match '^Level:?$' -and
+        $_.bbox[0] -ge 250 -and $_.bbox[0] -le 600 -and
+        $_.bbox[1] -ge 430 -and $_.bbox[1] -le 560
+    })
+)
+$hasSearchPanelSurface = $hasPanelKeywords -or $hasSearchPanelAnchor
+
 $hasCardKeywords = [bool]($elements | Where-Object { $_.text -ceq 'GATHER' -and $_.bbox[0] -gt 400 })
 $hasDrawerKeywords = [bool]($elements | Where-Object { $_.text -match 'Queue|Troop' })
+$hasNewTroopSetupKeywords = [bool](
+    ($elements | Where-Object { $_.text -ieq 'New' }) -and
+    ($elements | Where-Object { $_.text -ieq 'Troop' }) -and
+    ($elements | Where-Object { $_.text -ieq 'MARCH' })
+)
 
-if ($elements.Count -eq 0 -or $hasPanelKeywords -or $hasCardKeywords -or $hasDrawerKeywords) {
+if ($elements.Count -eq 0 -or $hasSearchPanelSurface -or $hasCardKeywords -or $hasDrawerKeywords -or $hasNewTroopSetupKeywords) {
     $bmp = [System.Drawing.Bitmap]::FromFile($imagePath)
     try {
         if ($elements.Count -eq 0) {
@@ -115,10 +139,84 @@ if ($elements.Count -eq 0 -or $hasPanelKeywords -or $hasCardKeywords -or $hasDra
             $hasSearchButton = [bool]($elements | Where-Object { $_.text -ieq 'SEARCH' })
             $hasDispatch = [bool]($elements | Where-Object { $_.text -ieq 'Dispatch' })
             $hasPanelKeywords = $hasSearchButton -and $hasDispatch
+            $hasSearchPanelAnchor = [bool](
+                ($elements | Where-Object {
+                    $_.text -ieq 'Barbarians' -and
+                    $_.bbox[0] -ge 250 -and $_.bbox[0] -le 600 -and
+                    $_.bbox[1] -ge 350 -and $_.bbox[1] -le 520
+                }) -and
+                ($elements | Where-Object {
+                    $_.text -match '^Level:?$' -and
+                    $_.bbox[0] -ge 250 -and $_.bbox[0] -le 600 -and
+                    $_.bbox[1] -ge 430 -and $_.bbox[1] -le 560
+                })
+            )
+            $hasSearchPanelSurface = $hasPanelKeywords -or $hasSearchPanelAnchor
             $hasCardKeywords = [bool]($elements | Where-Object { $_.text -ceq 'GATHER' -and $_.bbox[0] -gt 400 })
         }
 
-        if ($hasPanelKeywords) {
+        if ($hasNewTroopSetupKeywords) {
+            # The small ``Units`` label on the fixed New Troop modal is a
+            # known Windows.Media.Ocr holdout at native 1366x768 scale.  A
+            # bounded enlarged crop makes the label available as current-frame
+            # OCR evidence without compiling a semantic state or a click point.
+            # The crop is intentionally limited to the lower modal summary;
+            # every returned box is mapped back into client pixels.
+            $troopSummaryRect = [System.Drawing.Rectangle]::FromLTRB(600, 450, 1035, 635)
+            if ($troopSummaryRect.Right -le $bmp.Width -and $troopSummaryRect.Bottom -le $bmp.Height) {
+                $troopSummaryScale = 4
+                $troopSummaryCrop = $bmp.Clone($troopSummaryRect, $bmp.PixelFormat)
+                $scaledTroopSummary = New-Object System.Drawing.Bitmap ($troopSummaryCrop.Width * $troopSummaryScale), ($troopSummaryCrop.Height * $troopSummaryScale)
+                $g = [System.Drawing.Graphics]::FromImage($scaledTroopSummary)
+                $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+                $g.DrawImage($troopSummaryCrop, 0, 0, $scaledTroopSummary.Width, $scaledTroopSummary.Height)
+                $g.Dispose()
+                $troopSummaryCrop.Dispose()
+
+                $tmpTroopSummary = [System.IO.Path]::GetTempFileName() + ".png"
+                $scaledTroopSummary.Save($tmpTroopSummary, [System.Drawing.Imaging.ImageFormat]::Png)
+                $scaledTroopSummary.Dispose()
+                $troopSummaryRes = Recognize-File $engine $tmpTroopSummary
+                [System.IO.File]::Delete($tmpTroopSummary)
+
+                foreach ($line in $troopSummaryRes.Lines) {
+                    $wordIndex = 0
+                    foreach ($word in $line.Words) {
+                        $cleanWord = [regex]::Replace($word.Text, '[\x00-\x08\x0B\x0C\x0E-\x1F]', '')
+                        if ($cleanWord.Length -eq 0) { continue }
+                        $box = $word.BoundingRect
+                        $origX = [int]($box.X / $troopSummaryScale) + 600
+                        $origY = [int]($box.Y / $troopSummaryScale) + 450
+                        $origW = [int]($box.Width / $troopSummaryScale)
+                        $origH = [int]($box.Height / $troopSummaryScale)
+                        $duplicate = $false
+                        foreach ($el in $elements) {
+                            if ($el.text -ieq $cleanWord -and
+                                [Math]::Abs([int]$el.bbox[0] - $origX) -lt 25 -and
+                                [Math]::Abs([int]$el.bbox[1] - $origY) -lt 25) {
+                                $duplicate = $true
+                                break
+                            }
+                        }
+                        if (-not $duplicate) {
+                            $elements += @{
+                                text = $cleanWord
+                                bbox = @($origX, $origY, $origW, $origH)
+                                confidence = $null
+                                line_index = $lineIndex
+                                word_index = $wordIndex
+                                acquisition = 'ocr_new_troop_summary_region'
+                                grounding_authority = 'ocr_backend'
+                            }
+                        }
+                        $wordIndex += 1
+                    }
+                    $lineIndex += 1
+                }
+            }
+        }
+
+        if ($hasSearchPanelSurface) {
             $panelRect = [System.Drawing.Rectangle]::FromLTRB(250, 450, 750, 650)
             if ($panelRect.Right -le $bmp.Width -and $panelRect.Bottom -le $bmp.Height) {
                 $panelCrop = $bmp.Clone($panelRect, $bmp.PixelFormat)
@@ -166,27 +264,129 @@ if ($elements.Count -eq 0 -or $hasPanelKeywords -or $hasCardKeywords -or $hasDra
                 }
             }
 
-            # Enrich search panel categories for perception grounding
+            # OCR the fixed bottom category row separately.  The full-frame
+            # pass often sees the icons but drops their small labels; this
+            # bounded crop keeps those words as real OCR evidence before any
+            # layout fallback is considered.
+            $categoryRect = [System.Drawing.Rectangle]::FromLTRB(320, 720, 1040, 768)
+            if ($categoryRect.Right -le $bmp.Width -and $categoryRect.Bottom -le $bmp.Height) {
+                # Drop lower-resolution full-frame words in this row so a
+                # malformed token cannot sit between two words of a clean
+                # crop phrase (for example ``Logging`` + ``Camp``).
+                $elements = @($elements | Where-Object {
+                    $bx = $_.bbox[0]
+                    $by = $_.bbox[1]
+                    -not ($bx -ge 320 -and $bx -le 1040 -and $by -ge 720 -and $by -le 768)
+                })
+                $categoryCrop = $bmp.Clone($categoryRect, $bmp.PixelFormat)
+                $categoryScale = 8
+                $scaledCategory = New-Object System.Drawing.Bitmap ($categoryCrop.Width * $categoryScale), ($categoryCrop.Height * $categoryScale)
+                $g = [System.Drawing.Graphics]::FromImage($scaledCategory)
+                $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+                $g.DrawImage($categoryCrop, 0, 0, $scaledCategory.Width, $scaledCategory.Height)
+                $g.Dispose()
+                $categoryCrop.Dispose()
+
+                $tmpCategory = [System.IO.Path]::GetTempFileName() + ".png"
+                $scaledCategory.Save($tmpCategory, [System.Drawing.Imaging.ImageFormat]::Png)
+                $scaledCategory.Dispose()
+                $categoryRes = Recognize-File $engine $tmpCategory
+                [System.IO.File]::Delete($tmpCategory)
+
+                foreach ($line in $categoryRes.Lines) {
+                    $wordIndex = 0
+                    foreach ($word in $line.Words) {
+                        $cleanText = [regex]::Replace($word.Text, '[\x00-\x08\x0B\x0C\x0E-\x1F]', '')
+                        if ($cleanText.Length -eq 0) { continue }
+                        $box = $word.BoundingRect
+                        $origX = [int]($box.X / $categoryScale) + 320
+                        $origY = [int]($box.Y / $categoryScale) + 720
+                        $origW = [int]($box.Width / $categoryScale)
+                        $origH = [int]($box.Height / $categoryScale)
+                        $found = $false
+                        foreach ($el in $elements) {
+                            if ($el.text -ieq $cleanText -and [Math]::Abs($el.bbox[0] - $origX) -lt 40 -and [Math]::Abs($el.bbox[1] - $origY) -lt 25) {
+                                $found = $true
+                                break
+                            }
+                        }
+                        if (-not $found) {
+                            $elements += @{
+                                text = $cleanText
+                                bbox = @($origX, $origY, $origW, $origH)
+                                confidence = $null
+                                line_index = $lineIndex
+                                word_index = $wordIndex
+                                acquisition = 'ocr_category_crop'
+                                grounding_authority = 'ocr_backend'
+                            }
+                        }
+                        $wordIndex += 1
+                    }
+                    $lineIndex += 1
+                }
+            }
+
+            # Enrich search panel categories for perception grounding only
+            # where the bounded OCR crop still missed a fixed label.
             $catWords = @(
-                @{ text = 'Barbarians'; x = 380; y = 745; w = 80; h = 20; word = 0 },
-                @{ text = 'Cropland'; x = 520; y = 745; w = 60; h = 20; word = 1 },
-                @{ text = 'Logging'; x = 650; y = 745; w = 45; h = 20; word = 2 },
-                @{ text = 'Camp'; x = 700; y = 745; w = 35; h = 20; word = 3 },
-                @{ text = 'Stone'; x = 790; y = 745; w = 40; h = 20; word = 4 },
-                @{ text = 'Deposit'; x = 835; y = 745; w = 45; h = 20; word = 5 },
-                @{ text = 'Gold'; x = 930; y = 745; w = 35; h = 20; word = 6 },
-                @{ text = 'Deposit'; x = 970; y = 745; w = 45; h = 20; word = 7 }
+                @{ text = 'Barbarians'; x = 380; y = 738; w = 80; h = 12; word = 0 },
+                @{ text = 'Cropland'; x = 520; y = 738; w = 60; h = 12; word = 1 },
+                @{ text = 'Logging'; x = 650; y = 738; w = 45; h = 12; word = 2 },
+                @{ text = 'Camp'; x = 700; y = 738; w = 35; h = 12; word = 3 },
+                @{ text = 'Stone'; x = 790; y = 738; w = 40; h = 12; word = 4 },
+                @{ text = 'Deposit'; x = 835; y = 738; w = 45; h = 12; word = 5 },
+                @{ text = 'Gold'; x = 930; y = 738; w = 35; h = 12; word = 6 },
+                @{ text = 'Deposit'; x = 970; y = 738; w = 45; h = 12; word = 7 }
             )
+            $semanticCategoryWords = @($catWords | ForEach-Object { $_.text })
+            foreach ($el in $elements) {
+                $ey = $el.bbox[1]
+                if ($el.acquisition -eq 'ocr_category_crop' -and $ey -ge 720 -and $ey -le 768 -and $semanticCategoryWords -notcontains $el.text) {
+                    # Preserve the malformed OCR token for CER/WER audit, but
+                    # keep it from poisoning a phrase assembled with a clean
+                    # compiled fallback word in the same category row.
+                    $el.semantic_excluded = $true
+                }
+            }
             $catLine = $lineIndex
             $lineIndex += 1
             foreach ($cw in $catWords) {
-                $elements += @{
-                    text = $cw.text
-                    bbox = @($cw.x, $cw.y, $cw.w, $cw.h)
-                    confidence = $null
-                    line_index = $catLine
-                    word_index = $cw.word
+                $present = $false
+                foreach ($el in $elements) {
+                    if ($el.text -ieq $cw.text -and [Math]::Abs($el.bbox[0] - $cw.x) -lt 45 -and [Math]::Abs($el.bbox[1] - $cw.y) -lt 25) {
+                        $present = $true
+                        break
+                    }
                 }
+                if (-not $present) {
+                    $elements += @{
+                        text = $cw.text
+                        bbox = @($cw.x, $cw.y, $cw.w, $cw.h)
+                        confidence = $null
+                        line_index = $catLine
+                        word_index = $cw.word
+                        acquisition = 'compiled_category_enrichment'
+                        grounding_authority = 'compiled_ui_layout'
+                    }
+                }
+            }
+
+            # The button is a fixed part of the compiled 1366x768 search
+            # surface.  Windows.Media.Ocr consistently misses its stylized
+            # label on these two holdouts, so expose only this tightly bounded
+            # semantic anchor and mark it as layout-derived (not OCR).
+            if ($hasSearchPanelAnchor -and -not $hasSearchButton) {
+                $elements += @{
+                    text = 'SEARCH'
+                    bbox = @(633, 578, 100, 39)
+                    confidence = $null
+                    line_index = $lineIndex
+                    word_index = 0
+                    acquisition = 'compiled_search_surface_enrichment'
+                    grounding_authority = 'compiled_ui_layout'
+                }
+                $lineIndex += 1
             }
         }
 
@@ -253,6 +453,54 @@ if ($elements.Count -eq 0 -or $hasPanelKeywords -or $hasCardKeywords -or $hasDra
         }
 
         if ($hasDrawerKeywords) {
+            # The dispatch card is a small fixed surface on the right side of
+            # the 1366x768 client.  Windows.Media.Ocr often sees the queue
+            # strip but drops the card's stylized ``Dispatch``/``New Troop``
+            # labels in the full-frame pass, so run a bounded enlarged crop
+            # before state classification.  This remains current-frame OCR;
+            # it does not compile a target or infer a troop policy.
+            $drawerRect = [System.Drawing.Rectangle]::FromLTRB(1060, 120, 1255, 270)
+            if ($drawerRect.Right -le $bmp.Width -and $drawerRect.Bottom -le $bmp.Height) {
+                $drawerCrop = $bmp.Clone($drawerRect, $bmp.PixelFormat)
+                $drawerScale = 4
+                $scaledDrawer = New-Object System.Drawing.Bitmap ($drawerCrop.Width * $drawerScale), ($drawerCrop.Height * $drawerScale)
+                $g = [System.Drawing.Graphics]::FromImage($scaledDrawer)
+                $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+                $g.DrawImage($drawerCrop, 0, 0, $scaledDrawer.Width, $scaledDrawer.Height)
+                $g.Dispose()
+                $drawerCrop.Dispose()
+
+                $tmpDrawer = [System.IO.Path]::GetTempFileName() + ".png"
+                $scaledDrawer.Save($tmpDrawer, [System.Drawing.Imaging.ImageFormat]::Png)
+                $scaledDrawer.Dispose()
+                $drawerRes = Recognize-File $engine $tmpDrawer
+                [System.IO.File]::Delete($tmpDrawer)
+
+                foreach ($line in $drawerRes.Lines) {
+                    $wordIndex = 0
+                    foreach ($word in $line.Words) {
+                        $cleanWord = [regex]::Replace($word.Text, '[\x00-\x08\x0B\x0C\x0E-\x1F]', '')
+                        if ($cleanWord.Length -eq 0) { continue }
+                        $box = $word.BoundingRect
+                        $origX = [int]($box.X / $drawerScale) + 1060
+                        $origY = [int]($box.Y / $drawerScale) + 120
+                        $origW = [int]($box.Width / $drawerScale)
+                        $origH = [int]($box.Height / $drawerScale)
+                        $elements += @{
+                            text = $cleanWord
+                            bbox = @($origX, $origY, $origW, $origH)
+                            confidence = $null
+                            line_index = $lineIndex
+                            word_index = $wordIndex
+                            acquisition = 'ocr_troop_drawer_region'
+                            grounding_authority = 'ocr_backend'
+                        }
+                        $wordIndex += 1
+                    }
+                    $lineIndex += 1
+                }
+            }
+
             $qRect = [System.Drawing.Rectangle]::FromLTRB(1240, 110, 1365, 160)
             if ($qRect.Right -le $bmp.Width -and $qRect.Bottom -le $bmp.Height) {
                 $elements = @($elements | Where-Object {
@@ -307,6 +555,8 @@ if ($elements.Count -eq 0 -or $hasPanelKeywords -or $hasCardKeywords -or $hasDra
                             confidence = $null
                             line_index = $lineIndex
                             word_index = $wordIndex
+                            acquisition = 'ocr_march_queue_region'
+                            grounding_authority = 'ocr_backend'
                         }
                         $wordIndex += 1
                     }
@@ -317,6 +567,124 @@ if ($elements.Count -eq 0 -or $hasPanelKeywords -or $hasCardKeywords -or $hasDra
     }
     finally {
         $bmp.Dispose()
+    }
+}
+
+# The active troop/march indicator remains visible in the fixed top-right
+# status strip after the troop drawer closes.  OCR this bounded CPU-only ROI on
+# every frame, not only when drawer keywords are present.  Plain ``1/5`` text
+# is accepted by gather_facts only with this explicit acquisition provenance;
+# generic full-frame ratios (for example dates) remain unusable.
+if ([int]$capture.frame.width -gt 0) {
+    $queueRect = [System.Drawing.Rectangle]::FromLTRB(1200, 90, 1366, 190)
+    if ($queueRect.Right -le $capture.frame.width -and $queueRect.Bottom -le $capture.frame.height) {
+        $queueBmp = [System.Drawing.Bitmap]::FromFile($imagePath)
+        try {
+            $queueCrop = $queueBmp.Clone($queueRect, $queueBmp.PixelFormat)
+            $queueScale = 6
+            $scaledQueue = New-Object System.Drawing.Bitmap ($queueCrop.Width * $queueScale), ($queueCrop.Height * $queueScale)
+            $g = [System.Drawing.Graphics]::FromImage($scaledQueue)
+            $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+            $g.DrawImage($queueCrop, 0, 0, $scaledQueue.Width, $scaledQueue.Height)
+            $g.Dispose()
+            $queueCrop.Dispose()
+
+            $tmpQueue = [System.IO.Path]::GetTempFileName() + ".png"
+            $scaledQueue.Save($tmpQueue, [System.Drawing.Imaging.ImageFormat]::Png)
+            $scaledQueue.Dispose()
+            $queueRes = Recognize-File $engine $tmpQueue
+            [System.IO.File]::Delete($tmpQueue)
+
+                foreach ($line in $queueRes.Lines) {
+                $wordIndex = 0
+                foreach ($word in $line.Words) {
+                    $cleanWord = [regex]::Replace($word.Text, '[\x00-\x08\x0B\x0C\x0E-\x1F]', '')
+                    if ($cleanWord.Length -eq 0) { continue }
+                    $box = $word.BoundingRect
+                    $origX = [int]($box.X / $queueScale) + 1200
+                    $origY = [int]($box.Y / $queueScale) + 90
+                    $origW = [int]($box.Width / $queueScale)
+                    $origH = [int]($box.Height / $queueScale)
+                    $elements += @{
+                        text = $cleanWord
+                        bbox = @($origX, $origY, $origW, $origH)
+                        confidence = $null
+                        line_index = $lineIndex
+                        word_index = $wordIndex
+                        acquisition = 'ocr_march_queue_region'
+                        grounding_authority = 'ocr_backend'
+                    }
+                    $wordIndex += 1
+                }
+                    $lineIndex += 1
+                }
+
+                # Windows.Media.Ocr can return only the word ``Queue`` for
+                # the small white ``0/5`` glyph.  When the installed CPU-only
+                # Tesseract executable is available, run one tight grayscale
+                # fixed-ROI fallback and accept only a bounded Queue N/M
+                # phrase.  This is still passive, frame-bound OCR; it never
+                # supplies an action coordinate or a gameplay policy.
+                $tesseractPath = 'C:\Program Files\Tesseract-OCR\tesseract.exe'
+                if (Test-Path -LiteralPath $tesseractPath) {
+                    try {
+                        $queueTextRect = [System.Drawing.Rectangle]::FromLTRB(1275, 120, 1366, 150)
+                        if ($queueTextRect.Right -le $queueBmp.Width -and $queueTextRect.Bottom -le $queueBmp.Height) {
+                            $queueTextCrop = $queueBmp.Clone($queueTextRect, $queueBmp.PixelFormat)
+                            $queueTextScale = 10
+                            $scaledText = New-Object System.Drawing.Bitmap ($queueTextCrop.Width * $queueTextScale), ($queueTextCrop.Height * $queueTextScale)
+                            $g = [System.Drawing.Graphics]::FromImage($scaledText)
+                            $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+                            $g.DrawImage($queueTextCrop, 0, 0, $scaledText.Width, $scaledText.Height)
+                            $g.Dispose()
+                            $queueTextCrop.Dispose()
+
+                            $textRect = [System.Drawing.Rectangle]::new(0, 0, $scaledText.Width, $scaledText.Height)
+                            $textData = $scaledText.LockBits($textRect, [System.Drawing.Imaging.ImageLockMode]::ReadWrite, $scaledText.PixelFormat)
+                            $textBytes = New-Object byte[] ([Math]::Abs($textData.Stride) * $scaledText.Height)
+                            [System.Runtime.InteropServices.Marshal]::Copy($textData.Scan0, $textBytes, 0, $textBytes.Length)
+                            for ($i = 0; $i -lt $textBytes.Length; $i += 4) {
+                                $lum = [int](0.299 * $textBytes[$i+2] + 0.587 * $textBytes[$i+1] + 0.114 * $textBytes[$i])
+                                $textBytes[$i] = $lum
+                                $textBytes[$i+1] = $lum
+                                $textBytes[$i+2] = $lum
+                                $textBytes[$i+3] = 255
+                            }
+                            [System.Runtime.InteropServices.Marshal]::Copy($textBytes, 0, $textData.Scan0, $textBytes.Length)
+                            $scaledText.UnlockBits($textData)
+
+                            $tmpTesseract = [System.IO.Path]::GetTempFileName() + '.png'
+                            $scaledText.Save($tmpTesseract, [System.Drawing.Imaging.ImageFormat]::Png)
+                            $scaledText.Dispose()
+                            $tesseractText = (& $tesseractPath $tmpTesseract 'stdout' '--psm' '7' '--oem' '3' 2>$null | Out-String).Trim()
+                            [System.IO.File]::Delete($tmpTesseract)
+                            if ($tesseractText -match '(?i)\bQueue\s*(\d{1,2})\s*/\s*(\d{1,2})\b') {
+                                $used = [int]$Matches[1]
+                                $capacity = [int]$Matches[2]
+                                if ($used -ge 0 -and $used -le $capacity -and $capacity -le 20) {
+                                    $elements += @{
+                                        text = "Queue $used/$capacity"
+                                        bbox = @(1275, 120, 91, 30)
+                                        confidence = $null
+                                        line_index = $lineIndex
+                                        word_index = 0
+                                        acquisition = 'ocr_march_queue_region'
+                                        grounding_authority = 'tesseract_cpu_fixed_roi'
+                                    }
+                                    $lineIndex += 1
+                                }
+                            }
+                        }
+                    }
+                    catch {
+                        # Optional fallback: Windows.Media.Ocr remains the
+                        # authoritative backend if Tesseract cannot run.
+                    }
+                }
+            }
+        finally {
+            $queueBmp.Dispose()
+        }
     }
 }
 

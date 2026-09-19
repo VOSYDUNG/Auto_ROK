@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "measurement_class": "game_field_reconnaissance",
+  "status": "planned",
+  "target": {
+    "app_title": "Rise of Kingdoms",
+    "process": "MASS.exe",
+    "profile": "1366x768-client",
+    "execution": "direct_windows_host_cpu_ram_only"
+  },
+  "survey_rules": {
+    "one_bounded_pass": true,
+    "capture_every_state": true,
+    "capture_metadata_required": true,
+    "input_allowed": "safe_navigation_only",
+    "prohibited_actions": [
+      "MARCH",
+      "spend_resources",
+      "use_speedup",
+      "change_account_or_character",
+      "send_chat_or_submit_form",
+      "delete_or_release_game_state"
+    ],
+    "unobserved_policy": "UNKNOWN_STATE_OR_NEEDS_DECISION"
+  },
+  "required_fields": [
+    "state_id",
+    "capture_path",
+    "capture_frame_id",
+    "image_sha256",
+    "captured_at",
+    "client_geometry",
+    "visible_labels",
+    "landmarks_and_rois",
+    "safe_entry",
+    "safe_exit",
+    "observed_transitions",
+    "side_effects",
+    "unknowns",
+    "confidence"
+  ],
+  "states": [
+    {
+      "state_id": "LAUNCH_OR_SETTLED",
+      "label": "Launch/login settled client",
+      "safe_entry": "observe existing visible client",
+      "safe_exit": "no-op or close transient safe dialog",
+      "required_landmarks": ["title_or_city_anchor", "client_bounds"]
+    },
+    {
+      "state_id": "CITY_VIEW",
+      "label": "City view",
+      "safe_entry": "settled client",
+      "safe_exit": "open world map control or close safe panel",
+      "required_landmarks": ["city_anchor", "top_bar", "bottom_navigation"]
+    },
+    {
+      "state_id": "WORLD_MAP_VIEW",
+      "label": "World map",
+      "safe_entry": "city map control",
+      "safe_exit": "open search or return to city",
+      "required_landmarks": ["map_canvas", "search_control", "back_control"]
+    },
+    {
+      "state_id": "RESOURCE_SEARCH_PANEL",
+      "label": "Resource search panel",
+      "safe_entry": "world map search",
+      "safe_exit": "close without confirming a march",
+      "required_landmarks": ["resource_type", "resource_level", "search_button", "close_button"]
+    },
+    {
+      "state_id": "RESOURCE_NODE_DETAIL",
+      "label": "Visible resource node detail",
+      "safe_entry": "select a visible node only",
+      "safe_exit": "close detail without MARCH",
+      "required_landmarks": ["node_type", "node_level", "gather_control", "close_control"]
+    },
+    {
+      "state_id": "TROOP_DRAWER",
+      "label": "Troop/commander selection drawer",
+      "safe_entry": "open gather detail selection panel",
+      "safe_exit": "close drawer without confirming",
+      "required_landmarks": ["commander_selection", "troop_count", "queue_counter", "close_control"]
+    },
+    {
+      "state_id": "RESOURCE_LEVEL_CONTROL",
+      "label": "Resource level control",
+      "safe_entry": "observe the visible slider or level choices",
+      "safe_exit": "restore prior selection without dispatch",
+      "required_landmarks": ["track", "level_anchors", "selected_level"]
+    },
+    {
+      "state_id": "MARCH_CONFIRMATION",
+      "label": "March confirmation surface",
+      "safe_entry": "observe only if already visible",
+      "safe_exit": "cancel/close without confirming MARCH",
+      "required_landmarks": ["confirmation_text", "cancel_control", "march_control"]
+    },
+    {
+      "state_id": "QUEUE_AND_POST_ACTION",
+      "label": "March queue and post-action observation",
+      "safe_entry": "observe existing queue only",
+      "safe_exit": "return to safe city/map view",
+      "required_landmarks": ["queue_counter", "same_character_identity", "fresh_frame_boundary"]
+    },
+    {
+      "state_id": "RECOVERY_OR_UNKNOWN",
+      "label": "Delayed transition, modal or unknown state",
+      "safe_entry": "observe any transient state encountered",
+      "safe_exit": "wait/reobserve or operator decision",
+      "required_landmarks": ["reason_for_unknown", "stale_or_fresh_frame", "safe_cancel_path"]
+    }
+  ]
+}

@@ -7,8 +7,13 @@ schema_version: 3
 
 game:
   name: "Rise of Kingdoms"
-  reset_timezone: null
-  supported_window_profiles: []
+  reset_timezone: "UTC"
+  supported_window_profiles:
+    - id: ROK_DAILY_RESET
+      reset_at: "00:00"
+      display_timezone: "Asia/Ho_Chi_Minh"
+      status: training
+      source: human_training
 
 knowledge_sources:
   precedence:

@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "status": "screening_cases",
+  "measurement_class": "real_rok_search_panel_intent_matrix_replay",
+  "cases": [
+    {"id": "level2-food", "capture_meta": "workspace/runs/b002_test_level2/capture.json", "ocr": "workspace/runs/b002_test_level2/ocr-recheck-20260918.json", "image": "workspace/runs/b002_test_level2/rok-client.png", "resource_type": "FOOD"},
+    {"id": "level2-wood", "capture_meta": "workspace/runs/b002_test_level2/capture.json", "ocr": "workspace/runs/b002_test_level2/ocr-recheck-20260918.json", "image": "workspace/runs/b002_test_level2/rok-client.png", "resource_type": "WOOD"},
+    {"id": "level2-stone", "capture_meta": "workspace/runs/b002_test_level2/capture.json", "ocr": "workspace/runs/b002_test_level2/ocr-recheck-20260918.json", "image": "workspace/runs/b002_test_level2/rok-client.png", "resource_type": "STONE"},
+    {"id": "level2-gold", "capture_meta": "workspace/runs/b002_test_level2/capture.json", "ocr": "workspace/runs/b002_test_level2/ocr-recheck-20260918.json", "image": "workspace/runs/b002_test_level2/rok-client.png", "resource_type": "GOLD"},
+    {"id": "level4-food", "capture_meta": "workspace/runs/b002_test_level4/capture.json", "ocr": "workspace/runs/b002_test_level4/ocr-recheck-20260918.json", "image": "workspace/runs/b002_test_level4/rok-client.png", "resource_type": "FOOD"},
+    {"id": "level4-wood", "capture_meta": "workspace/runs/b002_test_level4/capture.json", "ocr": "workspace/runs/b002_test_level4/ocr-recheck-20260918.json", "image": "workspace/runs/b002_test_level4/rok-client.png", "resource_type": "WOOD"},
+    {"id": "level4-stone", "capture_meta": "workspace/runs/b002_test_level4/capture.json", "ocr": "workspace/runs/b002_test_level4/ocr-recheck-20260918.json", "image": "workspace/runs/b002_test_level4/rok-client.png", "resource_type": "STONE"},
+    {"id": "level4-gold", "capture_meta": "workspace/runs/b002_test_level4/capture.json", "ocr": "workspace/runs/b002_test_level4/ocr-recheck-20260918.json", "image": "workspace/runs/b002_test_level4/rok-client.png", "resource_type": "GOLD"},
+    {"id": "after1-food", "capture_meta": "workspace/runs/b002_after_click_lvl1/capture.json", "ocr": "workspace/runs/b002_after_click_lvl1/ocr-recheck-20260918.json", "image": "workspace/runs/b002_after_click_lvl1/rok-client.png", "resource_type": "FOOD"},
+    {"id": "after1-wood", "capture_meta": "workspace/runs/b002_after_click_lvl1/capture.json", "ocr": "workspace/runs/b002_after_click_lvl1/ocr-recheck-20260918.json", "image": "workspace/runs/b002_after_click_lvl1/rok-client.png", "resource_type": "WOOD"},
+    {"id": "after1-stone", "capture_meta": "workspace/runs/b002_after_click_lvl1/capture.json", "ocr": "workspace/runs/b002_after_click_lvl1/ocr-recheck-20260918.json", "image": "workspace/runs/b002_after_click_lvl1/rok-client.png", "resource_type": "STONE"},
+    {"id": "after1-gold", "capture_meta": "workspace/runs/b002_after_click_lvl1/capture.json", "ocr": "workspace/runs/b002_after_click_lvl1/ocr-recheck-20260918.json", "image": "workspace/runs/b002_after_click_lvl1/rok-client.png", "resource_type": "GOLD"},
+    {"id": "after3-food", "capture_meta": "workspace/runs/b002_after_click_lvl3/capture.json", "ocr": "workspace/runs/b002_after_click_lvl3/ocr-recheck-20260918.json", "image": "workspace/runs/b002_after_click_lvl3/rok-client.png", "resource_type": "FOOD"},
+    {"id": "after3-wood", "capture_meta": "workspace/runs/b002_after_click_lvl3/capture.json", "ocr": "workspace/runs/b002_after_click_lvl3/ocr-recheck-20260918.json", "image": "workspace/runs/b002_after_click_lvl3/rok-client.png", "resource_type": "WOOD"},
+    {"id": "after3-stone", "capture_meta": "workspace/runs/b002_after_click_lvl3/capture.json", "ocr": "workspace/runs/b002_after_click_lvl3/ocr-recheck-20260918.json", "image": "workspace/runs/b002_after_click_lvl3/rok-client.png", "resource_type": "STONE"},
+    {"id": "after3-gold", "capture_meta": "workspace/runs/b002_after_click_lvl3/capture.json", "ocr": "workspace/runs/b002_after_click_lvl3/ocr-recheck-20260918.json", "image": "workspace/runs/b002_after_click_lvl3/rok-client.png", "resource_type": "GOLD"}
+  ]
+}

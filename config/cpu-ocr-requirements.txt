@@ -1,0 +1,6 @@
+# Optional CPU-only fixed-ROI OCR path.
+# The default Windows.Media.Ocr observation path does not require this file.
+-r observation-requirements.txt
+PyYAML==6.0.3
+rapidocr-onnxruntime==1.4.4
+onnxruntime==1.30.0

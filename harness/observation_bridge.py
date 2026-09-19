@@ -168,6 +168,7 @@ def project_observation(
 
     evidence: list[Evidence] = []
     normalized: list[tuple[str, BoundingBox, float | None, int]] = []
+    metadata_by_index: dict[int, dict[str, Any]] = {}
     crop_x, crop_y, crop_width, crop_height = crop
     for index, item in enumerate(elements):
         _need(isinstance(item, Mapping) and isinstance(item.get("text"), str), f"OCR element {index} text is invalid")
@@ -191,6 +192,14 @@ def project_observation(
                     "source_coordinate_space": "ocr_crop_pixels", "coordinate_space": "client_pixels",
                     "ocr_element_index": index, "raw_confidence": confidence_raw,
                     "confidence_known": confidence is not None}
+        for key in ("acquisition", "grounding_authority", "semantic_excluded"):
+            value = item.get(key)
+            if key == "semantic_excluded":
+                if value is True:
+                    metadata[key] = True
+            elif isinstance(value, str) and value:
+                metadata[key] = value
+        metadata_by_index[index] = metadata
         evidence.append(Evidence("ocr", item["text"], confidence or 0.0, bbox, item["text"], metadata))
         normalized.append((item["text"], bbox, confidence, index))
 
@@ -206,10 +215,14 @@ def project_observation(
                               "match_count": len(matches)})
             continue
         label, bbox, confidence, index = matches[0]
+        target_metadata = {"frame_id": frame_id, "image_sha256": digest,
+                           "detector": dict(ocr_backend), "ocr_element_index": index,
+                           "calibrated_anchor": False}
+        for key in ("acquisition", "grounding_authority", "semantic_excluded"):
+            if key in metadata_by_index.get(index, {}):
+                target_metadata[key] = metadata_by_index[index][key]
         targets.append(VisualTarget(spec.target_id, frame_id, label, bbox, float(confidence), "ocr",
-                                    {"frame_id": frame_id, "image_sha256": digest,
-                                     "detector": dict(ocr_backend), "ocr_element_index": index,
-                                     "calibrated_anchor": False}))
+                                    target_metadata))
 
     facts = {"image_sha256": digest, "captured_at": captured_at.isoformat(),
              "window": {"title": target["title"], "exe": target["exe"], "hwnd": target["hwnd"], "pid": target["pid"]},

@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from harness.action_surface import ActionRequest
 from harness.contracts import Evidence, Observation
@@ -16,19 +17,24 @@ CONTEXT = MissionContext("GATHER_RESOURCE", "one-character", "run-level")
 
 
 class FakeProvider:
+    def __init__(self, window_size=(1000, 500), client_screen_rect=(100, 200, 1100, 700)):
+        self.window_size = window_size
+        self.client_screen_rect = client_screen_rect
+
     def observe(self, context):
         observation = Observation(
             1.0,
             "f1",
-            (1000, 500),
+            self.window_size,
             (
                 Evidence("ocr", "SEARCH", 0.0, value="SEARCH", metadata={"frame_id": "f1"}),
                 Evidence("ocr", "Cropland", 0.0, value="Cropland", metadata={"frame_id": "f1"}),
+                Evidence("ocr", "Level:", 0.0, value="Level:", metadata={"frame_id": "f1"}),
             ),
         )
         return ObservationBundle(
             observation,
-            SceneGraph("f1", None, (), {"client_screen_rect": [100, 200, 1100, 700]}),
+            SceneGraph("f1", None, (), {"client_screen_rect": list(self.client_screen_rect)}),
         )
 
 
@@ -122,3 +128,25 @@ def test_typed_surface_rejects_out_of_range_level(tmp_path):
         assert "outside the trained control range" in str(exc)
     else:
         raise AssertionError("out-of-range level must fail closed")
+
+
+def test_production_profile_maps_observed_level_handles_to_live_client_points():
+    profile_path = Path(__file__).resolve().parents[1] / "config" / "resource_level_profile.json"
+    profile = ResourceLevelProfile.load(profile_path)
+    bundle = ResourceLevelControlObservationProvider(
+        FakeProvider(window_size=(1366, 768), client_screen_rect=(0, 0, 1366, 768)),
+        profile,
+    ).observe(CONTEXT)
+    surface = GatherScreenMappedActionSurface({}, min_target_confidence=0.90)
+
+    points = []
+    for level in (1, 3, 6):
+        resolved = surface.resolve(
+            ActionRequest("SET_RESOURCE_LEVEL", "SEARCH_LEVEL_CONTROL", {"resource_level": level}),
+            scene=bundle.scene,
+        )
+        points.append(resolved.point)
+
+    # The persisted training frames show handle centres at x=459, 505, 575;
+    # y=546 is the vertical centre of the observed control.
+    assert points == [(459, 546), (505, 546), (575, 546)]

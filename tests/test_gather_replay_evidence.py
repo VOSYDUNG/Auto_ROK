@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import patch
 
 from harness.gather_replay_evidence import (
     build_gather_tick_evidence,
@@ -88,6 +89,15 @@ def valid_record():
         character_id="char-a",
         result=result,
         live_armed=True,
+        host_input_isolation={
+            "provided": True,
+            "ready": True,
+            "evidence_id": "host-r2-01",
+            "session_id": "windows-session-01",
+            "environment": "windows_host_direct",
+            "run_id": "run-replay",
+            "reasons": [],
+        },
         policy_approval={
             "approval_id": "approval-1",
             "bound_to_occurrence": True,
@@ -162,3 +172,16 @@ def test_tick_evidence_persistence_is_append_only_per_invocation(tmp_path: Path)
     loaded = load_gather_replay_records(first.parent)
     assert len(loaded) == 2
     assert all(item["identity"]["run_id"] == "run-replay" for item in loaded)
+
+
+def test_tick_evidence_timestamp_collision_cannot_overwrite(tmp_path: Path):
+    record = valid_record()
+    with patch("harness.gather_replay_evidence.time.time_ns", return_value=123):
+        first = save_gather_tick_evidence(tmp_path, record)
+        try:
+            save_gather_tick_evidence(tmp_path, record)
+        except FileExistsError:
+            pass
+        else:
+            raise AssertionError("timestamp collision overwrote append-only evidence")
+    assert first.exists()

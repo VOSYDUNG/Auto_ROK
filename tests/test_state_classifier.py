@@ -42,6 +42,24 @@ def test_queue_pattern_does_not_accept_arbitrary_text() -> None:
     assert result.state_id == UNKNOWN_STATE
 
 
+def test_drawer_queue_roi_anchor_is_enough_to_reach_next_guarded_action() -> None:
+    values = (
+        Evidence("ocr", "Dispatch a new troop from your city", 0.0, value="Dispatch a new troop from your city", metadata={"frame_id": FRAME}),
+        Evidence("ocr", "New Troop", 0.0, value="New Troop", metadata={"frame_id": FRAME}),
+        Evidence(
+            "ocr",
+            "Queue",
+            0.0,
+            value="Queue",
+            metadata={"frame_id": FRAME, "acquisition": "ocr_march_queue_region"},
+        ),
+    )
+    result = StateClassifier().classify(
+        Observation(1.0, FRAME, (1280, 720), values)
+    )
+    assert result.state_id == "TROOP_DISPATCH_DRAWER"
+
+
 def test_missing_evidence_is_unknown() -> None:
     result = StateClassifier().classify(observed("Resource Point"))
     assert result.state_id == UNKNOWN_STATE

@@ -1,0 +1,53 @@
+schema_version: 1
+profile_id: rok-client-1366x768-cpu-v1
+coordinate_space: client_pixels_reference
+reference_client_size: [1366, 768]
+aspect_ratio_tolerance: 0.02
+processing_backend:
+  name: opencv
+  device: cpu
+  allow_opencl: false
+  allow_cuda: false
+
+# These rectangles are processing windows only.  They are relative to the
+# current ROK client frame and must never be used as action coordinates.
+regions:
+  signature_canvas:
+    rect: [109, 61, 1148, 614]
+    purpose: "low-resolution CITY_VIEW/WORLD_MAP_VIEW visual signature"
+  top_resource_bar:
+    rect: [0, 0, 1366, 64]
+    purpose: "resource counters and profile identity OCR"
+  march_queue_indicator:
+    rect: [1240, 110, 125, 50]
+    purpose: "bounded OCR for the visible active-march queue indicator"
+  left_quest_panel:
+    rect: [0, 64, 190, 470]
+    purpose: "quest and task text OCR"
+  center_canvas:
+    rect: [190, 64, 1086, 556]
+    purpose: "central game scene visual processing"
+  bottom_action_bar:
+    rect: [900, 620, 466, 148]
+    purpose: "navigation/action icon visual processing"
+  # Fixed single-line label ROIs.  These are processing windows only, never
+  # action coordinates.  RapidOCR's experiment backend consumes them through
+  # the same profile so crop provenance cannot drift from the harness map.
+  resource_category_barbarians:
+    rect: [350, 732, 105, 24]
+    purpose: "fixed CPU OCR label crop for the Barbarians search category"
+  resource_category_cropland:
+    rect: [500, 732, 105, 24]
+    purpose: "fixed CPU OCR label crop for the Cropland search category"
+  resource_category_logging_camp:
+    rect: [625, 732, 125, 24]
+    purpose: "fixed CPU OCR label crop for the Logging Camp search category"
+  resource_category_stone_deposit:
+    rect: [770, 732, 135, 24]
+    purpose: "fixed CPU OCR label crop for the Stone Deposit search category"
+  resource_category_gold_deposit:
+    rect: [915, 732, 140, 24]
+    purpose: "fixed CPU OCR label crop for the Gold Deposit search category"
+  chat_log:
+    rect: [0, 650, 320, 118]
+    purpose: "chat text excluded from state classification"

@@ -1,5 +1,11 @@
 # G002 — Plan / Design brief / SRS / Spec / User stories
 
+> **Current scope override (2026-09-18):** Auto_ROK runs directly on one
+> physical Windows machine with one user. Docker, VM and Hyper-V are not
+> product prerequisites or acceptance targets. The guest references below are
+> historical feasibility material only; the active input gate is
+> `docs/HOST_INPUT_ISOLATION.md`.
+
 Source of truth: GOAL.md + PRD.md. This is an execution handoff, not evidence that later stages are implemented. Root/user decide scope and acceptance; agents implement. Max2 children; local1 slot; each package at most2 diagnosed repair attempts.
 
 ## Design brief
@@ -16,10 +22,10 @@ The main distinction shown to the user is observation vs suggestion vs verified 
 | Observation | frame ID/hash, source path, captured_at nullable, ingested_at, dimensions, OCR text+bbox, detector observations, confidence nullable |
 | Model allocation | requested/effective model/effort, context cap, endpoint capability evidence, autonomy, permission scope |
 | Proposal | answer/ask/observe/action intent, rationale, evidence IDs, expected postcondition; schema valid does not grant execution |
-| Action | guest binding, observation version, allowlist, expiry, idempotency key, pre/post evidence |
+| Action | direct-host binding, observation version, allowlist, expiry, idempotency key, pre/post evidence |
 | Session | ordered events, task/session/run IDs, failures, bounded history, usage fields nullable, independent verification result |
 
-Images and source content cannot set policy or invoke tools. Guest control must reject host ID, unknown session, stale/ambiguous frames, unsupported operations and cancellation. Reobserving a disk image must not refresh its original capture time.
+Images and source content cannot set policy or invoke tools. Direct-host control must reject unknown session, stale/ambiguous frames, unsupported operations and cancellation. Reobserving a disk image must not refresh its original capture time.
 
 ## Implementation packages
 
@@ -29,7 +35,7 @@ Images and source content cannot set policy or invoke tools. Guest control must 
 
 **P3 — Local canary.** After P1 review, builder runs one no-action observation session against the existing loopback endpoint, with budget/reasoning configuration and full failure record. Capture input class: ROK real / non-ROK real / synthetic. Only ROK real contributes to R1 acceptance. No account quota attribution from shared snapshots.
 
-**P4 — Windows guest feasibility.** Scout reads current host edition, VT/SLAT, hypervisor inventory, GPU/driver, free RAM/disk and ROK deployment requirements. Output is a concrete guest configuration proposal with resource budget, graphics uncertainty, software/license needs, rollback and commands; user reviews before host feature changes/reboot. Acceptance requires real ROK render and input isolation evidence, not merely successful VM boot. Then builder implements capture/control bridge within the guest.
+**P4 — Windows guest feasibility (historical, out of product scope).** Retained only as archived feasibility material. It must not trigger host feature changes, reboot, VM setup or a product gate. The active builder path is direct-host capture/control with `windows_host_direct` evidence.
 
 **P5 — Workflow.** Builder replaces legacy fixed-coordinate assumptions with frame-bound state machine for one resource workflow. Reuse algorithm intent, not import-time legacy input code. Stages detect → choose → act → verify, unknown state → ask/recover. Reviewer checks postconditions and restart/cancel. Account switching is separate scope after one-character workflow acceptance.
 
@@ -37,12 +43,24 @@ Images and source content cannot set policy or invoke tools. Guest control must 
 
 ## User stories and acceptance examples
 
+The local-worker-specific contract is defined in
+[`LOCAL_LLM_USER_STORIES.md`](LOCAL_LLM_USER_STORIES.md).  These stories keep
+the model as a bounded decision edge while the harness owns evidence,
+grounding, policy, input and verification.
+
 - As owner, I ask what is visible in an image: answer cites OCR/vision evidence and distinguishes uncertainty; non-ROK image is not fabricated into a ROK screen.
 - As owner, I ask a follow-up: session refers to the same frame, does not invent fresher capture; missing target blocks action.
-- As desktop user, I continue typing while the agent works in a guest: no host pointer movement, focus change or injected keys attributable to the agent.
+- As desktop user, I hand the foreground to ROK for one bounded action window: no unapproved pointer movement, focus change or injected keys are accepted, and the harness stops on stale or ambiguous evidence.
 - As operator, I cancel and later resume: no new action after cancel, fresh observation before resume, no duplicate action from an ambiguous prior result.
 - As budget owner, I see failed runs and reasoning tokens where provided: no invented zero costs, no cloud call on timeout without allocated permission.
 
 ## Production gate
 
-PRD R1–R4 and reviewer evidence must pass before calling tier1 production-ready. No guest and no ROK image corpus means useful observer prototype only. Robotics remains tier2 after tier1 acceptance.
+PRD R1–R4 and reviewer evidence must pass before calling tier1 production-ready. A missing direct-host trace or ROK image corpus means useful observer prototype only. Robotics remains tier2 after tier1 acceptance.
+# Superseded scope note
+
+The historical G002 feasibility plan below mentions a Windows guest. The
+current Auto_ROK product scope is direct execution on one physical Windows
+machine with one user; Docker/VM/Hyper-V are not prerequisites or acceptance
+targets. Use `docs/HOST_INPUT_ISOLATION.md` and the direct-host R2 artifacts for
+the current action gate.

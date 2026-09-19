@@ -121,3 +121,26 @@ def test_phrase_assembly_keeps_words_on_different_lines_separate():
     )
     enriched = OcrSemanticObservationProvider(One(bundle)).observe(CONTEXT)
     assert "New Troop" not in {item.label for item in enriched.observation.evidence}
+
+
+def test_semantic_excluded_ocr_tokens_remain_audit_evidence_but_do_not_join_phrases():
+    excluded = word("f1", "Lcg=.ng", 10, 10, 55, 30, 0)
+    excluded = Evidence(
+        excluded.source,
+        excluded.label,
+        excluded.confidence,
+        excluded.bbox,
+        excluded.value,
+        {**excluded.metadata, "semantic_excluded": True},
+    )
+    bundle = make_bundle(
+        excluded,
+        word("f1", "Logging", 60, 10, 110, 30, 1),
+        word("f1", "Camp", 115, 10, 155, 30, 2),
+    )
+    enriched = OcrSemanticObservationProvider(
+        One(bundle),
+        (OcrTargetSpec("WOOD", ("Logging Camp",), allow_unscored_exact=True),),
+    ).observe(CONTEXT)
+    assert any(item.label == "Lcg=.ng" for item in enriched.observation.evidence)
+    assert enriched.scene.target("WOOD", allow_unscored_exact=True) is not None

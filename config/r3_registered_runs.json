@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "status": "pending_runs",
+  "measurement_class": "r3_live_gather_repetition",
+  "contract": {
+    "mission_id": "GATHER_RESOURCE",
+    "task_id": "one-character",
+    "character_id": "char-direct-01",
+    "required_runs": 10,
+    "minimum_successes": 9,
+    "required_queue_delta": 1,
+    "require_live_armed": true,
+    "require_occurrence_bound_approval": true,
+    "require_non_interference": true
+  },
+  "runs": [
+    {
+      "run_id": "gather-admin-20260918-02",
+      "evidence_path": "workspace/evidence/gather/gather-054e1be092ffb2cbc270/revision-000012-1789734216546654200.json",
+      "registered_at": "2026-09-19T00:00:00+07:00",
+      "notes": "Existing current occurrence; counted as the first registered run only."
+    },
+    {
+      "run_id": "gather-admin-20260919-03",
+      "evidence_path": "workspace/evidence/gather/gather-e9f395858e63a2dcb7d0/revision-000005-1789780669952972900.json",
+      "registered_at": "2026-09-19T08:17:49+07:00",
+      "notes": "Live direct-host occurrence; queue 0->1, VERIFIED MARCH receipt, occurrence-bound approval, host isolation ready."
+    }
+  ]
+}

@@ -1,17 +1,22 @@
 {
   "schema_version": 1,
-  "enabled": false,
+  "enabled": true,
   "provider": "local-openai-compatible",
   "endpoint": "http://127.0.0.1:8080/v1",
   "model": "gpt-oss-20b",
   "alternatives": [
     "qwen3-coder-30b"
   ],
-  "timeout_seconds": 8,
-  "max_output_tokens": 128,
+  "timeout_seconds": 60,
+  "max_output_tokens": 512,
   "temperature": 0,
   "reasoning_budget_ratio": 0.2,
   "role": "bounded_action_selector",
+  "service_mode": "always_on_observer",
+  "mission_intake": "harness_escalation_only",
+  "dispatch_authority": "harness",
+  "idle_without_request": true,
+  "cpu_only": true,
   "input_contract": [
     "mission_id",
     "task_id",

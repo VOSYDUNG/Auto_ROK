@@ -1,6 +1,6 @@
 schema_version: 1
 graph_id: AUTO_ROK_GATHER_VERTICAL_SLICE
-updated_at: "2026-09-15"
+updated_at: "2026-09-19"
 
 principles:
   - deterministic_first
@@ -13,9 +13,13 @@ principles:
 roots:
   - mission_contract
   - live_capture
+  - mission_timeline
 
 required_runtime_path:
   - mission_contract
+  - mission_timeline
+  - mission_knowledge_store
+  - mission_scheduler
   - mission_compiler
   - live_capture
   - windows_ocr
@@ -42,6 +46,83 @@ required_runtime_path:
   - gather_runtime_evidence
 
 nodes:
+  - id: mission_layer_config
+    kind: config
+    responsibility: Declares data-driven mission/task cadences, reset boundary, risk and local-LLM ownership policy.
+    authority: canonical
+    status: implemented
+    path: config/mission_layer.yaml
+    evidence:
+      - tests/test_mission_timeline.py
+      - docs/MISSION_LAYER_DESIGN.md
+
+  - id: mission_timeline
+    kind: orchestration
+    responsibility: Derives daily, interval, event-window and continuous task signals from fresh semantic facts without fixed sleeps.
+    authority: canonical
+    status: implemented
+    path: harness/mission_timeline.py
+    evidence:
+      - tests/test_mission_timeline.py
+      - scripts/run_mission_layer_acceptance.py
+      - workspace/evidence/mission_layer/acceptance-latest.json
+
+  - id: mission_knowledge_store
+    kind: persistence
+    responsibility: Stores time-bounded semantic facts, task occurrences, change signals and evidence references in a local SQLite database.
+    authority: canonical
+    status: implemented
+    path: harness/mission_knowledge.py
+    evidence:
+      - tests/test_mission_knowledge.py
+      - scripts/run_mission_layer_acceptance.py
+      - docs/MISSION_LAYER_DESIGN.md
+
+  - id: mission_scheduler
+    kind: orchestration
+    responsibility: Runs a caller-driven no-input timeline tick, persists semantic facts and emits bounded decision packets only for unknown or ambiguous signals.
+    authority: canonical
+    status: implemented
+    path: harness/mission_scheduler.py
+    evidence:
+      - tests/test_mission_scheduler.py
+      - docs/MISSION_LAYER_DESIGN.md
+
+  - id: mission_layer_acceptance
+    kind: verification
+    responsibility: Runs five non-interactive acceptance cases for reset, event windows, farm timing, queue/cooldown and retraining feedback.
+    authority: evidence
+    status: implemented
+    path: scripts/run_mission_layer_acceptance.py
+    evidence:
+      - workspace/evidence/mission_layer/acceptance-latest.json
+      - tests/test_mission_timeline.py
+      - tests/test_mission_knowledge.py
+
+  - id: mission_live_pass_observation
+    kind: evidence
+    responsibility: Records one current-screen deterministic observation pass with no gameplay input, semantic facts, unknowns and no-gem policy.
+    authority: evidence
+    status: implemented
+    path: workspace/evidence/mission_layer/live-pass-20260919-01-report.json
+    evidence:
+      - workspace/evidence/mission_layer/live-pass-20260919-01.json
+      - workspace/runs/mission-pass-20260919-01/scene.json
+      - workspace/runs/mission-pass-20260919-03/scene.json
+      - workspace/runs/mission-pass-20260919-04/scene.json
+      - workspace/runs/mission-pass-20260919-05/scene.json
+      - workspace/evidence/mission_layer/live-pass-20260919-01.sqlite3
+
+  - id: local_llm_service_policy
+    kind: policy
+    responsibility: Keeps the local LLM service available as an idle observer while granting it only harness-escalated bounded decisions.
+    authority: canonical
+    status: implemented
+    path: config/local-llm.json
+    evidence:
+      - docs/MISSION_LAYER_DESIGN.md
+      - docs/reference/LOCAL_LLM_USER_STORIES.md
+
   - id: mission_contract
     kind: config
     responsibility: Declares GATHER_RESOURCE states, actions, parameters, preconditions and completion contract.
@@ -50,6 +131,38 @@ nodes:
     path: config/mission_flows.yaml
     evidence:
       - tests/test_mission_loader.py
+
+  - id: game_state_mission_matrix
+    kind: document
+    responsibility: Records the evidence-bounded ROK state and mission matrix and the harness/local-LLM ownership boundary.
+    authority: canonical
+    status: implemented
+    path: docs/GAME_STATE_MISSION_MATRIX.md
+    evidence:
+      - config/mission_flows.yaml
+      - config/game_field_reconnaissance_plan.json
+      - docs/GAME_STATE_MISSION_MATRIX.md
+      - docs/GAME_FIELD_RECONNAISSANCE.md
+      - docs/ROADMAP_STATUS.md
+      - workspace/evidence/recon/recon-preflight-20260919-01/observation.json
+      - workspace/evidence/recon/recon-preflight-20260919-01/index.json
+      - workspace/evidence/recon/recon-goal-20260919-02/index.json
+      - workspace/evidence/recon/recon-goal-20260919-02/CITY_VIEW/observation.json
+      - workspace/evidence/recon/recon-goal-20260919-02/RESOURCE_SEARCH_PANEL/observation.json
+      - workspace/evidence/recon/recon-goal-20260919-02/RESOURCE_NODE_DETAIL/observation.json
+      - workspace/evidence/recon/recon-goal-20260919-02/TROOP_DRAWER/observation.json
+      - workspace/evidence/gather/gather-596d20bfddd42eb077af/revision-000013-1789787875616850100.json
+
+  - id: completion_audit
+    kind: document
+    responsibility: Maps every Goal requirement to authoritative evidence and preserves explicit PASS, PARTIAL and BLOCKED boundaries.
+    authority: canonical
+    status: partial
+    path: docs/COMPLETION_AUDIT.md
+    evidence:
+      - docs/COMPLETION_AUDIT.md
+      - workspace/evidence/audit/goal-readiness-latest.json
+      - tests/test_goal_readiness_audit.py
 
   - id: mission_compiler
     kind: code
@@ -78,6 +191,32 @@ nodes:
     path: scripts/windows_ocr.ps1
     evidence:
       - tests/test_observation_bridge.py
+      - workspace/runs/live-after-march-20260918-01/ocr.json
+      - docs/WINDOWS_OBSERVATION.md
+      - workspace/runtime/gather_resource-d3d18a7e7a96f532/ocr.json
+
+  - id: rapidocr_fixed_roi_backend
+    kind: adapter
+    responsibility: Optional CPU-only recognizer for the five fixed resource-category ROIs; merges only the declared category row and preserves frame/hash provenance.
+    authority: evidence
+    status: partial
+    path: harness/rapidocr_fixed_roi.py
+    evidence:
+      - config/cpu_rois.yaml
+      - config/cpu-ocr-requirements.txt
+      - harness/rapidocr_fixed_roi.py
+      - scripts/run_rapidocr_fixed_roi.py
+      - scripts/experiment_rapidocr_overlay.py
+      - scripts/build_ocr_review_packet.py
+      - tests/test_rapidocr_fixed_roi.py
+      - tests/test_windows_live_observation.py
+      - workspace/evidence/corpus/rapidocr-corpus-experiment-20260919-03.json
+      - workspace/evidence/corpus/ocr-quality-rapidocr-overlay-20260919.json
+      - workspace/evidence/corpus/cpu-observation-corpus-rapidocr-overlay-20260919.json
+      - workspace/evidence/corpus/ocr-independent-review-packet-20260919.json
+      - workspace/evidence/corpus/ocr-independent-review-result-20260919.json
+      - workspace/evidence/corpus/ocr-quality-rapidocr-overlay-20260919-independent.json
+      - workspace/evidence/corpus/cpu-observation-corpus-rapidocr-overlay-20260919-independent.json
 
   - id: observation_projection
     kind: code
@@ -105,6 +244,16 @@ nodes:
     path: harness/main_view_detector.py
     evidence:
       - tests/test_main_view_detector.py
+      - harness/cpu_roi.py
+      - config/cpu_rois.yaml
+      - tests/test_cpu_roi.py
+      - scripts/benchmark_cpu_vision.py
+      - workspace/evidence/cpu/b002-current-live-signature-20260918.json
+      - workspace/evidence/cpu/live-recheck-20260918-02.json
+      - workspace/evidence/cpu/live-followup-20260918-01.json
+      - workspace/evidence/cpu/live-followup-20260918-03.json
+      - workspace/evidence/cpu/live-followup-20260918-04.json
+      - workspace/runs/live-timing-20260918-01/run.json
 
   - id: main_view_training_profile
     kind: evidence
@@ -115,6 +264,56 @@ nodes:
     evidence:
       - config/main_view_profiles.json
       - tests/test_main_view_detector.py
+
+  - id: observation_corpus_holdout
+    kind: evidence
+    responsibility: Tracks real ROK labelled and holdout captures evaluated through the CPU ROI/OCR/state pipeline without converting provisional labels into acceptance.
+    authority: evidence
+    status: partial
+    path: config/observation_corpus.json
+    evidence:
+      - scripts/evaluate_observation_corpus.py
+      - scripts/evaluate_ocr_quality.py
+      - scripts/experiment_ocr_preprocess.ps1
+      - scripts/experiment_tesseract_ocr.py
+      - scripts/experiment_rapidocr.py
+      - scripts/experiment_rapidocr_corpus.py
+      - scripts/run_rapidocr_fixed_roi.py
+      - scripts/experiment_rapidocr_overlay.py
+      - docs/CPU_OCR_BACKEND_EXPERIMENT.md
+      - harness/rapidocr_fixed_roi.py
+      - tests/test_rapidocr_fixed_roi.py
+      - config/observation_label_lock.json
+      - tests/test_ocr_quality.py
+      - workspace/evidence/corpus/cpu-observation-corpus-20260918-01.json
+      - workspace/evidence/corpus/cpu-observation-corpus-20260918-02.json
+      - workspace/evidence/corpus/cpu-observation-corpus-20260918-03.json
+      - workspace/evidence/corpus/cpu-observation-corpus-20260918-04.json
+      - workspace/evidence/corpus/cpu-observation-corpus-20260918-05.json
+      - workspace/evidence/corpus/cpu-observation-corpus-20260918-07.json
+      - workspace/evidence/corpus/cpu-observation-corpus-20260918-08.json
+      - workspace/evidence/corpus/cpu-observation-corpus-20260918-09.json
+      - workspace/evidence/corpus/cpu-observation-corpus-20260918-10.json
+      - workspace/evidence/corpus/cpu-observation-corpus-20260918-13.json
+      - workspace/evidence/corpus/ocr-quality-20260918-06.json
+      - workspace/evidence/corpus/ocr-quality-20260918-10.json
+      - workspace/evidence/corpus/ocr-preprocess-experiment-20260918-01.json
+      - workspace/evidence/corpus/tesseract-ocr-experiment-20260918-01.json
+      - workspace/evidence/corpus/tesseract-ocr-experiment-20260918-02.json
+      - workspace/evidence/corpus/rapidocr-experiment-20260918-03.json
+      - workspace/evidence/corpus/rapidocr-corpus-experiment-20260918-01.json
+      - workspace/evidence/corpus/rapidocr-corpus-experiment-20260919-01.json
+      - workspace/evidence/corpus/rapidocr-corpus-experiment-20260919-02.json
+      - workspace/evidence/corpus/rapidocr-corpus-experiment-20260919-03.json
+      - workspace/evidence/corpus/rapidocr-fixed-roi-current-20260919.json
+      - workspace/evidence/corpus/rapidocr-fixed-roi-current-20260919-02.json
+      - workspace/evidence/corpus/rapidocr-fixed-roi-current-20260919-03.json
+      - workspace/evidence/corpus/observation_corpus-rapidocr-overlay-20260919.json
+      - workspace/evidence/corpus/ocr-quality-rapidocr-overlay-20260919.json
+      - workspace/evidence/corpus/cpu-observation-corpus-rapidocr-overlay-20260919.json
+      - workspace/runs/live-followup-20260918-01/
+      - workspace/runs/live-followup-20260918-02/
+      - workspace/runs/live-followup-20260918-03/
 
   - id: resource_level_control
     kind: actuator
@@ -154,6 +353,7 @@ nodes:
     path: harness/gather_facts.py
     evidence:
       - tests/test_gather_facts.py
+      - workspace/runs/live-after-march-20260918-01/ocr.json
 
   - id: troop_selection_policy
     kind: policy
@@ -168,8 +368,23 @@ nodes:
     kind: evidence
     responsibility: Hold the explicit operator decision approving the currently visible troop/commander selection for one exact GATHER occurrence.
     authority: operator
-    status: blocked
-    blocker: B003
+    status: implemented
+    path: docs/B003_APPROVAL.md
+    evidence:
+      - harness/troop_policy.py
+      - tests/test_troop_policy.py
+      - scripts/check_b003_approval.py
+      - workspace/evidence/gather/B003_CURRENT_OCCURRENCE_REVIEW.json
+      - workspace/evidence/gather/B003_CURRENT_OCCURRENCE_REVIEW-20260918-02.json
+      - workspace/evidence/gather/B003_CURRENT_OCCURRENCE_REVIEW-20260918-03.json
+      - workspace/evidence/gather/B003_CURRENT_OCCURRENCE_REVIEW-20260918-04.json
+      - workspace/evidence/gather/B003_CURRENT_OCCURRENCE_REVIEW-20260919-03.json
+      - workspace/evidence/gather/approvals/gather-admin-20260918-02.json
+      - workspace/evidence/gather/approvals/gather-admin-20260919-03.json
+      - workspace/evidence/gather/approvals/gather-goal-20260919-04.json
+      - workspace/evidence/gather/R3_PREFLIGHT-20260918-07.json
+      - workspace/evidence/gather/R3_PREFLIGHT-20260919-03.json
+      - workspace/evidence/gather/R3_PREFLIGHT-gather-goal-20260919-04-final.json
 
   - id: policy_overlay
     kind: code
@@ -198,6 +413,70 @@ nodes:
     path: harness/mission_selector.py
     evidence:
       - tests/test_mission_selector.py
+
+  - id: local_decision_provider
+    kind: decision
+    responsibility: Optionally asks a loopback Qwen/GPT-OSS worker to choose one existing semantic candidate; never supplies perception, coordinates or policy.
+    authority: canonical
+    status: partial
+    path: harness/local_llm_selector.py
+    evidence:
+      - tests/test_local_llm_selector.py
+      - docs/reference/LOCAL_LLM_USER_STORIES.md
+      - scripts/run_local_llm_canary.py
+      - scripts/run_local_llm_canary_batch.py
+      - scripts/run_local_llm_canary_multiframe.py
+      - scripts/validate_local_llm_holdout.py
+      - config/local_llm_multiframe_cases.json
+      - config/local_llm_decision_matrix_cases.json
+      - config/local_llm_no_intent_cases.json
+      - config/local_llm_holdout_cases.json
+      - workspace/evidence/local_llm/needs-decision-gpt-oss-20260917-01.json
+      - workspace/evidence/local_llm/needs-decision-gpt-oss-screening-20260918-01.json
+      - workspace/evidence/local_llm/needs-decision-gpt-oss-20260918-usage.json
+      - workspace/evidence/local_llm/needs-decision-gpt-oss-multiframe-256-20260918.json
+      - workspace/evidence/local_llm/needs-decision-gpt-oss-intent-matrix-256-20260918.json
+      - workspace/evidence/local_llm/needs-decision-gpt-oss-no-intent-guard-20260918.json
+      - workspace/evidence/local_llm/needs-decision-gpt-oss-post-guard-20260918.json
+
+  - id: local_llm_shadow_overlay
+    kind: operator_interface
+    responsibility: Displays append-only local LLM and harness telemetry as a click-through shadow HUD without granting model or overlay any input authority.
+    authority: operator
+    status: partial
+    path: scripts/run_local_agent_overlay.py
+    evidence:
+      - harness/overlay_events.py
+      - scripts/run_local_llm_live_shadow.py
+      - scripts/run_gather_tick.py
+      - tests/test_local_llm_selector.py
+      - workspace/evidence/local_llm/needs-decision-gpt-oss-reverse-20260918.json
+      - workspace/evidence/local_llm/needs-decision-gpt-oss-holdout-manifest-20260918.json
+      - workspace/evidence/local_llm/needs-decision-gpt-oss-holdout-20260918.json
+      - workspace/runs/local-llm-holdout-20260918-01/launch.json
+      - workspace/runs/b002_current_live/llama-server-canary-launch.json
+      - workspace/runs/local-llm-tax-live-20260919-01/server.stderr.log
+      - workspace/evidence/local_llm/local-llm-tax-live-20260919-01.json
+      - workspace/runs/local-llm-tax-live-20260919-03/local-llm-512.json
+      - workspace/runs/local-llm-tax-live-20260919-03/launch.json
+      - workspace/evidence/local_llm/local-llm-tax-live-20260919-03b.json
+
+  - id: harness_comparison_protocol
+    kind: verification
+    responsibility: Defines matched-model harness variants and records context, latency, CPU/RAM, safety and verification metrics without changing the action authority.
+    authority: canonical
+    status: partial
+    path: docs/HARNESS_TAX_ADAPTATION.md
+    evidence:
+      - config/harness_benchmark_matrix.json
+      - docs/HARNESS_TAX_ADAPTATION.md
+      - scripts/run_harness_tax_benchmark.py
+      - tests/test_harness_benchmark_contract.py
+      - tests/test_harness_tax_benchmark.py
+      - tests/test_local_llm_selector.py
+      - workspace/evidence/local_llm/harness-tax-benchmark-latest.json
+      - workspace/evidence/local_llm/local-llm-tax-live-20260919-01.json
+      - workspace/evidence/local_llm/local-llm-tax-live-20260919-03b.json
 
   - id: mission_engine
     kind: code
@@ -247,6 +526,96 @@ nodes:
     evidence:
       - tests/test_windows_interference_guard.py
 
+  - id: host_input_isolation_evidence
+    kind: evidence
+    responsibility: Validates direct one-user Windows host evidence for fresh target binding, foreground stability, operator quiescence, stale-frame rejection and cancel coverage.
+    authority: operator
+    status: implemented
+    path: docs/HOST_INPUT_ISOLATION.md
+    evidence:
+      - harness/host_input_isolation.py
+      - tests/test_host_input_isolation.py
+      - scripts/record_host_input_isolation.py
+      - scripts/assess_host_input_isolation.py
+      - scripts/diagnose_windows_input.py
+      - tests/test_diagnose_windows_input.py
+      - workspace/evidence/host/direct-host-r2-20260918-01.json
+      - workspace/evidence/host/direct-host-r2-20260918-01-assessment.json
+      - workspace/evidence/host/direct-host-r2-20260918-02.json
+      - workspace/evidence/host/direct-host-r2-20260918-02-assessment.json
+      - workspace/evidence/host/diagnose-input-incident-20260918-01.json
+      - workspace/evidence/host/direct-host-environment-check-20260918-01.json
+      - workspace/evidence/host/gather-admin-20260918-02-20260918T122333751845Z-00.json
+      - workspace/evidence/host/gather-admin-20260919-03-20260919T011737622239Z-04.json
+      - workspace/evidence/host/gather-admin-20260919-03-20260919T011737622239Z-04-assessment.json
+      - workspace/evidence/host/gather-goal-20260919-04-20260919T031742734674Z-00.json
+      - workspace/evidence/host/live-prerequisite-check-20260919.json
+
+  - id: r3_preflight
+    kind: verification
+    responsibility: Checks exact R3 direct-host input-isolation, B003 and trained-profile prerequisites before an operator can arm a one-character GATHER attempt.
+    authority: canonical
+    status: implemented
+    path: scripts/check_r3_preconditions.py
+    evidence:
+      - scripts/check_r3_preconditions.py
+      - workspace/evidence/gather/R3_PREFLIGHT-20260918-02.json
+      - workspace/evidence/gather/R3_PREFLIGHT-20260918-03.json
+      - workspace/evidence/gather/R3_PREFLIGHT-20260918-04.json
+      - workspace/evidence/gather/R3_PREFLIGHT-20260918-05.json
+      - workspace/evidence/gather/R3_PREFLIGHT-20260918-06.json
+      - workspace/evidence/gather/R3_PREFLIGHT-20260918-07.json
+      - workspace/evidence/gather/R3_PREFLIGHT-20260919-03.json
+      - workspace/evidence/gather/R3_PREFLIGHT-gather-goal-20260919-04-final.json
+      - tests/test_host_input_isolation.py
+      - tests/test_troop_policy.py
+
+  - id: goal_readiness_audit
+    kind: verification
+    responsibility: Audits every numbered goal gate from durable evidence and fails closed on screening, stale, mismatched or missing artifacts.
+    authority: canonical
+    status: implemented
+    path: scripts/audit_goal_readiness.py
+    evidence:
+      - scripts/audit_goal_readiness.py
+      - tests/test_goal_readiness_audit.py
+      - docs/COMPLETION_AUDIT.md
+      - workspace/evidence/audit/goal-readiness-20260918-01.json
+      - workspace/evidence/audit/goal-readiness-20260918-03.json
+      - workspace/evidence/audit/goal-readiness-20260918-04.json
+      - workspace/evidence/audit/goal-readiness-latest.json
+
+  - id: r3_repetition_evidence
+    kind: verification
+    responsibility: Validates registered one-character GATHER occurrences against occurrence-bound approval, live arming, non-interference and fresh queue +1 evidence before endurance.
+    authority: canonical
+    status: partial
+    path: scripts/validate_r3_repetition.py
+    evidence:
+      - config/r3_registered_runs.json
+      - scripts/validate_r3_repetition.py
+      - tests/test_validate_r3_repetition.py
+      - workspace/evidence/gather/r3-repetition-latest.json
+      - workspace/evidence/gather/gather-e9f395858e63a2dcb7d0/revision-000005-1789780669952972900.json
+      - workspace/evidence/audit/goal-readiness-20260918-matrix.json
+      - workspace/evidence/audit/goal-readiness-latest.json
+
+  - id: r3_endurance_authorization
+    kind: evidence
+    responsibility: Requires an explicit operator authorization scoped to the active one-character R3 repetition contract and reserves each live attempt append-only before dispatch, bounded by a maximum additional run count.
+    authority: operator
+    status: partial
+    path: harness/r3_endurance_authorization.py
+    evidence:
+      - harness/r3_endurance_authorization.py
+      - scripts/run_elevated_gather.py
+      - scripts/run_gather_tick.py
+      - scripts/audit_goal_readiness.py
+      - tests/test_r3_endurance_authorization.py
+      - tests/test_goal_readiness_audit.py
+      - config/r3_endurance_authorization.example.json
+      - docs/ROADMAP_STATUS.md
+
   - id: windows_input
     kind: actuator
     responsibility: Emits ordinary Win32 mouse/keyboard input only after the guard authorizes actuation.
@@ -266,6 +635,7 @@ nodes:
       - tests/test_mission_engine.py
       - tests/test_mission_tool.py
       - tests/test_typed_action_contracts.py
+      - tests/test_mission_runner.py
 
   - id: mission_store
     kind: persistence
@@ -276,6 +646,10 @@ nodes:
     evidence:
       - tests/test_mission_store.py
       - tests/test_mission_runner.py
+      - scripts/run_recovery_matrix.py
+      - workspace/evidence/recovery/recovery-matrix-20260918-01.json
+      - workspace/evidence/recovery/recovery-matrix-20260919-02.json
+      - workspace/evidence/gather/pending-recovery-gather-admin-20260918-02.json
 
   - id: mission_runner
     kind: orchestration
@@ -284,6 +658,10 @@ nodes:
     status: implemented
     path: harness/mission_runner.py
     evidence:
+      - tests/test_mission_runner.py
+      - scripts/run_recovery_matrix.py
+      - workspace/evidence/recovery/recovery-matrix-20260918-01.json
+      - workspace/evidence/recovery/recovery-matrix-20260919-02.json
       - tests/test_mission_runner.py
 
   - id: gather_cli
@@ -296,6 +674,8 @@ nodes:
       - .github/workflows/gather-harness.yml
       - tests/test_troop_policy.py
       - tests/test_gather_replay_evidence.py
+      - workspace/evidence/gather/live-20260918-01-cpu-criterion/
+      - scripts/run_gather_tick.py
 
   - id: gather_runtime_evidence
     kind: verification
@@ -306,29 +686,71 @@ nodes:
     evidence:
       - tests/test_gather_replay_evidence.py
       - scripts/validate_gather_replay.py
+      - workspace/evidence/gather/gather-054e1be092ffb2cbc270
+      - workspace/evidence/gather/gather-596d20bfddd42eb077af
 
   - id: live_replay_evidence
     kind: evidence
     responsibility: Prove the composed vertical slice against real captured game frames and guarded live actuation using the canonical replay evidence validator.
     authority: evidence
-    status: blocked
-    blocker: B004
+    status: implemented
+    path: harness/gather_replay_evidence.py
+    evidence:
+      - tests/test_gather_replay_evidence.py
+      - scripts/validate_gather_replay.py
+      - workspace/evidence/gather/gather-054e1be092ffb2cbc270
+      - workspace/evidence/gather/gather-596d20bfddd42eb077af
 
 edges:
+  - {from: mission_layer_config, to: mission_timeline, relation: declares_cadence_and_reset}
+  - {from: mission_timeline, to: mission_knowledge_store, relation: persists_signals_and_occurrences}
+  - {from: mission_scheduler, to: mission_timeline, relation: evaluates}
+  - {from: mission_scheduler, to: mission_knowledge_store, relation: persists_facts_and_signals}
+  - {from: mission_scheduler, to: local_decision_provider, relation: emits_bounded_packets}
+  - {from: mission_timeline, to: mission_layer_acceptance, relation: is_verified_by}
+  - {from: mission_knowledge_store, to: mission_layer_acceptance, relation: is_verified_by}
+  - {from: mission_scheduler, to: mission_live_pass_observation, relation: ingests_current_facts}
+  - {from: mission_live_pass_observation, to: game_state_mission_matrix, relation: supplies_current_unknowns}
+  - {from: mission_layer_acceptance, to: completion_audit, relation: supplies_new_gate}
+  - {from: mission_layer_config, to: local_llm_service_policy, relation: declares_model_boundary}
+  - {from: local_llm_service_policy, to: local_decision_provider, relation: configures_lifecycle_and_authority}
+  - {from: game_state_mission_matrix, to: mission_timeline, relation: bounds_known_game_facts}
+  - {from: mission_timeline, to: local_decision_provider, relation: escalates_only_unknown_or_ambiguous}
   - {from: mission_contract, to: mission_compiler, relation: compiles_into}
+  - {from: mission_contract, to: game_state_mission_matrix, relation: provides_trained_transitions}
+  - {from: observation_corpus_holdout, to: game_state_mission_matrix, relation: measures_observed_states}
+  - {from: live_replay_evidence, to: game_state_mission_matrix, relation: supplies_live_postconditions}
+  - {from: game_state_mission_matrix, to: mission_engine, relation: bounds_state_actions}
+  - {from: game_state_mission_matrix, to: deterministic_selector, relation: bounds_candidate_surface}
+  - {from: game_state_mission_matrix, to: local_decision_provider, relation: defines_llm_boundary}
+  - {from: game_state_mission_matrix, to: harness_comparison_protocol, relation: bounds_benchmark_cases}
+  - {from: observation_corpus_holdout, to: harness_comparison_protocol, relation: supplies_frame_disjoint_cases}
+  - {from: local_decision_provider, to: harness_comparison_protocol, relation: exposes_measurement_telemetry}
+  - {from: local_decision_provider, to: local_llm_shadow_overlay, relation: emits_raw_bounded_output_telemetry}
+  - {from: live_capture, to: local_llm_shadow_overlay, relation: supplies_current_frame_identity}
+  - {from: gather_cli, to: local_llm_shadow_overlay, relation: emits_operator_shadow_events}
+  - {from: local_llm_shadow_overlay, to: harness_comparison_protocol, relation: supplies_shadow_trace_for_comparison}
+  - {from: game_state_mission_matrix, to: goal_readiness_audit, relation: defines_coverage}
+  - {from: goal_readiness_audit, to: completion_audit, relation: supplies_gate_snapshot}
+  - {from: game_state_mission_matrix, to: completion_audit, relation: supplies_scope_matrix}
   - {from: mission_compiler, to: deterministic_selector, relation: constrains}
   - {from: mission_compiler, to: mission_engine, relation: constrains}
   - {from: mission_contract, to: troop_selection_policy, relation: declares_precondition}
   - {from: live_capture, to: windows_ocr, relation: feeds}
+  - {from: live_capture, to: rapidocr_fixed_roi_backend, relation: supplies_bound_frame}
+  - {from: windows_ocr, to: rapidocr_fixed_roi_backend, relation: supplies_base_ocr_overlay}
   - {from: live_capture, to: observation_projection, relation: proves_frame}
   - {from: live_capture, to: city_world_visual_detector, relation: supplies_current_frame}
   - {from: windows_ocr, to: observation_projection, relation: feeds}
+  - {from: rapidocr_fixed_roi_backend, to: observation_projection, relation: optional_experiment_overlay}
   - {from: observation_projection, to: ocr_semantics, relation: feeds}
   - {from: observation_projection, to: city_world_visual_detector, relation: supplies_frame_provenance}
   - {from: ocr_semantics, to: state_classifier, relation: feeds}
   - {from: ocr_semantics, to: gather_fact_extractor, relation: feeds}
   - {from: ocr_semantics, to: resource_level_control, relation: supplies_current_anchors}
   - {from: main_view_training_profile, to: city_world_visual_detector, relation: calibrates}
+  - {from: observation_corpus_holdout, to: city_world_visual_detector, relation: measures}
+  - {from: observation_corpus_holdout, to: ocr_semantics, relation: measures}
   - {from: city_world_visual_detector, to: state_classifier, relation: feeds}
   - {from: resource_level_training_profile, to: resource_level_control, relation: calibrates}
   - {from: resource_level_control, to: state_adapter, relation: grounds_typed_target}
@@ -342,12 +764,24 @@ edges:
   - {from: state_classifier, to: state_adapter, relation: feeds}
   - {from: state_adapter, to: deterministic_selector, relation: exposes_actions}
   - {from: deterministic_selector, to: mission_engine, relation: selects_for}
+  - {from: deterministic_selector, to: local_decision_provider, relation: escalates_only_when_needs_decision}
+  - {from: local_decision_provider, to: mission_runner, relation: supplies_bounded_choice}
   - {from: state_adapter, to: bounded_mission_tool, relation: snapshots}
   - {from: mission_engine, to: bounded_mission_tool, relation: executes_through}
   - {from: bounded_mission_tool, to: semantic_action_surface, relation: dispatches_to}
   - {from: semantic_action_surface, to: screen_mapping, relation: resolves_through}
   - {from: resource_level_control, to: screen_mapping, relation: typed_screen_point}
   - {from: screen_mapping, to: interference_guard, relation: guarded_by}
+  - {from: host_input_isolation_evidence, to: live_replay_evidence, relation: required_for}
+  - {from: host_input_isolation_evidence, to: r3_preflight, relation: gates}
+  - {from: troop_selection_policy_approval, to: r3_preflight, relation: checks}
+  - {from: goal_readiness_audit, to: r3_preflight, relation: audits}
+  - {from: goal_readiness_audit, to: gather_runtime_evidence, relation: audits}
+  - {from: live_replay_evidence, to: r3_repetition_evidence, relation: supplies_registered_occurrences}
+  - {from: r3_endurance_authorization, to: goal_readiness_audit, relation: gates_live_repetition}
+  - {from: r3_endurance_authorization, to: gather_cli, relation: gates_authorized_repetition}
+  - {from: r3_repetition_evidence, to: goal_readiness_audit, relation: gates_endurance}
+  - {from: r3_preflight, to: gather_cli, relation: authorizes}
   - {from: interference_guard, to: windows_input, relation: authorizes}
   - {from: windows_input, to: post_action_verification, relation: requires_fresh_verify}
   - {from: post_action_verification, to: mission_engine, relation: verifies}
@@ -359,22 +793,13 @@ edges:
   - {from: troop_selection_policy_approval, to: live_replay_evidence, relation: supplies_policy_provenance}
   - {from: gather_runtime_evidence, to: live_replay_evidence, relation: validates}
 
-blockers:
-  - id: B003
-    title: Occurrence-bound troop/commander approval evidence is missing
-    class: gameplay_policy_evidence
-    blocks: [troop_selection_policy_approval, live_replay_evidence]
-    falsification: Operator supplies an explicit positive approval bound to the exact GATHER mission/task/run/character occurrence, and runtime evidence records the same approval on the completion transition.
-
-  - id: B004
-    title: End-to-end live evidence missing
-    class: live_verification
-    blocks: [live_replay_evidence]
-    falsification: Canonical replay evidence validator PASSes a guarded one-character GATHER_RESOURCE run with live arming, trained B001/B002 profiles, occurrence-bound B003 approval, fresh VERIFIED receipt and durable same-character march queue increase.
+blockers: []
 
 coverage:
   active_vertical_slice: GATHER_RESOURCE
   dimensions:
+    field_reconnaissance: partial
+    game_state_mission_matrix: partial
     mission_contract: covered
     deterministic_selection: covered
     persistence_resume: covered
@@ -383,22 +808,36 @@ coverage:
     post_action_verification: covered
     windows_capture: covered
     windows_ocr_bridge: covered
+    rapidocr_fixed_roi_backend: partial
     ocr_target_grounding: covered
     gather_queue_fact: covered
     selected_resource_level_fact: covered
     main_view_visual_perception: covered
     main_view_profile_training: covered
+    observation_corpus_holdout: partial
+    r3_repetition_evidence: partial
+    r3_endurance_authorization: partial
+    local_llm_decision_canary: partial
+    harness_comparison_protocol: partial
+    host_input_isolation: covered
     resource_level_actuation: covered
     resource_level_profile_training: covered
     commander_troop_policy: partial
     commander_troop_policy_contract: covered
-    commander_troop_policy_approval: missing
+    commander_troop_policy_approval: covered
+    recovery_cancel_resume: covered
     runtime_replay_evidence_contract: covered
-    real_live_replay: missing
+    real_live_replay: covered
+    mission_timeline: covered
+    mission_knowledge_store: covered
+    mission_scheduler: covered
+    mission_layer_offline_acceptance: covered
+    mission_live_pass_observation: covered
+    local_llm_always_on_boundary: covered
   other_mission_branches:
     CLAIM_ALLIANCE_TERRITORY_RSS: not_covered_end_to_end
     SWITCH_CHARACTER: not_covered_end_to_end
     BARBARIAN_FORT_RALLY: training_only
     EVENT_COORDINATION: not_covered_end_to_end
-    GPT_OSS_DECISION_PROVIDER: deferred
-    MISSION_SCHEDULER: deferred
+    GPT_OSS_DECISION_PROVIDER: partial
+    MISSION_SCHEDULER: partial

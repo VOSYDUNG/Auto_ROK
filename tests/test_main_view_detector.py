@@ -97,3 +97,52 @@ def test_foreground_search_surface_suppresses_background_main_view_match(tmp_pat
     assert bundle.observation.evidence == (search,)
     assert bundle.scene.facts["main_view_detector"]["status"] == "suppressed"
     assert bundle.scene.facts["main_view_detector"]["reason"] == "foreground_gather_surface_visible"
+
+
+def test_research_label_does_not_count_as_foreground_search(tmp_path):
+    research = Evidence("ocr", "Research", 0.0, value="Research", metadata={"frame_id": "f1"})
+    wrapper = MainViewVisualObservationProvider(
+        FakeProvider(evidence=(research,)),
+        profile(tmp_path),
+        extractor=lambda _: [1.0, 0.0, 0.0],
+    )
+    bundle = wrapper.observe(CONTEXT)
+    assert bundle.scene.facts["main_view_detector"]["status"] == "matched"
+    assert bundle.scene.facts["main_view_detector"]["state_id"] == CITY_VIEW
+
+
+def test_raw_search_word_still_suppresses_background_main_view(tmp_path):
+    provider = FakeProvider()
+    provider.observe = lambda context: ObservationBundle(
+        Observation(1.0, "f1", (1280, 720), ()),
+        SceneGraph("f1", None, (), {"image_path": "frame.png", "raw_text": "open Search"}),
+    )
+    wrapper = MainViewVisualObservationProvider(
+        provider,
+        profile(tmp_path),
+        extractor=lambda _: [1.0, 0.0, 0.0],
+    )
+    bundle = wrapper.observe(CONTEXT)
+    assert bundle.scene.facts["main_view_detector"]["status"] == "suppressed"
+    assert bundle.scene.facts["main_view_detector"]["foreground_markers"] == ["search"]
+
+
+def test_city_quest_gather_word_does_not_suppress_background_main_view(tmp_path):
+    provider = FakeProvider()
+    provider.observe = lambda context: ObservationBundle(
+        Observation(1.0, "f1", (1280, 720), ()),
+        SceneGraph(
+            "f1",
+            None,
+            (),
+            {"image_path": "frame.png", "raw_text": "Gather resources from the map"},
+        ),
+    )
+    wrapper = MainViewVisualObservationProvider(
+        provider,
+        profile(tmp_path),
+        extractor=lambda _: [1.0, 0.0, 0.0],
+    )
+    bundle = wrapper.observe(CONTEXT)
+    assert bundle.scene.facts["main_view_detector"]["status"] == "matched"
+    assert bundle.scene.facts["main_view_detector"]["state_id"] == CITY_VIEW

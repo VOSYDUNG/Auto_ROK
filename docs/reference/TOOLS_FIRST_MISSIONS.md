@@ -24,7 +24,12 @@ Tọa độ click phải suy từ bbox ứng viên trong frame cụ thể, có t
 
 Persist mission definition, occurrence ID, due time/timezone, checkpoint, retry/backoff và reason cần quyết định. Runtime tick đánh giá một bước hữu hạn rồi trả quyền điều khiển; scheduler sau này gọi tick theo due/event thay vì vòng while click liên tục. State machine xử lý WAITING/OBSERVE/PLANNED/NEEDS_DECISION/AWAITING_VERIFICATION/COMPLETED/CANCELLED/FAILED theo evidence có thực. Tên trạng thái là hợp đồng mong muốn; xem evidence để biết phần đã triển khai.
 
-Local LLM không cần “sống” bằng reasoning liên tục. Khi due: tool quan sát và áp rule đã kiểm; chỉ tình huống mơ hồ/thay đổi mới gọi decision provider. Khi model tắt, mission biết nó đang đợi gì và giữ state; khi model trở lại, nhận brief ngắn gồm frame/state/allowed tools/budget. Người dùng vẫn có thể quyết định hoặc hủy. Tool không tự gọi cloud để vượt lỗi local.
+Local LLM service được giữ **always-on ở trạng thái observer/idle**, nhưng không
+nhận mission stream. Khi due, tool quan sát và áp rule đã kiểm; chỉ tình huống
+mơ hồ/thay đổi mới gửi decision packet. Nếu endpoint tạm tắt, mission vẫn biết
+nó đang đợi gì và giữ state; khi model trở lại, nhận brief ngắn gồm
+graph/state/allowed tools/budget. Người dùng vẫn có thể quyết định hoặc hủy.
+Tool không tự gọi cloud để vượt lỗi local.
 
 ## Thực nghiệm đang diễn ra
 

@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "status": "holdout_cases",
+  "measurement_class": "real_rok_search_panel_intent_holdout",
+  "split": "holdout",
+  "description": "Frames are disjoint from the 16-case decision matrix; the CPU-only loopback run is measured separately from reviewer and live-postcondition promotion.",
+  "cases": [
+    {"id": "pure1-food", "capture_meta": "workspace/runs/b001_pure_world1/capture.json", "ocr": "workspace/runs/b001_pure_world1/ocr-recheck-20260918-15.json", "image": "workspace/runs/b001_pure_world1/rok-client.png", "resource_type": "FOOD", "expected_target_id": "SEARCH_CATEGORY_FOOD"},
+    {"id": "pure1-wood", "capture_meta": "workspace/runs/b001_pure_world1/capture.json", "ocr": "workspace/runs/b001_pure_world1/ocr-recheck-20260918-15.json", "image": "workspace/runs/b001_pure_world1/rok-client.png", "resource_type": "WOOD", "expected_target_id": "SEARCH_CATEGORY_WOOD"},
+    {"id": "pure1-stone", "capture_meta": "workspace/runs/b001_pure_world1/capture.json", "ocr": "workspace/runs/b001_pure_world1/ocr-recheck-20260918-15.json", "image": "workspace/runs/b001_pure_world1/rok-client.png", "resource_type": "STONE", "expected_target_id": "SEARCH_CATEGORY_STONE"},
+    {"id": "pure1-gold", "capture_meta": "workspace/runs/b001_pure_world1/capture.json", "ocr": "workspace/runs/b001_pure_world1/ocr-recheck-20260918-15.json", "image": "workspace/runs/b001_pure_world1/rok-client.png", "resource_type": "GOLD", "expected_target_id": "SEARCH_CATEGORY_GOLD"},
+    {"id": "overlay-food", "capture_meta": "workspace/runs/b001_search_overlay/capture.json", "ocr": "workspace/runs/b001_search_overlay/ocr-recheck-20260918-15.json", "image": "workspace/runs/b001_search_overlay/rok-client.png", "resource_type": "FOOD", "expected_target_id": "SEARCH_CATEGORY_FOOD"},
+    {"id": "overlay-wood", "capture_meta": "workspace/runs/b001_search_overlay/capture.json", "ocr": "workspace/runs/b001_search_overlay/ocr-recheck-20260918-15.json", "image": "workspace/runs/b001_search_overlay/rok-client.png", "resource_type": "WOOD", "expected_target_id": "SEARCH_CATEGORY_WOOD"},
+    {"id": "overlay-stone", "capture_meta": "workspace/runs/b001_search_overlay/capture.json", "ocr": "workspace/runs/b001_search_overlay/ocr-recheck-20260918-15.json", "image": "workspace/runs/b001_search_overlay/rok-client.png", "resource_type": "STONE", "expected_target_id": "SEARCH_CATEGORY_STONE"},
+    {"id": "overlay-gold", "capture_meta": "workspace/runs/b001_search_overlay/capture.json", "ocr": "workspace/runs/b001_search_overlay/ocr-recheck-20260918-15.json", "image": "workspace/runs/b001_search_overlay/rok-client.png", "resource_type": "GOLD", "expected_target_id": "SEARCH_CATEGORY_GOLD"},
+    {"id": "level6-food", "capture_meta": "workspace/runs/b002_after_click_lvl6/capture.json", "ocr": "workspace/runs/b002_after_click_lvl6/ocr-recheck-20260918-15.json", "image": "workspace/runs/b002_after_click_lvl6/rok-client.png", "resource_type": "FOOD", "expected_target_id": "SEARCH_CATEGORY_FOOD"},
+    {"id": "level6-wood", "capture_meta": "workspace/runs/b002_after_click_lvl6/capture.json", "ocr": "workspace/runs/b002_after_click_lvl6/ocr-recheck-20260918-15.json", "image": "workspace/runs/b002_after_click_lvl6/rok-client.png", "resource_type": "WOOD", "expected_target_id": "SEARCH_CATEGORY_WOOD"},
+    {"id": "level6-stone", "capture_meta": "workspace/runs/b002_after_click_lvl6/capture.json", "ocr": "workspace/runs/b002_after_click_lvl6/ocr-recheck-20260918-15.json", "image": "workspace/runs/b002_after_click_lvl6/rok-client.png", "resource_type": "STONE", "expected_target_id": "SEARCH_CATEGORY_STONE"},
+    {"id": "level6-gold", "capture_meta": "workspace/runs/b002_after_click_lvl6/capture.json", "ocr": "workspace/runs/b002_after_click_lvl6/ocr-recheck-20260918-15.json", "image": "workspace/runs/b002_after_click_lvl6/rok-client.png", "resource_type": "GOLD", "expected_target_id": "SEARCH_CATEGORY_GOLD"}
+  ]
+}
