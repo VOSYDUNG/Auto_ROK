@@ -24,7 +24,94 @@ Một người vận hành duy nhất, sở hữu máy và tài khoản, ngồi 
 phê duyệt các hành động rủi ro, cung cấp kiến thức game, và là người duy nhất được quyền
 uỷ quyền chạy endurance.
 
-## 3. Nguyên tắc sản phẩm
+## 3. Phạm vi (Scope)
+
+### 3.1 Luận đề đang kiểm
+
+> **Năng lực = model × giàn giáo.** Trong một miền có ranh giới, giàn giáo thay thế được cho
+> dung lượng model.
+
+Phát biểu để có thể sai:
+
+> Với cùng một model ~20B chạy CPU, harness đưa hiệu suất vận hành từ *không chạy nổi* lên
+> *trong khoảng X% mốc người chơi giỏi*, trong khi model vào cuộc dưới N lần / 100 tick.
+
+Đo bằng **hai nhánh**, ghi trong `config/harness_benchmark_matrix.json`:
+
+| Nhánh | Là gì | Trạng thái |
+|---|---|---|
+| Trần | người vận hành tự chơi | **đã có số**: 2h00–2h30 (farm nhà 25 cấp mạnh) · 3h30–4h00 (farm thấp hơn), buff 50% chạy |
+| H1 | model yếu + harness đầy đủ | cần đo |
+
+**Không đo nhánh sàn.** Model yếu không harness chắc chắn không vận hành được — đo chỉ tốn
+thời gian, không thêm thông tin. Quyết định của người vận hành, 2026-09-19.
+
+**Trần không cần model cloud**, vì tiền đề sản phẩm là chỉ tương tác qua bề mặt nhìn-và-bấm
+mà người chơi có. Người chơi giỏi chính là trần.
+
+### 3.2 Trong phạm vi
+
+| Hạng mục | Nội dung |
+|---|---|
+| Miền | Rise of Kingdoms, **một máy Windows thật**, một client hiển thị |
+| Đội hình | nhiều tài khoản × nhiều nhân vật × 5 đạo quân; hiện 2×4×5, **số lượng là đầu vào lúc chạy** |
+| Xoay vòng | đổi nhân vật trong game (Settings → Character), **không cần thông tin đăng nhập** |
+| Mission | `ACCUMULATE` theo hạn mức + thời hạn; `DEFAULT_FARM` tỉ lệ 1:1:1:2; `DAILY_CITIZEN` |
+| Suy giảm | thang 5 bậc, `SCARCITY_FILL` khi khan mỏ |
+| Giao hàng | **trong phạm vi nhưng đang KHOÁ** — chờ quan sát bảng cấp Chợ, đường giao, và số thuế |
+| LLM | bộ chọn có ràng buộc ở hai tầng; chiến lược (phút) và chiến thuật (giây) |
+| Tri thức | `knowledge/*.yaml`, mỗi mẩu có nguồn và ngày |
+| Bằng chứng | bất biến, gắn occurrence, G1–G6 |
+
+### 3.3 Ngoài phạm vi, và vì sao
+
+| Ngoài phạm vi | Vì sao |
+|---|---|
+| Docker, máy ảo, Hyper-V, GPU | ranh giới sản phẩm; **cưỡng chế bằng `tests/test_no_virtualization.py`** |
+| Dịch vụ CI | chạy trên máy ảo thuê; thay bằng `scripts/check_local.py` |
+| Đọc bộ nhớ tiến trình, chèn code | chỉ dùng bề mặt của người chơi |
+| Tác tử desktop tự do | model không bao giờ thấy toạ độ hay bề mặt điều khiển mở |
+| Đăng xuất / đăng nhập tài khoản | đổi nhân vật trong game đủ cho quy mô hiện tại; thông tin đăng nhập là hạng mục riêng, có rủi ro riêng |
+| Mua vật phẩm bằng gem | hành động tiêu tiền, không hoàn tác; thuộc quyền người vận hành |
+| Rally quân, điều phối sự kiện, đổi vương quốc | chưa có hợp đồng quan sát/chính sách/xác minh riêng |
+| Nhánh alliance `CLAIM_ALLIANCE_TERRITORY_RSS` | đang `partial`, chặn bởi `A001`; **GATHER chưa đóng thì chưa mở nhánh hai** |
+| Nhiều máy, điều phối từ xa | một agent, một máy |
+| Model cloud, kể cả để đo | trần là người chơi, không cần cloud |
+
+### 3.4 Điều kiện đóng phạm vi này
+
+Phạm vi coi là hoàn thành khi **đồng thời**:
+
+1. **G1–G6 đạt** — trong đó G6 cần chữ ký uỷ quyền của người vận hành, không phải code;
+2. **Hàng đợi đội hình lên 5/5** và giữ được, buff không về 0;
+3. **H1 đo được và so được với trần** trên bốn thước: giờ chạy tự chủ · % hàng đợi đầy và
+   buff ≠ 0 · lần LLM vào cuộc / 100 tick · lần tự phát hiện game đổi;
+4. **`ACCUMULATE` chạy trọn một chu kỳ order**, kể cả khi gặp khan mỏ và tụt bậc.
+
+Giao hàng **không** nằm trong điều kiện đóng, vì nó đang khoá.
+
+### 3.5 Giả định
+
+Sai giả định nào thì phải mở lại phạm vi, không phải vá.
+
+| Giả định | Nếu sai thì sao |
+|---|---|
+| Buff 50% luôn bật được | mọi mốc chu kỳ sai; lịch xoay vòng phải tính lại |
+| Đổi nhân vật trong game là đủ | phải làm đăng nhập tài khoản → hạng mục và rủi ro mới |
+| Màn chi tiết tài nguyên loại trừ item tồn tại | không đo được tiến độ hạn mức chính xác |
+| Client giữ nguyên độ phân giải và bố cục | mọi ROI và nối đất phải huấn luyện lại |
+| Người vận hành có mặt cho các pass quan sát | P3 đứng, kéo theo P4 |
+
+### 3.6 Cái gì buộc mở lại phạm vi
+
+- Game cập nhật đổi bố cục UI → `retraining_required`, dừng, huấn luyện lại
+- Số tài khoản vượt quá mức xoay vòng đơn giản chịu được → cần tầng điều phối
+- Người vận hành yêu cầu giao hàng tự động **trước khi** quan sát xong bảng cấp Chợ →
+  từ chối, vì đó là hành động chuyển tài sản không hoàn tác
+
+---
+
+## 4. Nguyên tắc sản phẩm
 
 1. **LLM là chủ ngữ, harness là nền.** Mỗi tính năng phải nói được nó làm LLM quyết định
    tốt hơn ở đâu.
@@ -39,7 +126,7 @@ uỷ quyền chạy endurance.
 
 ---
 
-## 4. Yêu cầu chức năng
+## 5. Yêu cầu chức năng
 
 ### F01 — Thu hình thụ động
 Thu hình client ROK đang hiển thị, chỉ bằng CPU/RAM, gắn HWND, kèm metadata khung hình
@@ -161,7 +248,7 @@ chưa có số thuế. Không xây nửa vời.
 
 ---
 
-## 5. Yêu cầu phi chức năng
+## 6. Yêu cầu phi chức năng
 
 | Mã | Yêu cầu | Ngưỡng | Hiện trạng |
 |---|---|---|---|
@@ -177,7 +264,7 @@ không nằm ở tốc độ di chuyển chuột.
 
 ---
 
-## 6. Rủi ro
+## 7. Rủi ro
 
 | Rủi ro | Ảnh hưởng | Cách chặn |
 |---|---|---|
@@ -188,8 +275,3 @@ không nằm ở tốc độ di chuyển chuột.
 | Harness không đủ sâu | LLM chậm và nhiễu | đo N02/N04 và siết dần |
 
 ---
-
-## 7. Ngoài phạm vi phiên bản này
-
-Đổi tài khoản tự động, mua vật phẩm bằng gem, rally quân, điều phối sự kiện, và mọi thứ
-chạy ngoài một máy Windows một người dùng.

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "AUTOROK_HARNESS_TAX_V1",
   "status": "design_contract",
-  "purpose": "Isolate the effect of the harness while holding the local model, task, and frame evidence constant.",
+  "purpose": "Two questions, kept separate. (1) Does the harness help, holding the model constant - the original H0/H1/H2 variants. (2) Does the harness let a weak local model reach the operator's own play - the thesis arms below.",
   "constraints": {
     "host": "direct_windows_single_user",
     "processing_device": "cpu",
@@ -82,5 +82,50 @@
     "record_request_fingerprint_not_raw_prompt": true,
     "promotion_requires_independent_review": true,
     "live_gather_gate_remains_separate": true
+  },
+  "thesis": {
+    "statement": "Capability equals model times scaffold. Inside a bounded domain the scaffold substitutes for model capacity.",
+    "falsifiable_form": "With one ~20B CPU model, the harness lifts operation from not-viable to within X percent of the operator's own play, while the model is consulted fewer than N times per 100 ticks.",
+    "declaration_ref": "docs/PROJECT_DECLARATION.md section 1",
+    "arms": [
+      {
+        "id": "ceiling_operator_play",
+        "role": "ceiling",
+        "status": "baseline_recorded",
+        "description": "The operator playing by hand. This is the correct ceiling because the product premise is to act only through the visible surface a human player has.",
+        "requires_cloud_model": false,
+        "source": "knowledge/farming_workflow_2026-09-19.yaml account_cycle.per_character_batch.cycle_length",
+        "recorded_baseline": {
+          "strong_farm_city_hall_25": "2h00-2h30 per five-march batch",
+          "lower_level_farm": "3h30-4h00 per five-march batch",
+          "precondition": "50 percent gathering buff active",
+          "source_kind": "operator experience, not machine-measured"
+        }
+      },
+      {
+        "id": "h1_weak_model_full_harness",
+        "role": "treatment",
+        "status": "planned",
+        "description": "The shipped configuration: local ~20B CPU model inside the full harness, measured against the ceiling on the same metrics.",
+        "requires_cloud_model": false,
+        "implementation": "harness/local_llm_selector.py plus autorok/mission"
+      }
+    ],
+    "deliberately_excluded": [
+      {
+        "id": "floor_weak_model_no_harness",
+        "reason": "The result is known in advance - an unscaffolded weak model cannot operate the client at all - so measuring it costs time and adds no information. Excluded by operator decision on 2026-09-19."
+      },
+      {
+        "id": "strong_model_reference",
+        "reason": "A frontier model would need either weights this CPU cannot host or a cloud call, and cloud_fallback is false. The operator's own play is the ceiling that matters and it needs neither."
+      }
+    ],
+    "metrics": [
+      "autonomous_hours_without_operator_touch",
+      "percent_time_queue_full_and_buff_nonzero",
+      "local_llm_entries_per_100_ticks",
+      "self_detected_game_changes"
+    ]
   }
 }

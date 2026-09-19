@@ -32,6 +32,48 @@ LLM **không** được: nhìn toạ độ thô, đọc bộ nhớ tiến trình
 tiêu tài nguyên, hay phát input. Nếu một ngày LLM cần một trong các quyền đó, đó là dấu
 hiệu harness còn thiếu sâu, không phải lý do nới quyền cho LLM.
 
+### Luận đề — vì sao một model yếu là đủ
+
+Đây là trái tim của dự án, và nó phải kiểm chứng được:
+
+> **Năng lực = model × giàn giáo.** Trong một miền có ranh giới, giàn giáo thay thế được cho
+> dung lượng model.
+
+Model biên giới phải nhồi cả thế giới vào **trọng số**, vì nó không biết trước sẽ gặp gì.
+Dự án này biết trước. Nên phần "biết" được đẩy ra khỏi trọng số — vào harness (cơ chế) và
+`knowledge/` (tri thức có cấu trúc, có nguồn, có ngày) — và chỉ để lại cho model phần
+**suy luận trên tri thức đang có**.
+
+Hệ quả: *"LLM local yếu"* không phải nhược điểm phải khắc phục. Nó là **điều kiện của bài
+toán**. Nếu dự án chỉ chạy được khi thay bằng model mạnh hơn, thì luận đề sai.
+
+### Phạm vi làm luận đề mạnh lên, không yếu đi
+
+*"Chúng tôi làm AGI"* là câu không ai kiểm chứng được. Câu dưới đây thì có thể sai, nên nó
+mới đáng nói:
+
+> Với cùng một model khoảng 20B chạy CPU, harness đưa hiệu suất vận hành từ *không chạy nổi*
+> lên *trong khoảng X% của mốc người chơi giỏi*, trong khi model phải vào cuộc dưới N lần
+> trên 100 tick.
+
+Đóng phạm vi vào ROK là lựa chọn có chủ đích. ROK là miền thử khó: bề mặt đồ hoạ không có
+accessibility tree · trạng thái đổi theo thời gian thực · hành động không hoàn tác được ·
+chân trời hàng giờ · và **môi trường đối kháng, không dừng** — người chơi khác cướp mỏ, nên
+cùng một hành động hôm nay làm được, mai không. Rất ít miền thử có tính chất cuối cùng đó.
+
+### Đo bằng hai nhánh, không phải ba
+
+| Nhánh | Là gì | Nguồn |
+|---|---|---|
+| **Trần** | người vận hành tự chơi | mốc kinh nghiệm đã có: 2h00–2h30 với farm nhà 25 cấp mạnh, 3h30–4h00 với farm thấp hơn, điều kiện buff 50% chạy |
+| **H1** | model yếu + harness đầy đủ | cần đo |
+
+**Không đo nhánh sàn** (model yếu, không harness). Kết quả đã biết trước — nó không vận hành
+được — nên đo chỉ tốn thời gian mà không thêm thông tin.
+
+Trần **không cần model cloud**. Tiền đề của dự án là *chỉ tương tác qua đúng bề mặt
+nhìn-và-bấm mà người chơi có*, nên trần tự nhiên là người chơi giỏi, và số đó đã có.
+
 ### "Luôn bật" không có nghĩa là "luôn có việc"
 
 LLM local chạy thường trực như một người quan sát rảnh rỗi. Harness chỉ gửi cho nó một
