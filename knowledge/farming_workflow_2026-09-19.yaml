@@ -57,24 +57,78 @@ mission_model:
       cadence: continuous over the horizon
       completion: net-equivalent stock reaches the quota
     - id: DELIVER
-      cadence: once, on quota completion
+      cadence: on quota completion, as a multi-turn logistics run
       risk: transfer of assets, not reversible
-      authority: agent_acts_under_a_per_delivery_ceiling
-      operator_statement: "Agent tự giao, nhưng có trần mỗi lần"
-      rule: >
-        The agent performs the delivery itself, but each single delivery is
-        bounded by an explicit ceiling set by the operator.  A delivery that
-        would exceed the ceiling is split, or escalated - never silently
-        enlarged.
-      ceiling_value: NEEDS_CONFIRMATION - the operator has not yet given the
-        number, and the capability must stay disarmed until they do
+      authority: agent_acts
+
+      no_per_transfer_ceiling:
+        operator_statement: >
+          "không có trần giao nhé, game này có thể giao hết. Trần của nó đang
+          là tổng hợp tất cả 8 nông dân giao có đạt order của tôi không"
+        rule: >
+          The game permits transferring everything, so there is no per-transfer
+          limit to enforce.  The governing bound is the ORDER ITSELF, measured
+          in aggregate across all 8 farmers.  The question the agent must
+          answer is not "is this transfer too big" but "does the sum of what
+          all farmers have delivered reach the order".
+        consequence_for_design: >
+          Delivery accounting is therefore a fleet-level ledger, not a
+          per-action check.  Each transfer is posted against the shared order,
+          and the order is what closes.
+
+      recipient:
+        kind: designated_player
+        not: alliance_warehouse
+        proximity_requirement: >
+          The agent must TELEPORT NEAR the recipient before delivering.
+          Distance is therefore a cost that has to be paid before the transfer,
+          and it belongs in the delivery plan rather than being discovered
+          mid-run.
+
+      ui_paths:
+        operator_statement: >
+          "click kéo thủ công hoặc vào chợ support bấm, thì cái nào nó cũng
+          đang là như nhau theo thao tác người"
+        options:
+          - id: MAP_DRAG
+            description: manual click-and-drag on the map toward the recipient
+          - id: MARKET_SUPPORT
+            description: open the Trading Post and press Support
+        equivalence: >
+          The operator considers them equivalent as human operations.  The
+          agent may choose either; the choice should be made on which one
+          grounds more reliably on the current frame, not on preference.
+        selection_status: OPEN - to be decided by grounding reliability once
+          both paths are observed
+
+      transport_capacity:
+        SIGNIFICANCE: >
+          This is the fact that makes delivery a logistics problem instead of
+          a click.  A delivery is not one action; it is a sequence of cart
+          runs bounded by Trading Post level.
+        operator_statement: >
+          "phải xem chợ cấp bao nhiêu mới biết 1 turn chuyển được bao nhiêu
+          hàng hóa, và hàng đợi đó tương ứng với số xe chuyển hàng luôn"
+        model:
+          driver: trading_post_level
+          cargo_per_turn: derived from trading post level
+          transport_queue_size: equals the number of transport carts
+          note: >
+            This is a SECOND queue, independent of the five march queues used
+            for gathering.  The agent now has two capacity-limited queues with
+            different drivers, and the delivery schedule is bounded by the
+            transport one.
+        status: NEEDS_OBSERVATION - the exact level-to-capacity mapping has
+          not been read from the client yet
+
       required_guards:
-        - the ceiling is read from configuration, never inferred
         - the recipient is grounded on the current frame, never remembered
-        - the delivered amount is verified against the visible post-transfer
-          stock, because a dispatch receipt is not proof of transfer
-        - tax is applied to the net target, so gross delivered exceeds the
-          number the operator quoted
+        - the delivered amount is verified against visible post-transfer stock,
+          because a dispatch receipt is not proof of transfer
+        - tax is applied to the net target, so gross delivered must exceed the
+          figure the operator quoted
+        - every transfer is posted to the fleet-level order ledger before the
+          next one is planned
 
 # ---------------------------------------------------------------------------
 # 2. The account cycle - this is a process, not a UI sequence
@@ -108,13 +162,69 @@ account_cycle:
 
   current_scale:
     accounts: 2
+    characters_per_account: 4
+    farming_characters: 8
     operator_statement: "hiện tại khung tôi đang có là 2x4"
-    reading: 2 accounts x 4 characters = 8 farming characters
-    status: NEEDS_CONFIRMATION - the 2x4 shorthand is read as accounts x
-      characters; the operator should correct this if it means something else
+    status: CONFIRMED by operator
     marches_per_character: 5
-    implied_total_marches_per_full_rotation: 40
+    total_marches_per_full_rotation: 40
     design_rule: scale is a runtime input, never a constant in code
+
+# ---------------------------------------------------------------------------
+# 2b. Character check - what the agent surveys to build an account profile
+# ---------------------------------------------------------------------------
+# The operator: configuration may be loaded, or the agent surveys the client
+# to determine it.  The survey targets below are the inputs that decide how
+# fast a character farms and how much it can ship.
+#
+# STORAGE: operator_layer/ already holds the right schema for this -
+# OperatorSnapshot with mandatory Provenance, ObservedFact, and an
+# AccountQualityVector carrying commander_depth and farm_network_capacity.
+# It was merged on 2026-09-19 and nothing imports it yet.  This is the
+# consumer it was built for.
+character_survey:
+  purpose: >
+    Derive, per character, the two numbers the scheduler needs: how fast it
+    gathers, and how much it can transport per turn.
+
+  surfaces_to_read:
+    - surface: commanders
+      operator_statement: "vào tướng nhìn vào danh sách farm để đánh giá"
+      yields:
+        - which commanders are gathering-capable
+        - their levels and gathering skills
+      feeds: gathering_speed (the commander-skill component)
+
+    - surface: city_hall
+      operator_statement: >
+        "vào city hall để lấy tốc độ farm chung chưa tính skill của tướng"
+      yields: base gathering speed for the account
+      IMPORTANT: this figure EXCLUDES commander skill bonuses
+
+    - surface: trading_post
+      operator_statement: "vào chợ để xem năng lực vận chuyển"
+      yields:
+        - trading post level
+        - cargo per turn
+        - number of transport carts, which is the transport queue size
+      feeds: delivery_capacity
+
+  derived_values:
+    - id: gathering_speed
+      formula: base_speed_from_city_hall + commander_skill_contribution
+      operator_statement: >
+        "city hall ... chưa tính skill của tướng cộng vào để quyết định tốc độ"
+      use: >
+        Replaces the operator's empirical 2h-2h30 / 3h30-4h baseline with a
+        per-character computed cycle length.
+    - id: delivery_capacity
+      formula: cargo_per_turn(trading_post_level) x transport_queue_size
+      use: how many turns a given delivery will take
+
+  provenance_requirement: >
+    Every value above is an ObservedFact bound to the frame it was read from.
+    A derived value carries the evidence keys of the facts it came from.  This
+    is the contract operator_layer/profile.py already enforces.
 
   per_character_batch:
     marches: 5
@@ -216,13 +326,13 @@ default_daily_goal:
 
   target_ratio:
     value: [1, 1, 1, 2]
-    mapping: NEEDS_CONFIRMATION
-    likely_mapping:
+    mapping: CONFIRMED by operator
+    confirmed_mapping:
       food: 1
       wood: 1
       stone: 1
       gold: 2
-    rationale: >
+    rationale_confirmed: >
       The mission worked example asks for 5b gold against 3b of each other
       resource, which is consistent with gold carrying the double weight.
       Not yet confirmed by the operator.
