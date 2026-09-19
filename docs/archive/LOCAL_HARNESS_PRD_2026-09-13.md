@@ -1,6 +1,6 @@
 # PRD G002 — ROK Windows / Local Computer Use + OCR
 
-Ngày 2026-09-13. Trạng thái: đặc tả và triển khai R1; chưa nghiệm thu Computer Use. Nguồn: yêu cầu trực tiếp, [GOAL](GOAL.md), Auto_ROK HEAD 27fb52b573ceaf88e2f03b43ace6625dc8e465b1. Người dùng nghiệm thu; root quản đốc; chia_lo biên soạn đề, tho_dung xây, kiem_luat kiểm độc lập.
+Ngày 2026-09-13. Trạng thái: đặc tả và triển khai R1; chưa nghiệm thu Computer Use. Nguồn: yêu cầu trực tiếp, [GOAL](../GOAL.md), Auto_ROK HEAD 27fb52b573ceaf88e2f03b43ace6625dc8e465b1. Người dùng nghiệm thu; root quản đốc; chia_lo biên soạn đề, tho_dung xây, kiem_luat kiểm độc lập.
 
 ## Vấn đề và luồng người dùng
 

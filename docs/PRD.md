@@ -102,6 +102,63 @@ Giữ hàng đợi đầy và buff tăng tốc thu thập luôn khác 0.
 Khi một control, nhãn, hay hình dạng hộp thoại đã huấn luyện không còn khớp khung hình
 hiện tại, phát `retraining_required` và dừng. Cấm thay thế bằng mục tiêu phỏng đoán.
 
+Mở rộng: LLM được phép **đề xuất** một `ObservedFact` mô tả bố cục mới, kèm bằng chứng khung
+hình. Người vận hành duyệt thì nó vào `knowledge/`. LLM không bao giờ tự ghi.
+
+### F13 — Order và sổ cái cấp đội hình
+Một order là hạn mức **sau thuế** cộng thời hạn. Số phải gửi được tính ngược lên từ thuế và
+làm tròn lên, để không bao giờ giao thiếu.
+
+Game cho phép chuyển hết, nên **không có trần từng lần giao**. Ràng buộc thật là chính order,
+đo bằng **tổng của toàn đội**. Do đó sổ cái — không phải kiểm tra từng hành động — là cơ chế
+an toàn: mỗi bút toán bắt buộc có tham chiếu bằng chứng, và biên nhận gửi lệnh không phải
+bằng chứng chuyển hàng.
+
+*Đã hiện thực: `autorok/mission/order.py`.*
+
+### F14 — Đội hình và xoay vòng hai cấp
+Mỗi nhân vật 5 đạo quân. Chỉ vào lại một nhân vật khi **cả 5 đạo đã về**. Năm đạo không về
+cùng lúc, nên chu kỳ khấu hao theo **đạo chậm nhất**; đuôi trống được hấp thụ bằng cách xoay
+sang nhân vật kế tiếp, không phải bằng cách vào lại sớm.
+
+Xoay vòng ưu tiên tài khoản đang mở, vì đổi nhân vật rẻ còn đổi tài khoản thì không. Số lượng
+tài khoản và nhân vật là **đầu vào lúc chạy**, không phải hằng số trong code.
+
+"Hàng đợi đầy" đo ở **cấp đội hình**: một nhân vật cạn dần là bình thường, đội hình mới là
+thứ phải luôn bão hoà.
+
+*Đã hiện thực: `autorok/mission/fleet.py`.*
+
+### F15 — Thang suy giảm
+Fail-closed ở **cấp hành động**, không bao giờ dừng ở **cấp vòng lặp**:
+
+```
+ORDER_WORK → DEFAULT_FARM → SCARCITY_FILL → DAILY_CITIZEN → OBSERVE_ONLY
+```
+
+Hành động bị chặn thì tụt bậc, không đứng hình. Mỗi lần tụt ghi lại kèm lý do; tụt bậc kéo
+dài là bằng chứng về vương quốc và phải được đưa lên LLM, không bị nuốt im.
+
+*Bậc `SCARCITY_FILL` đã hiện thực: `autorok/mission/allocation.py`.*
+
+### F16 — Onboarding của LLM local
+Sáu pha trước khi được ra bất kỳ quyết định hành động nào: nạp `knowledge/` · xác định vị trí
+· khảo sát nhân vật nếu chưa có profile · dựng trạng thái đội hình · xác định mục tiêu hiệu
+lực · kiểm tra buff.
+
+Chỉ pha 0 được phép chặn toàn bộ. Các pha khác hỏng thì tụt bậc theo F15.
+**Không bao giờ tồn tại trạng thái "không có mục tiêu".**
+
+*Đặc tả đầy đủ: [`docs/LLM_GAMEPLAY_SPEC.md`](LLM_GAMEPLAY_SPEC.md).*
+
+### F17 — Giao hàng như bài toán logistics *(khoá)*
+Giao không phải một cú bấm. Người nhận là một người chơi được chỉ định, phải **tele lại gần**
+trước, và thông lượng bị chặn bởi **cấp Chợ**: hàng mỗi lượt × số xe, trong đó số xe chính là
+một hàng đợi thứ hai độc lập với 5 đạo quân.
+
+**Trạng thái: khoá.** Chưa quan sát được bảng *cấp Chợ → hàng mỗi lượt*, chưa chọn đường giao,
+chưa có số thuế. Không xây nửa vời.
+
 ---
 
 ## 5. Yêu cầu phi chức năng

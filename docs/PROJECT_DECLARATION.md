@@ -177,7 +177,10 @@ chặn việc xây dựng, nhưng **có** chặn việc tuyên bố đã nghiệ
 |---|---|
 | `docs/PROJECT_DECLARATION.md` | tài liệu này — cao nhất |
 | `docs/GOAL.md` | mục tiêu và định nghĩa hoàn thành G1–G6 |
-| `docs/PRD.md` | yêu cầu sản phẩm |
+| `docs/PRD.md` | yêu cầu sản phẩm F01–F17, N01–N06 |
+| `docs/DESIGN_BRIEF.md` | research kiến trúc và thiết kế hai tầng quyết định |
+| `docs/LLM_GAMEPLAY_SPEC.md` | LLM local chơi game thế nào, gồm onboarding 6 pha |
+| `docs/BUILD_PLAN.md` | kế hoạch xây dựng P0–P5 và bảng điểm |
 | `docs/COVERAGE.md` | độ phủ hiện tại, tính từ bằng chứng |
 | `knowledge/*.yaml` | kiến thức gameplay đã quan sát, có nguồn và ngày |
 | `config/engineering_graph.yaml` | cấu trúc kỹ thuật và blocker đang mở |
