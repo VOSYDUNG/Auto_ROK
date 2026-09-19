@@ -18,8 +18,9 @@ Three things were wrong with it, and each is fixed here for a stated reason.
    there is nothing to leak.
 
 3. It drew a 68px crosshair over live game UI at every action point.  The
-   agent cursor here is a 22px ring with short inward ticks and an open
-   centre, so the thing being clicked stays visible.
+   agent cursor here is a small conical farm hat standing above the target,
+   with a 5px dot marking the exact pixel, so the thing being clicked stays
+   visible underneath.
 
 Two windows, and each uses exactly ONE transparency mechanism:
 
@@ -31,12 +32,15 @@ than incidental.
 
 On the agent cursor.  Windows has one physical pointer and SendInput moves it,
 so the agent cannot own a second one the way a remote-desktop agent can.  The
-ring is better than a second pointer would be anyway: it appears at the target
-BEFORE the click, so the operator sees where the agent is going while there is
-still time to stop it.  A real cursor only tells you where it already went.
+marker is better than a second pointer would be anyway: it appears at the
+target BEFORE the click, so the operator sees where the agent is going while
+there is still time to stop it.  A real cursor only tells you where it went.
 
-It is deliberately not an arrow.  At a glance a dashed ring cannot be confused
-with the operator's own pointer, which is the whole reason it exists.
+It is a nón lá, because the operator calls the accounts "nông dân" and the
+marker should speak the same language the business does.  It is also nothing
+like an arrow, which is what makes it readable at a glance - and the state
+shows in the shape as well as the colour: hollow while targeting, filled once
+input is armed.
 
 The HUD is read-only and click-through.  It never sends input, and it is not a
 control surface: it reports what the harness already decided.
@@ -61,23 +65,29 @@ DOCK_X, DOCK_Y = 334, 2
 DOCK_W, DOCK_H = 607, 34
 COLLAPSED_W, COLLAPSED_H = 120, 4
 
-#: The agent cursor.  Windows has one physical pointer, and SendInput moves
-#: it, so the agent cannot have a second one.  What it gets instead is a ring
-#: drawn around where it intends to act - visible BEFORE the click, which the
-#: real cursor cannot give you, because by the time the pointer has moved the
-#: decision is already made.
-#:
-#: Deliberately not an arrow.  A ring with inward ticks cannot be mistaken for
-#: the operator's own pointer at a glance, which is the entire point.
+#: The agent cursor: a marker at the point it intends to act on, visible
+#: BEFORE the click.  The real pointer cannot give you that - by the time it
+#: has moved, the decision is already made.
 CURSOR_BOX = 64
-CURSOR_RING = 11
-CURSOR_TICK = 6
+#: A conical farm hat.  The operator calls the accounts "nông dân", so the
+#: marker wears the same word the business does - and a hat silhouette is
+#: unmistakable against an arrow pointer at any size.
+HAT_HALF_W = 15
+HAT_HEIGHT = 22
+#: Gap between the brim and the click point, so the hat never covers the
+#: thing it is about to click.
+STEM = 9
+POINT_R = 2.5
 
 #: Colour-key transparency, and NO alpha.  The HUD bar uses alpha and no key.
 #: Each window uses exactly one mechanism - using both together is what made
 #: the previous overlay fringe pink.  The key is a near-black the marker never
 #: draws, so nothing can be keyed out by accident.
 CURSOR_KEY = "#010203"
+#: Dark stroke drawn under the marker so it reads on pale grass and on dark
+#: city panels alike.  Deliberately not the key colour, which would be keyed
+#: out and leave the marker with no contrast at all.
+HALO = "#12171d"
 
 FONT_UI = ("Segoe UI", 9)
 FONT_UI_MEDIUM = ("Segoe UI", 9, "bold")
@@ -122,10 +132,10 @@ def read_target_point(payload: dict[str, Any]) -> tuple[float, float] | None:
 
 
 class AgentCursor:
-    """A ring around the point the agent is about to act on.
+    """A farm hat standing over the point the agent is about to act on.
 
-    Click-through and never filled: the operator has to be able to see the
-    thing being clicked, which a solid dot would hide.
+    Click-through, and the hat sits above the target rather than on it, so the
+    operator can see what is about to be clicked.
     """
 
     def __init__(self, master: tk.Misc) -> None:
@@ -158,24 +168,70 @@ class AgentCursor:
             self.visible = True
 
         self.canvas.delete("all")
-        colour = look.dot
-        radius = CURSOR_RING + (2 if armed else 0)
-        width = 2 if armed else 1
-        dash = () if armed else (3, 3)
+        self._draw_hat(half, look.dot, armed=armed)
 
-        self.canvas.create_oval(
-            half - radius, half - radius, half + radius, half + radius,
-            outline=colour, width=width, dash=dash,
+    def _draw_hat(self, centre: int, colour: str, *, armed: bool) -> None:
+        """A nón lá silhouette standing above the click point.
+
+        Everything is anchored on ``centre`` - the window is positioned so
+        that pixel sits exactly on the target, so the dot must be drawn there
+        and the hat built upward from it.  Anchoring the hat instead would put
+        the click a few pixels off, which is the kind of error that only shows
+        up as a misclick on a live client.
+
+        Hollow while targeting, filled once armed, so the state reads from the
+        shape and not from colour alone.
+        """
+        cx = centre
+        point_y = centre
+        brim = point_y - STEM
+        top = brim - HAT_HEIGHT
+        left, right = cx - HAT_HALF_W, cx + HAT_HALF_W
+
+        # Apex, down the right slope, then back along a brim that sags very
+        # slightly in the middle.  An earlier version curved the brim UP and
+        # the silhouette read as an umbrella rather than a hat.
+        crown = (
+            cx, top,
+            cx, top,
+            cx + 8, top + 11,
+            right, brim - 1,
+            cx + 8, brim + 2,
+            cx, brim + 3,
+            cx - 8, brim + 2,
+            left, brim - 1,
+            cx - 8, top + 11,
+            cx, top,
         )
-        # Inward ticks, stopping short of the ring so the centre stays clear.
-        gap = radius + 3
-        reach = gap + CURSOR_TICK
-        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-            self.canvas.create_line(
-                half + dx * gap, half + dy * gap,
-                half + dx * reach, half + dy * reach,
-                fill=colour, width=width,
-            )
+        # A darker stroke underneath, so the marker survives both the pale
+        # grass of the world map and the dark panels of the city UI.  Without
+        # it the hollow state disappears against anything dim.
+        self.canvas.create_polygon(
+            crown, fill="", outline=HALO, width=4, smooth=True
+        )
+        self.canvas.create_polygon(
+            crown,
+            fill=colour if armed else "",
+            outline=colour,
+            width=2,
+            smooth=True,
+        )
+        if not armed:
+            # Hollow needs an interior line or it reads as an empty blob at
+            # this size - this is the ridge from apex to brim.
+            self.canvas.create_line(cx, top + 3, cx, brim, fill=colour, width=1)
+
+        self.canvas.create_line(cx, brim + 1, cx, point_y - 4, fill=HALO, width=3)
+        self.canvas.create_line(cx, brim + 1, cx, point_y - 4, fill=colour, width=1)
+        self.canvas.create_oval(
+            cx - POINT_R - 1, point_y - POINT_R - 1,
+            cx + POINT_R + 1, point_y + POINT_R + 1,
+            fill=HALO, outline="",
+        )
+        self.canvas.create_oval(
+            cx - POINT_R, point_y - POINT_R, cx + POINT_R, point_y + POINT_R,
+            fill=colour, outline="",
+        )
 
 
 def _set_click_through(window: tk.Misc) -> None:

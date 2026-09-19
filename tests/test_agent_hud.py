@@ -167,20 +167,50 @@ def test_a_malformed_point_draws_no_cursor(payload):
     assert read_target_point(payload) is None
 
 
-def test_the_cursor_centre_stays_open():
-    """A filled marker would hide the very element being clicked."""
-    from scripts.run_agent_hud import CURSOR_BOX, CURSOR_RING, CURSOR_TICK
+def test_the_click_point_lands_on_the_window_centre():
+    """The window is placed centre-on-target, so the dot must be drawn there.
 
-    assert CURSOR_RING * 2 < CURSOR_BOX
-    # Ring, a gap, then ticks - all inside the window.
-    assert (CURSOR_RING + 2 + 3 + CURSOR_TICK) < CURSOR_BOX // 2
+    Anchoring the hat instead would offset every click by the stem length -
+    an error that only shows up as a misclick on a live client.
+    """
+    from scripts.run_agent_hud import CURSOR_BOX, STEM
+
+    centre = CURSOR_BOX // 2
+    point_y = centre
+    brim = point_y - STEM
+    assert point_y == centre
+    assert brim < point_y, "the hat must sit above the point, never on it"
 
 
-def test_the_cursor_is_small_enough_not_to_obscure_a_target():
-    """The rejected overlay drew a 68px crosshair."""
-    from scripts.run_agent_hud import CURSOR_RING
+def test_the_hat_never_covers_the_target():
+    """A marker drawn over the element hides the thing being clicked."""
+    from scripts.run_agent_hud import POINT_R, STEM
 
-    assert CURSOR_RING * 2 <= 26
+    assert STEM > POINT_R * 2
+
+
+def test_the_whole_marker_fits_inside_its_window():
+    from scripts.run_agent_hud import (
+        CURSOR_BOX,
+        HAT_HALF_W,
+        HAT_HEIGHT,
+        POINT_R,
+        STEM,
+    )
+
+    centre = CURSOR_BOX // 2
+    apex = centre - STEM - HAT_HEIGHT
+    assert apex > 0, "hat apex clipped by the window"
+    assert centre + POINT_R < CURSOR_BOX, "click dot clipped"
+    assert 0 < centre - HAT_HALF_W and centre + HAT_HALF_W < CURSOR_BOX
+
+
+def test_the_marker_is_smaller_than_the_crosshair_it_replaced():
+    """The rejected overlay drew 68px of crosshair."""
+    from scripts.run_agent_hud import HAT_HALF_W, HAT_HEIGHT, STEM
+
+    assert HAT_HALF_W * 2 <= 36
+    assert HAT_HEIGHT + STEM <= 32
 
 
 def test_the_two_windows_never_share_a_transparency_mechanism():
@@ -193,3 +223,16 @@ def test_the_two_windows_never_share_a_transparency_mechanism():
             assert getattr(look, field).lower() != CURSOR_KEY.lower(), (
                 "a palette colour equal to the key would be keyed out and vanish"
             )
+
+
+def test_the_marker_has_a_dark_halo_that_is_not_the_transparency_key():
+    """Without it the hollow state vanishes on dark panels.
+
+    A halo equal to the key colour would be keyed out, leaving the marker with
+    no contrast at all - the exact failure it exists to prevent.
+    """
+    from scripts.run_agent_hud import CURSOR_KEY, HALO
+
+    assert HALO.lower() != CURSOR_KEY.lower()
+    for look in LOOKS.values():
+        assert look.dot.lower() != HALO.lower(), "halo must contrast with the marker"
