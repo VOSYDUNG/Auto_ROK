@@ -13,6 +13,7 @@ import ctypes
 import json
 from pathlib import Path
 import sys
+import time
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -129,7 +130,24 @@ def record(
     capture_output: Path,
     operator_confirms_quiescent: bool,
     recovery_evidence: Path | None,
+    focus_delay_seconds: float = 0.0,
 ) -> dict[str, Any]:
+    # The guard requires ROK to be foreground for the whole bounded window.
+    # Launching this from a terminal makes the TERMINAL foreground, so
+    # without a pause the check can never pass from a shell - it would only
+    # pass if something else put the game in front, which is the opposite of
+    # what the evidence is supposed to show.  The delay is time for the
+    # operator to click the client, nothing more: no input is sent, and the
+    # foreground reading afterwards is still taken from the live desktop.
+    if focus_delay_seconds > 0:
+        print(
+            f"focus the Rise of Kingdoms client now - capturing in "
+            f"{focus_delay_seconds:.0f}s, and do not touch the mouse or "
+            f"keyboard once it starts",
+            file=sys.stderr,
+            flush=True,
+        )
+        time.sleep(focus_delay_seconds)
     started = datetime.now(timezone.utc)
     foreground_before = _foreground_hwnd()
     capture_meta = capture_output.with_suffix(".capture.json")
@@ -182,6 +200,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--capture-output", required=True)
     parser.add_argument("--operator-confirms-quiescent", action="store_true")
     parser.add_argument(
+        "--focus-delay-seconds",
+        type=float,
+        default=0.0,
+        help="pause before capturing so the operator can bring ROK to the "
+             "foreground; sends no input",
+    )
+    parser.add_argument(
         "--recovery-evidence",
         help="completed no-input recovery matrix JSON used as cancel/resume evidence",
     )
@@ -197,6 +222,7 @@ def main(argv: list[str] | None = None) -> int:
             capture_output=capture_output,
             operator_confirms_quiescent=args.operator_confirms_quiescent,
             recovery_evidence=_evidence_path(args.recovery_evidence) if args.recovery_evidence else None,
+            focus_delay_seconds=max(0.0, min(60.0, float(args.focus_delay_seconds))),
         )
         output.parent.mkdir(parents=True, exist_ok=True)
         temporary = output.with_name(output.name + ".tmp")
