@@ -88,7 +88,7 @@ không có dữ liệu để đề xuất.
 | OCR-003 | Một khung hoàn tất dưới **400 ms** | Đo trên corpus hiện có | N02 | **CHƯA ĐẠT** — đo được 4.525 ms |
 | OCR-004 | Tối ưu OCR không được đổi kết quả | Đầu ra sau tối ưu giống hệt trước trên toàn corpus | N02 | CHƯA XÂY |
 | OCR-005 | Đầu ra OCR phải là **UTF-8**, không phụ thuộc locale máy | Tên có dấu (`Šárka`) đọc được; đổi locale không làm gãy | F02 | **CHƯA XÂY** — hiện xuất cp1252 |
-| OCR-006 | Đọc được chỉ số hàng đợi trên world map | `1/5` tại `x≈1321…1338, y≈116…125` phải ra đúng | F07 | **CHƯA XÂY** — hiện không đọc được |
+| OCR-006 | Đọc được chỉ số hàng đợi trên world map | Đọc đúng `1/5` từ khung thật; **template, không phải OCR** | F07 | **XONG** · `test_queue_indicator` |
 
 ### 3.3 Trạng thái — STA
 
@@ -98,7 +98,9 @@ không có dữ liệu để đề xuất.
 | STA-002 | Thiếu bằng chứng → `UNKNOWN_STATE`, không đoán | Bằng chứng rỗng không bao giờ cho ra trạng thái cụ thể | F03 | ĐÃ KIỂM |
 | STA-003 | Bằng chứng cạnh tranh → `AMBIGUOUS_STATE` | Hai ứng viên điểm sát nhau thì không chọn | F03 | ĐÃ KIỂM |
 | STA-004 | Bề mặt tiền cảnh che kết quả nền | Overlay hiện thì không trả CITY/WORLD nền | F03 | ĐÃ KIỂM · `test_alliance_main_view_suppression` |
-| STA-005 | Hàng đợi nối đất theo **vị trí**, cấm bắt `n/5` toàn khung | Chuỗi `(5/5)` của nhiệm vụ Trade Deal không được nhận là hàng đợi | F07 | **CHƯA XÂY** — mồi giả đã quan sát thấy |
+| STA-005 | Hàng đợi nối đất theo **vị trí**, cấm bắt `n/5` toàn khung | Mồi `(5/5)` vẽ ở vùng nhiệm vụ không được đọc là hàng đợi | F07 | **XONG** · `test_queue_indicator` |
+| STA-006 | Glyph chưa huấn luyện → `UNKNOWN_GLYPH`, không đoán | Chữ số 0/2/3/4 chưa quan sát thì từ chối, không trả số | F03 | **XONG** · `test_queue_indicator` |
+| STA-007 | Hai template hoà nhau → từ chối, không bẻ hoà tuỳ tiện | `AMBIGUOUS_GLYPH` thay vì chọn bừa | F03 | **XONG** |
 
 ### 3.4 Order và đội hình — MIS
 
@@ -218,8 +220,8 @@ không có dữ liệu để đề xuất.
 | Nhóm | Tổng | ĐÃ KIỂM | CHƯA KIỂM | CHƯA XÂY | KHOÁ / chờ |
 |---|---|---|---|---|---|
 | CAP thu hình | 6 | 6 | — | — | — |
-| OCR | 6 | 2 | — | 4 | — |
-| STA trạng thái | 5 | 4 | — | 1 | — |
+| OCR | 6 | 3 | — | 3 | — |
+| STA trạng thái | 7 | 7 | — | — | — |
 | MIS order/đội hình | 16 | 12 | — | 4 | — |
 | LAD suy giảm | 10 | 6 | — | 4 | — |
 | LLM biên quyết định | 9 | 4 | 1 | 4 | — |
@@ -228,9 +230,9 @@ không có dữ liệu để đề xuất.
 | EVI bằng chứng | 4 | 4 | — | — | — |
 | SAF an toàn | 6 | 3 | 1 | 2 | — |
 | DEL giao hàng | 15 | 6 | — | 4 | 5 |
-| **Tổng** | **89** | **55** | **2** | **27** | **5** |
+| **Tổng** | **91** | **59** | **2** | **25** | **5** |
 
-**Đọc bảng này:** 55/89 yêu cầu đã có test đang chạy. Phần chưa xây tập trung đúng bốn chỗ —
+**Đọc bảng này:** 59/91 yêu cầu đã có test đang chạy. Phần chưa xây tập trung đúng bốn chỗ —
 **thang suy giảm** (LAD-007…010), **tầng chiến lược của LLM** (LLM-005…009),
 **onboarding** (ONB-001…004), và **lịch biểu động** (MIS-013…016). Ba nhóm đầu là P1 trong
 `BUILD_PLAN`; nhóm thứ tư là mới, sinh ra từ buổi 2026-09-20.

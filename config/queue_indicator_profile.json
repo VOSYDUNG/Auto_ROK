@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "status": "trained",
+  "measurement_class": "march_queue_indicator",
+  "note": "Bitmap font glyphs for the world-map march queue. Windows OCR reads this region as '115' for '1/5', so the runtime uses template matching. Digits 0, 2, 3 and 4 are not observed yet; the reader returns UNKNOWN_GLYPH for them rather than guessing.",
+  "roi": {
+    "x": 1310,
+    "y": 113,
+    "width": 40,
+    "height": 15
+  },
+  "threshold": 200,
+  "max_glyph_distance": 1,
+  "client_size": [
+    1366,
+    768
+  ],
+  "source_frame_id": "rok-20260919T172251392707Z-cab77d2c0b1f",
+  "trained_at": "2026-09-20",
+  "observed_value": "1/5",
+  "glyphs": {
+    "1": [
+      "###",
+      ".##",
+      "..#",
+      "..#",
+      "..#",
+      ".##",
+      "###"
+    ],
+    "/": [
+      "..#",
+      "...",
+      ".#.",
+      ".#.",
+      ".#.",
+      "...",
+      "...",
+      "#..",
+      "#..",
+      "#.."
+    ],
+    "5": [
+      "####",
+      "#...",
+      "#...",
+      "####",
+      "...#",
+      "...#",
+      "..##",
+      ".#.."
+    ]
+  }
+}
