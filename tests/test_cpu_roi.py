@@ -55,3 +55,39 @@ def test_visual_signature_turns_opencl_off_before_processing(tmp_path):
         cv2.ocl.setUseOpenCL(True)
     extract_visual_signature(path)
     assert not hasattr(cv2, "ocl") or cv2.ocl.useOpenCL() is False
+
+
+def test_every_region_carries_a_measured_ocr_scale():
+    """A scale nobody measured is a guess with a number on it."""
+    profile = CpuRoiProfile.load(PROFILE)
+    for roi_id in profile.regions:
+        scale = profile.resolve(roi_id, (1366, 768)).ocr_scale
+        assert 1.0 <= scale <= 8.0, f"{roi_id} has an out-of-range ocr_scale"
+
+
+def test_an_out_of_range_ocr_scale_is_refused(tmp_path):
+    source = PROFILE.read_text(encoding="utf-8")
+    broken = source.replace("ocr_scale: 1.0", "ocr_scale: 99", 1)
+    path = tmp_path / "bad.yaml"
+    path.write_text(broken, encoding="utf-8")
+    with pytest.raises(CpuRoiError, match="ocr_scale"):
+        CpuRoiProfile.load(path)
+
+
+def test_the_header_strip_stops_short_of_the_plus_button():
+    """Calibrated 2026-09-20. Including it corrupted the gem counter.
+
+    This is a boundary someone will widen back to the full client width
+    because it looks tidier. The measurement said 1340 reads 10/10 exact and
+    1366 reads 8/10, at every magnification tried.
+    """
+    profile = CpuRoiProfile.load(PROFILE)
+    rect = profile.resolve("top_resource_bar", (1366, 768)).rect
+    assert rect.right == 1340, (
+        "the header ROI must stop before the green + button; widening it "
+        "silently corrupts the gem counter rather than failing"
+    )
+    assert rect.height >= 60, (
+        "the strip must keep full glyph height; clipping it to 30px dropped "
+        "the read to zero elements"
+    )

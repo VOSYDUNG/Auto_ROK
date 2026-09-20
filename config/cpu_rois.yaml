@@ -11,19 +11,59 @@ processing_backend:
 
 # These rectangles are processing windows only.  They are relative to the
 # current ROK client frame and must never be used as action coordinates.
+#
+# ocr_scale is how much a region is magnified before Windows.Media.Ocr sees
+# it.  It is MEASURED per region, never picked globally, because the two
+# effects pull in opposite directions:
+#
+#   * a region that clips glyph height reads NOTHING until it is magnified
+#   * a well-framed region reads correctly at 1 and gets WORSE at 3, because
+#     magnifying a wide strip fragments words that were already legible
+#
+# Calibrated 2026-09-20 against two live 1366x768 frames, one CITY_VIEW and
+# one WORLD_MAP_VIEW, scored against operator-read ground truth.
 regions:
   signature_canvas:
     rect: [109, 61, 1148, 614]
     purpose: "low-resolution CITY_VIEW/WORLD_MAP_VIEW visual signature"
   top_resource_bar:
-    rect: [0, 0, 1366, 64]
+    # Right edge pulled in from 1366 to 1340.  The last 26px hold the green
+    # "+" button, and including them corrupted the gem counter on EVERY
+    # scale: "13,602" came back as 13,602" / 13,602K / 13,6Ch.  Narrowing the
+    # box took the strip from 8/10 to 10/10 exact across both frames, which
+    # no amount of magnification achieved.
+    rect: [0, 0, 1340, 64]
+    ocr_scale: 1.0
     purpose: "resource counters and profile identity OCR"
+    calibration:
+      measured_on: "2026-09-20"
+      frames: ["m7-live-20260920/city-01.png", "p3-observe-20260920/frame-01.png"]
+      exact_reads: "10/10"
+      note: "scale 2 -> 8/10, scale 3 -> 8/10, scale 4 -> 6/10; do not magnify"
   march_queue_indicator:
     rect: [1240, 110, 125, 50]
-    purpose: "bounded OCR for the visible active-march queue indicator"
+    ocr_scale: 1.0
+    purpose: "template reading for the visible active-march queue indicator"
+    calibration:
+      measured_on: "2026-09-20"
+      exact_reads: "0 elements at scale 1, 2, 3, 4 and 6, on both frames"
+      note: >-
+        Windows.Media.Ocr never reads this indicator at any magnification.
+        That is why harness/queue_indicator.py matches templates instead, at
+        0.207 ms.  Kept here so the region stays registered, not because OCR
+        is expected to work on it.
   left_quest_panel:
     rect: [0, 64, 190, 470]
+    ocr_scale: 1.0
     purpose: "quest and task text OCR"
+    calibration:
+      measured_on: "2026-09-20"
+      exact_reads: "37 elements at scale 1; 34 at scale 2 and 3"
+      note: >-
+        Reads well unscaled.  Worth knowing: swept as part of a whole CITY
+        frame this same panel yields ZERO, and cropped it yields 37.  The
+        frame around the text decides whether the text is read at all, which
+        is why every sensor takes a region rather than a screenshot.
   center_canvas:
     rect: [190, 64, 1086, 556]
     purpose: "central game scene visual processing"

@@ -7,7 +7,7 @@ distorting a trained region.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping
@@ -48,6 +48,11 @@ class ResolvedRoi:
     rect: RoiRect
     source_client_size: tuple[int, int]
     reference_client_size: tuple[int, int]
+    #: How much to magnify this region before OCR.  Measured per region, not
+    #: chosen globally: a well-framed strip reads correctly at 1 and gets
+    #: WORSE at 3, while a tight region reads nothing until 4.  See
+    #: harness/windows_ocr_direct.recognize_frame for the numbers.
+    ocr_scale: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -57,6 +62,9 @@ class CpuRoiProfile:
     aspect_ratio_tolerance: float
     regions: Mapping[str, RoiRect]
     processing_backend: Mapping[str, Any]
+    #: Per-region OCR magnification, defaulting to 1.0 for regions that are
+    #: visual-only or that read correctly unscaled.
+    ocr_scales: Mapping[str, float] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: str | Path) -> "CpuRoiProfile":
@@ -93,6 +101,7 @@ class CpuRoiProfile:
         if not isinstance(raw_regions, Mapping) or not raw_regions:
             raise CpuRoiError("CPU ROI profile needs at least one region")
         regions: dict[str, RoiRect] = {}
+        ocr_scales: dict[str, float] = {}
         ref_width, ref_height = reference
         for roi_id, item in raw_regions.items():
             if not isinstance(roi_id, str) or not roi_id.strip() or not isinstance(item, Mapping):
@@ -108,12 +117,19 @@ class CpuRoiProfile:
             if parsed.right > ref_width or parsed.bottom > ref_height:
                 raise CpuRoiError(f"ROI {roi_id!r} exceeds reference client bounds")
             regions[roi_id] = parsed
+            scale = item.get("ocr_scale", 1.0)
+            if type(scale) not in (int, float) or not 1.0 <= float(scale) <= 8.0:
+                raise CpuRoiError(
+                    f"ROI {roi_id!r} ocr_scale must be a number within 1..8"
+                )
+            ocr_scales[roi_id] = float(scale)
         return cls(
             profile_id.strip(),
             (ref_width, ref_height),
             float(tolerance),
             regions,
             dict(backend),
+            ocr_scales,
         )
 
     def resolve(self, roi_id: str, client_size: tuple[int, int]) -> ResolvedRoi:
@@ -143,7 +159,13 @@ class CpuRoiProfile:
         resolved = RoiRect(x, y, right - x, bottom - y)
         if resolved.right > width or resolved.bottom > height:
             raise CpuRoiError(f"resolved ROI {roi_id!r} exceeds current client bounds")
-        return ResolvedRoi(roi_id, resolved, client_size, self.reference_client_size)
+        return ResolvedRoi(
+            roi_id,
+            resolved,
+            client_size,
+            self.reference_client_size,
+            self.ocr_scales.get(roi_id, 1.0),
+        )
 
     def crop(self, image: Any, roi_id: str) -> tuple[Any, ResolvedRoi]:
         shape = getattr(image, "shape", ())
