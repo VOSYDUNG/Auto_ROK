@@ -6,10 +6,23 @@ import pytest
 from harness.windows_live_observation import WindowsLiveObservationProvider
 
 
-def test_windows_live_observation_defaults_to_canonical_windows_ocr(tmp_path):
+def test_the_default_backend_calls_windows_ocr_without_leaving_the_process(tmp_path):
+    """The PowerShell path cost 1,036 ms to do 73 ms of OCR.
+
+    It spawned a process, reloaded WinRT, then re-hashed and re-decoded a frame
+    this process already held. Same engine either way; the in-process call
+    measures 93 ms and matches it element for element.
+    """
     provider = WindowsLiveObservationProvider(tmp_path)
-    assert provider.ocr_backend == "windows"
+    assert provider.ocr_backend == "windows_direct"
     assert provider._rapidocr_backend is None
+    assert provider._direct_ocr is None, "the engine is built on first use, not eagerly"
+
+
+def test_the_powershell_path_is_still_selectable_for_replay(tmp_path):
+    """Retained for replaying stored evidence, not for live ticks."""
+    provider = WindowsLiveObservationProvider(tmp_path, ocr_backend="windows")
+    assert provider.ocr_backend == "windows"
 
 
 def test_rapidocr_fixed_roi_is_explicit_opt_in(tmp_path):

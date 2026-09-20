@@ -85,11 +85,11 @@ không có dữ liệu để đề xuất.
 |---|---|---|---|---|
 | OCR-001 | Lắp hộp từ thành cụm có nghĩa, tất định | Cùng đầu vào cho cùng đầu ra | F02 | ĐÃ KIỂM · `test_ocr_semantics` |
 | OCR-002 | Nối đất mục tiêu theo **nhãn chữ chính xác**, không theo màu hay vị trí | Mục tiêu khai báo không khớp chữ thì không nối đất | F02, F11 | ĐÃ KIỂM |
-| OCR-003 | Một khung hoàn tất dưới **400 ms** | Đo trên khung game thật | N02 | **ĐẠT trên bản mẫu — 93 ms**; chưa nối vào runtime |
+| OCR-003 | Một khung hoàn tất dưới **400 ms** | Đo trên khung game thật | N02 | **ĐẠT — 93 ms**, đã là backend mặc định |
 | OCR-004 | Tối ưu OCR không được đổi kết quả | 75 element giống hệt **từng byte** trước/sau | N02 | **ĐẠT** cho M3.1 |
 | OCR-007 | Cảm biến sai thì thay cảm biến, cấm vá bên tiêu thụ | Bản vá `115→1/5` đã gỡ; `213`, `919` nay bị từ chối | F02 | **XONG** · `test_gather_facts` |
-| OCR-005 | Đầu ra OCR phải là **UTF-8**, không phụ thuộc locale máy | Tên có dấu (`Šárka`) đọc được; đổi locale không làm gãy | F02 | **LỖI ĐANG SỐNG** — xuất **CP437**, không phải cp1252 |
-| OCR-008 | Không đi qua ranh giới tiến trình để làm lại việc đã làm | Python đã có pixel và đã băm SHA-256; PowerShell băm lại 151 ms, giải mã lại 325 ms | N02 | **CHƯA XÂY** |
+| OCR-005 | Không có lớp mã hoá nào giữa engine và Python | Đường mặc định nhận thẳng `str` từ WinRT; đường PowerShell còn lại khai rõ `cp437` | F02 | **XONG** |
+| OCR-008 | Không đi qua ranh giới tiến trình để làm lại việc đã làm | Backend mặc định gọi WinRT trong tiến trình | N02 | **XONG** · `test_windows_ocr_direct` |
 | OCR-006 | Đọc được chỉ số hàng đợi trên world map | Đọc đúng `1/5` từ khung thật; **template, không phải OCR** | F07 | **XONG** · `test_queue_indicator` |
 
 ### 3.3 Trạng thái — STA
@@ -223,7 +223,7 @@ không có dữ liệu để đề xuất.
 | Nhóm | Tổng | ĐÃ KIỂM | CHƯA KIỂM | CHƯA XÂY | KHOÁ / chờ |
 |---|---|---|---|---|---|
 | CAP thu hình | 6 | 6 | — | — | — |
-| OCR | 8 | 5 | 1 | 2 | — |
+| OCR | 8 | 8 | — | — | — |
 | STA trạng thái | 7 | 7 | — | — | — |
 | MIS order/đội hình | 16 | 12 | — | 4 | — |
 | LAD suy giảm | 10 | 6 | — | 4 | — |
@@ -233,9 +233,9 @@ không có dữ liệu để đề xuất.
 | EVI bằng chứng | 4 | 4 | — | — | — |
 | SAF an toàn | 6 | 3 | 1 | 2 | — |
 | DEL giao hàng | 15 | 6 | — | 4 | 5 |
-| **Tổng** | **94** | **63** | **3** | **23** | **5** |
+| **Tổng** | **94** | **66** | **2** | **21** | **5** |
 
-**Đọc bảng này:** 63/94 yêu cầu đã có test đang chạy. Phần chưa xây tập trung đúng bốn chỗ —
+**Đọc bảng này:** 66/94 yêu cầu đã có test đang chạy. Phần chưa xây tập trung đúng bốn chỗ —
 **thang suy giảm** (LAD-007…010), **tầng chiến lược của LLM** (LLM-005…009),
 **onboarding** (ONB-001…004), và **lịch biểu động** (MIS-013…016). Ba nhóm đầu là P1 trong
 `BUILD_PLAN`; nhóm thứ tư là mới, sinh ra từ buổi 2026-09-20.

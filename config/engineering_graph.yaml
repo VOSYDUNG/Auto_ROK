@@ -75,6 +75,17 @@ nodes:
       - harness/mission_timeline.py
       - tests/test_llm_boundary.py
 
+  - id: windows_ocr_direct
+    kind: perception
+    responsibility: Call Windows.Media.Ocr in process on pixels the capture backend already holds, instead of spawning PowerShell to re-hash and re-decode the same frame.
+    authority: canonical
+    status: implemented
+    path: harness/windows_ocr_direct.py
+    evidence:
+      - harness/windows_live_observation.py
+      - tests/test_windows_ocr_direct.py
+      - tests/test_windows_live_observation.py
+
   - id: march_queue_indicator
     kind: perception
     responsibility: Read the world-map march queue from a calibrated ROI by template matching, returning a value or a classified refusal but never a guess.
@@ -787,6 +798,7 @@ nodes:
     blocker: A001
 
 edges:
+  - {from: windows_ocr_direct, to: observation_projection, relation: supplies_ocr_elements}
   - {from: march_queue_indicator, to: gather_fact_extractor, relation: supplies_queue_fact}
   - {from: model_input_boundary, to: local_decision_provider, relation: constrains}
   - {from: model_input_boundary, to: mission_scheduler, relation: constrains}

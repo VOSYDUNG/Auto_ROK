@@ -32,7 +32,7 @@ class WindowsLiveObservationProvider:
         candidates: Sequence[CandidateSpec] = (),
         powershell: str = "powershell.exe",
         ocr_script: str | Path | None = None,
-        ocr_backend: str = "windows",
+        ocr_backend: str = "windows_direct",
         timeout_seconds: float = 10.0,
         max_age_seconds: float = 30.0,
     ) -> None:
@@ -40,15 +40,44 @@ class WindowsLiveObservationProvider:
         self.candidates = tuple(candidates)
         self.powershell = powershell
         self.ocr_script = Path(ocr_script).resolve() if ocr_script else Path(__file__).resolve().parents[1] / "scripts" / "windows_ocr.ps1"
-        if ocr_backend not in {"windows", "rapidocr_fixed_roi_experiment"}:
+        if ocr_backend not in {
+            "windows_direct",
+            "windows",
+            "rapidocr_fixed_roi_experiment",
+        }:
             raise ValueError(
-                "ocr_backend must be 'windows' or 'rapidocr_fixed_roi_experiment'"
+                "ocr_backend must be 'windows_direct', 'windows' or "
+                "'rapidocr_fixed_roi_experiment'"
             )
         self.ocr_backend = ocr_backend
+        #: Created on first use and reused; building the engine costs about
+        #: 7 ms and the PowerShell path had to pay it on every frame because
+        #: the process died each time.
+        self._direct_ocr = None
         self._rapidocr_backend = None
         self.timeout_seconds = timeout_seconds
         self.max_age_seconds = max_age_seconds
         self._previous_timestamp: float | None = None
+
+    def _recognize_in_process(self, capture, image):
+        """OCR without leaving this process.
+
+        The capture backend already holds the pixels and has already hashed
+        them, so the PowerShell path was re-reading, re-hashing and re-decoding
+        a frame we had in hand: 73 ms of real OCR inside 1,036 ms of overhead.
+        """
+        from harness.windows_ocr_direct import (  # noqa: PLC0415
+            WindowsOcr,
+            WindowsOcrError,
+            recognize_path,
+        )
+
+        try:
+            if self._direct_ocr is None:
+                self._direct_ocr = WindowsOcr()
+            return recognize_path(image, capture, engine=self._direct_ocr)
+        except WindowsOcrError as exc:
+            raise LiveObservationError(str(exc)) from exc
 
     def observe(self, context: MissionContext) -> ObservationBundle:
         # Import lazily so non-Windows CI can import this module.
@@ -67,29 +96,39 @@ class WindowsLiveObservationProvider:
         try:
             capture = capture_rok_client(image, timeout_seconds=self.timeout_seconds)
             self._write_json(capture_path, capture)
-            completed = subprocess.run(
-                [
-                    self.powershell,
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    str(self.ocr_script),
-                    "-Image",
-                    str(image),
-                    "-CaptureMeta",
-                    str(capture_path),
-                ],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                check=False,
-            )
-            if completed.returncode != 0:
-                raise LiveObservationError(
-                    completed.stderr.strip() or f"Windows OCR exited {completed.returncode}"
+            if self.ocr_backend == "windows_direct":
+                ocr = self._recognize_in_process(capture, image)
+            else:
+                # The PowerShell path is retained for replaying stored
+                # evidence and for comparison, not for live ticks.  It writes
+                # stdout in CP437, so the encoding is stated rather than left
+                # to the machine locale - reading it as the locale default
+                # silently turned "æ" into a left quote.
+                completed = subprocess.run(
+                    [
+                        self.powershell,
+                        "-NoProfile",
+                        "-ExecutionPolicy",
+                        "Bypass",
+                        "-File",
+                        str(self.ocr_script),
+                        "-Image",
+                        str(image),
+                        "-CaptureMeta",
+                        str(capture_path),
+                    ],
+                    capture_output=True,
+                    timeout=30,
+                    check=False,
                 )
-            ocr = json.loads(completed.stdout, strict=False)
+                if completed.returncode != 0:
+                    raise LiveObservationError(
+                        completed.stderr.decode("cp437", errors="replace").strip()
+                        or f"Windows OCR exited {completed.returncode}"
+                    )
+                ocr = json.loads(
+                    completed.stdout.decode("cp437"), strict=False
+                )
             if self.ocr_backend == "rapidocr_fixed_roi_experiment":
                 ocr = self._overlay_rapidocr(capture, image, ocr)
             self._write_json(ocr_path, ocr)
