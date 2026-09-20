@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
+from autorok.llm.boundary import is_forbidden_key
+
 try:  # PyYAML is already a runtime dependency of the mission compiler.
     import yaml
 except ImportError:  # pragma: no cover - config loading is not used without it
@@ -541,8 +543,7 @@ def _semantic_copy(value: Any) -> Any:
         return {
             str(key): _semantic_copy(item)
             for key, item in value.items()
-            if isinstance(key, str) and not any(token in key.casefold() for token in
-                                               ("bbox", "coord", "rect", "screen", "hwnd", "pid", "path", "image"))
+            if isinstance(key, str) and not is_forbidden_key(key)
         }
     if isinstance(value, (list, tuple)):
         return [_semantic_copy(item) for item in value]

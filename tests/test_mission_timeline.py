@@ -1,3 +1,7 @@
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
 from datetime import datetime, timedelta, timezone
 
 from harness.mission_timeline import (
@@ -16,7 +20,7 @@ NOW = datetime(2026, 9, 19, 3, 0, tzinfo=UTC)
 
 
 def timeline():
-    return load_timeline_config("config/mission_layer.yaml")
+    return load_timeline_config(ROOT / "config" / "mission_layer.yaml")
 
 
 def test_reset_is_one_utc_boundary_and_vietnam_display_is_seven_am():

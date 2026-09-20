@@ -146,7 +146,8 @@ không có dữ liệu để đề xuất.
 | LLM-002 | Không bao giờ gửi bbox, rect, toạ độ, HWND, PID, đường dẫn, ảnh | Mọi khoá chứa các phần cấm bị loại | F05 | ĐÃ KIỂM |
 | LLM-003 | Đầu ra phải ánh xạ về ứng viên **đã tồn tại** | Không khớp thì **từ chối**, không sửa | F05 | ĐÃ KIỂM |
 | LLM-004 | `{"action_id": null}` là câu trả lời hợp lệ | Từ chối được xử lý như abstain, không phải lỗi | F05 | ĐÃ KIỂM |
-| LLM-005 | Một **mô-đun ranh giới duy nhất** cho cả hai tầng | Không tồn tại danh sách lọc thứ hai trong repo | F05 | **CHƯA XÂY** — hiện có 2 danh sách đã lệch |
+| LLM-005 | Một **mô-đun ranh giới duy nhất** cho cả hai tầng | Ba bản sao cũ nay trỏ về cùng **một đối tượng**; test quét cấm bản sao thứ tư | F05 | **XONG** · `test_llm_boundary` |
+| LLM-010 | Ranh giới chỉ được **thêm**, không được bớt | Bớt một mảnh là nới quyền của model, phải sửa Tuyên bố dự án trước | F05 | ĐÃ KIỂM |
 | LLM-006 | Tầng chiến lược nhận gói và trả `MissionIntent` | Gói chiến lược có người nhận, không bị vứt | F05 | **CHƯA XÂY** |
 | LLM-007 | Tần suất gọi ở tầng chiến thuật ≤ 5/100 tick | Đo trên một phiên chạy thật | SC-02 | CHƯA KIỂM |
 | LLM-008 | `retraining_required` phải nêu *cái gì đổi* và *khung hình nào chứng minh* | Thiếu một trong hai thì tín hiệu không hợp lệ | F12 | CHƯA XÂY |
@@ -224,15 +225,15 @@ không có dữ liệu để đề xuất.
 | STA trạng thái | 7 | 7 | — | — | — |
 | MIS order/đội hình | 16 | 12 | — | 4 | — |
 | LAD suy giảm | 10 | 6 | — | 4 | — |
-| LLM biên quyết định | 9 | 4 | 1 | 4 | — |
+| LLM biên quyết định | 10 | 6 | 1 | 3 | — |
 | ONB onboarding | 5 | 1 | — | 4 | — |
 | ACT actuation | 6 | 6 | — | — | — |
 | EVI bằng chứng | 4 | 4 | — | — | — |
 | SAF an toàn | 6 | 3 | 1 | 2 | — |
 | DEL giao hàng | 15 | 6 | — | 4 | 5 |
-| **Tổng** | **91** | **59** | **2** | **25** | **5** |
+| **Tổng** | **92** | **61** | **2** | **24** | **5** |
 
-**Đọc bảng này:** 59/91 yêu cầu đã có test đang chạy. Phần chưa xây tập trung đúng bốn chỗ —
+**Đọc bảng này:** 61/92 yêu cầu đã có test đang chạy. Phần chưa xây tập trung đúng bốn chỗ —
 **thang suy giảm** (LAD-007…010), **tầng chiến lược của LLM** (LLM-005…009),
 **onboarding** (ONB-001…004), và **lịch biểu động** (MIS-013…016). Ba nhóm đầu là P1 trong
 `BUILD_PLAN`; nhóm thứ tư là mới, sinh ra từ buổi 2026-09-20.

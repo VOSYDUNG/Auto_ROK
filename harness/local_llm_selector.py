@@ -16,6 +16,7 @@ from typing import Any, Callable, Mapping, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from autorok.llm.boundary import FORBIDDEN_KEY_PARTS
 from harness.mission_runtime import ActionChoice, ToolSnapshot
 
 
@@ -81,19 +82,9 @@ _MODEL_FEEDBACK_SCALAR_KEYS = frozenset({
     "reobserve_required",
     "message",
 })
-_MODEL_FORBIDDEN_KEY_PARTS = (
-    "bbox",
-    "rect",
-    "coord",
-    "point",
-    "screen",
-    "window",
-    "hwnd",
-    "pid",
-    "path",
-    "image",
-    "memory",
-)
+#: Kept as an alias so the existing call sites read unchanged.  The list
+#: itself now lives in autorok.llm.boundary, shared with the strategic tier.
+_MODEL_FORBIDDEN_KEY_PARTS = FORBIDDEN_KEY_PARTS
 
 
 def _safe_json_value(value: Any) -> Any:

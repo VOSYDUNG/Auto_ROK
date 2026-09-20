@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autorok"
+version = "0.1.0"
+description = "A local LLM operating one Rise of Kingdoms client through a deterministic harness"
+requires-python = ">=3.12"
+dependencies = [
+    "PyYAML==6.0.3",
+]
+
+# Windows capture and CPU vision are only needed to run against a live client.
+# The mission layer, the evidence contracts and the whole test suite work
+# without them, which is what keeps the suite runnable in under ten seconds.
+[project.optional-dependencies]
+observation = [
+    "windows-capture==2.0.1",
+    "numpy==2.5.3",
+    "opencv-python==5.0.0.93",
+]
+cpu-ocr = [
+    "rapidocr-onnxruntime==1.4.4",
+    "onnxruntime==1.30.0",
+]
+dev = ["pytest>=8"]
+
+[tool.setuptools]
+# Four top-level packages, per docs/PROJECT_DECLARATION.md section 2:
+# harness is the 80% mechanism, autorok holds the rewritten work process,
+# knowledge is the game facts, operator_layer the account profiles.
+packages = ["autorok", "autorok.mission", "harness", "knowledge", "operator_layer"]
+
+[tool.pytest.ini_options]
+# Before this file existed the suite only worked through `python -m pytest`,
+# which happens to put the working directory on sys.path. Typing `pytest`
+# directly failed to import harness, and running from any other directory
+# failed outright. pythonpath fixes both without asking anyone to install
+# the project first.
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"

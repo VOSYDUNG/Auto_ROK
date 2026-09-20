@@ -1,3 +1,7 @@
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
 from datetime import datetime, timedelta, timezone
 
 from harness.mission_knowledge import SQLiteMissionKnowledgeStore
@@ -10,7 +14,7 @@ NOW = datetime(2026, 9, 19, 3, 0, tzinfo=UTC)
 
 def test_sqlite_knowledge_store_persists_expiring_facts_and_events(tmp_path):
     path = tmp_path / "mission-knowledge.sqlite3"
-    tl = load_timeline_config("config/mission_layer.yaml")
+    tl = load_timeline_config(ROOT / "config" / "mission_layer.yaml")
     signal = tl.signal("CLAIM_VIP", character_id="c1", now=NOW,
                        facts={"vip": {"claim_available": True}})
     with SQLiteMissionKnowledgeStore(path) as store:

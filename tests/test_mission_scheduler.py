@@ -1,3 +1,7 @@
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
 from datetime import datetime, timedelta, timezone
 
 from harness.mission_knowledge import SQLiteMissionKnowledgeStore
@@ -10,7 +14,7 @@ NOW = datetime(2026, 9, 19, 3, 0, tzinfo=UTC)
 
 
 def test_tick_persists_facts_occurrences_and_only_escalates_ambiguity():
-    timeline = load_timeline_config("config/mission_layer.yaml")
+    timeline = load_timeline_config(ROOT / "config" / "mission_layer.yaml")
     with SQLiteMissionKnowledgeStore(":memory:") as store:
         scheduler = MissionScheduler(timeline, store)
         facts = {
@@ -29,7 +33,7 @@ def test_tick_persists_facts_occurrences_and_only_escalates_ambiguity():
 
 
 def test_tick_uses_return_and_cooldown_facts_without_sleep():
-    timeline = load_timeline_config("config/mission_layer.yaml")
+    timeline = load_timeline_config(ROOT / "config" / "mission_layer.yaml")
     with SQLiteMissionKnowledgeStore(":memory:") as store:
         scheduler = MissionScheduler(timeline, store)
         facts = {"farm": {"queue_used": 2, "queue_capacity": 2,

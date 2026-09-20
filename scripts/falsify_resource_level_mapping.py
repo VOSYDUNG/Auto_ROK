@@ -17,8 +17,6 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-if r"C:\Shin\CEO-OS\Auto_ROK" not in sys.path:
-    sys.path.insert(0, r"C:\Shin\CEO-OS\Auto_ROK")
 
 from harness.action_surface import ActionRequest
 from harness.gather_facts import GatherFactObservationProvider

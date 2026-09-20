@@ -4,11 +4,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
+from autorok.llm.boundary import FORBIDDEN_KEY_PARTS
 from harness.mission_knowledge import SQLiteMissionKnowledgeStore
 from harness.mission_timeline import MissionTimeline, TaskState, TaskSignal, bounded_llm_packet
 
 
-_FORBIDDEN_FACT_KEY_PARTS = ("bbox", "coord", "rect", "screen", "hwnd", "pid", "path", "image")
+#: Previously a second, shorter copy that had drifted - it was missing
+#: "memory", "point" and "window".  One list now, shared with the tactical tier.
+_FORBIDDEN_FACT_KEY_PARTS = FORBIDDEN_KEY_PARTS
 
 
 class MissionScheduler:

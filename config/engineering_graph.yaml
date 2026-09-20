@@ -46,6 +46,45 @@ required_runtime_path:
   - gather_runtime_evidence
 
 nodes:
+  - id: autorok_mission_layer
+    kind: mission_policy
+    responsibility: Model the farm work process as pure domain logic - order quota with tax gross-up, fleet rotation with batch amortisation, ratio allocation with scarcity fallback, and transport capacity - with no capture, OCR or input dependency.
+    authority: canonical
+    status: implemented
+    path: autorok/mission/__init__.py
+    evidence:
+      - autorok/mission/order.py
+      - autorok/mission/fleet.py
+      - autorok/mission/allocation.py
+      - autorok/mission/transport.py
+      - tests/test_mission_order.py
+      - tests/test_mission_fleet.py
+      - tests/test_mission_allocation.py
+      - tests/test_mission_transport.py
+      - knowledge/farming_workflow_2026-09-19.yaml
+
+  - id: model_input_boundary
+    kind: safety_contract
+    responsibility: Hold the single denylist of fact keys that may never reach a model, shared by the tactical selector, the scheduler and the timeline packet builder.
+    authority: canonical
+    status: implemented
+    path: autorok/llm/boundary.py
+    evidence:
+      - harness/local_llm_selector.py
+      - harness/mission_scheduler.py
+      - harness/mission_timeline.py
+      - tests/test_llm_boundary.py
+
+  - id: march_queue_indicator
+    kind: perception
+    responsibility: Read the world-map march queue from a calibrated ROI by template matching, returning a value or a classified refusal but never a guess.
+    authority: canonical
+    status: implemented
+    path: harness/queue_indicator.py
+    evidence:
+      - config/queue_indicator_profile.json
+      - tests/test_queue_indicator.py
+
   - id: mission_layer_config
     kind: config
     responsibility: Declares data-driven mission/task cadences, reset boundary, risk and local-LLM ownership policy.
@@ -748,6 +787,10 @@ nodes:
     blocker: A001
 
 edges:
+  - {from: march_queue_indicator, to: gather_fact_extractor, relation: supplies_queue_fact}
+  - {from: model_input_boundary, to: local_decision_provider, relation: constrains}
+  - {from: model_input_boundary, to: mission_scheduler, relation: constrains}
+  - {from: autorok_mission_layer, to: mission_scheduler, relation: supplies_work_process}
   - {from: mission_layer_config, to: mission_timeline, relation: declares_cadence_and_reset}
   - {from: mission_timeline, to: mission_knowledge_store, relation: persists_signals_and_occurrences}
   - {from: mission_scheduler, to: mission_timeline, relation: evaluates}
