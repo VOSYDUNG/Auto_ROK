@@ -119,6 +119,18 @@ nodes:
       - tests/test_strategic_bridge.py
       - docs/LLM_GAMEPLAY_SPEC.md
 
+  - id: map_coordinate_detector
+    kind: perception
+    responsibility: Decide from one calibrated corner of the frame whether the client is on the bare world map, by reading the coordinate widget the client draws only there, and refusing rather than guessing when it is partly read.
+    authority: canonical
+    status: implemented
+    path: harness/map_coordinate.py
+    evidence:
+      - harness/map_coordinate_provider.py
+      - harness/state_classifier.py
+      - config/cpu_rois.yaml
+      - tests/test_map_coordinate.py
+
   - id: credential_boundary
     kind: safety_contract
     responsibility: Keep every account secret out of the repository, so the login flow can be described and built while the value itself stays in Windows Credential Manager, entered once by the operator.
@@ -889,6 +901,8 @@ edges:
   - {from: onboarding_phases, to: strategic_decision_tier, relation: gates_first_decision}
   - {from: degradation_ladder, to: game_change_feedback, relation: raises_persistent_degradation}
   - {from: credential_boundary, to: autorok_mission_layer, relation: constrains_account_rotation}
+  - {from: map_coordinate_detector, to: state_classifier, relation: establishes_world_map_view}
+  - {from: city_world_visual_detector, to: state_classifier, relation: establishes_city_view}
   - {from: model_input_boundary, to: mission_scheduler, relation: constrains}
   - {from: autorok_mission_layer, to: mission_scheduler, relation: supplies_work_process}
   - {from: mission_layer_config, to: mission_timeline, relation: declares_cadence_and_reset}

@@ -27,6 +27,7 @@ from harness.gather_replay_evidence import (  # noqa: E402
 )
 from harness.local_llm_selector import OpenAICompatibleDecisionProvider  # noqa: E402
 from harness.main_view_detector import MainViewProfile, MainViewVisualObservationProvider  # noqa: E402
+from harness.map_coordinate_provider import MapCoordinateObservationProvider  # noqa: E402
 from harness.mission_loader import compile_mission  # noqa: E402
 from harness.mission_runner import MissionRunner  # noqa: E402
 from harness.mission_runtime import MissionContext  # noqa: E402
@@ -295,6 +296,10 @@ def main(argv: list[str] | None = None) -> int:
         )
         observations = OcrSemanticObservationProvider(observations, candidate_specs)
         observations = MainViewVisualObservationProvider(observations, main_view_profile)
+        # Second, independent route to WORLD_MAP_VIEW.  The visual signature
+        # above cannot carry that state - open terrain looks different
+        # everywhere you pan - so the coordinate readout carries it instead.
+        observations = MapCoordinateObservationProvider(observations)
         observations = ResourceLevelControlObservationProvider(observations, resource_level_profile)
         observations = GatherFactObservationProvider(observations, character_id=args.character_id)
         observations = PolicyEvidenceObservationProvider(observations, approvals)
