@@ -108,7 +108,13 @@ class QueueIndicatorProfile:
     roi: tuple[int, int, int, int]
     threshold: int
     client_size: tuple[int, int]
-    glyphs: Mapping[str, tuple[str, ...]]
+    #: label -> the accepted bitmaps for it. SEVERAL per label on purpose.
+    #: One bitmap per glyph turned out to be too brittle twice over: a single
+    #: pixel of antialiasing shrank "/" at threshold 200, and the same "/"
+    #: renders slightly differently under the client's night tint. Both are
+    #: the same character; neither is wrong. A label is matched if the glyph
+    #: is within max_glyph_distance of ANY of its samples.
+    glyphs: Mapping[str, tuple[tuple[str, ...], ...]]
     max_glyph_distance: int = 1
     source_frame_id: str | None = None
 
@@ -138,10 +144,16 @@ class QueueIndicatorProfile:
             raise QueueIndicatorError(f"malformed queue indicator profile: {exc}") from exc
         if len(size) != 2:
             raise QueueIndicatorError("client_size must be [width, height]")
-        glyphs = {
-            str(label): tuple(str(row) for row in rows)
-            for label, rows in (raw.get("glyphs") or {}).items()
-        }
+        glyphs: dict[str, tuple[tuple[str, ...], ...]] = {}
+        for label, value in (raw.get("glyphs") or {}).items():
+            if not isinstance(value, list) or not value:
+                raise QueueIndicatorError(f"glyph {label!r} must be a non-empty list")
+            # Accept both shapes: a single bitmap (a list of row strings) as
+            # the profile originally shipped, and a list of bitmaps.
+            samples = value if isinstance(value[0], list) else [value]
+            glyphs[str(label)] = tuple(
+                tuple(str(row) for row in sample) for sample in samples
+            )
         return cls(
             roi=region,
             threshold=int(raw.get("threshold", 200)),
@@ -275,11 +287,17 @@ class QueueIndicatorReader:
         picking one would be a guess dressed as a reading.
         """
         best: list[tuple[int, str]] = []
-        for label, template in self.profile.glyphs.items():
-            distance = _distance(pattern, template)
-            if distance is None or distance > self.profile.max_glyph_distance:
-                continue
-            best.append((distance, label))
+        for label, samples in self.profile.glyphs.items():
+            # Closest sample for this label; a label with three renderings is
+            # not three votes, it is one character with three faces.
+            distances = [
+                distance
+                for sample in samples
+                if (distance := _distance(pattern, sample)) is not None
+                and distance <= self.profile.max_glyph_distance
+            ]
+            if distances:
+                best.append((min(distances), label))
         if not best:
             return None, QueueReadStatus.UNKNOWN_GLYPH
         best.sort()

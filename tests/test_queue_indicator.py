@@ -47,7 +47,8 @@ def _render(profile: QueueIndicatorProfile, labels, frame=None) -> np.ndarray:
     x, y, _, _ = profile.roi
     cursor = x + 12
     for label in labels:
-        pattern = profile.glyphs[label]
+        # A label now carries several accepted renderings; draw the first.
+        pattern = profile.glyphs[label][0]
         _paint(frame, pattern, cursor, y + 3)
         cursor += len(pattern[0]) + 2
     return frame
@@ -108,15 +109,16 @@ def test_the_quest_decoy_elsewhere_in_the_frame_is_ignored(profile):
 
 
 def test_an_untrained_digit_is_refused_rather_than_guessed(profile):
-    """Digits 0, 2, 3 and 4 have not been observed yet."""
+    """A shape the profile has never been shown gets no reading at all."""
     frame = _blank()
     x, y, _, _ = profile.roi
     unknown = ("###", "#.#", "#.#", "#.#", "###")  # a zero-ish shape, untrained
     _paint(frame, unknown, x + 12, y + 3)
-    cursor = x + 12 + 5
+    cursor = x + 12 + len(unknown[0]) + 2
     for label in ("/", "5"):
-        _paint(frame, profile.glyphs[label], cursor, y + 3)
-        cursor += len(profile.glyphs[label][0]) + 2
+        pattern = profile.glyphs[label][0]
+        _paint(frame, pattern, cursor, y + 3)
+        cursor += len(pattern[0]) + 2
 
     reading = QueueIndicatorReader(profile).read(frame)
     assert reading.status is QueueReadStatus.UNKNOWN_GLYPH

@@ -15,8 +15,12 @@ calibration; a frame alone is self-deception.
 
     python scripts/train_queue_glyph.py --frame <png> --value 2/5
 
-It refuses to overwrite a glyph the profile already knows unless --replace is
-given, so a mislabelled run cannot quietly corrupt a working digit.
+A label carries SEVERAL accepted bitmaps, and a new rendering is APPENDED
+rather than replacing what is there. That matters: the same "/" renders
+slightly differently under the client's night tint, and one bitmap per glyph
+meant a correct "3/5" after dark could not be trained without discarding the
+daylight "/" that was working. Both are the character. --replace discards a
+label's existing samples, and is only for when the old ones were wrong.
 """
 from __future__ import annotations
 
@@ -44,7 +48,12 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         help='what the indicator actually reads, e.g. "2/5" - the operator states this',
     )
-    parser.add_argument("--replace", action="store_true", help="allow overwriting a known glyph")
+    parser.add_argument(
+        "--replace",
+        action="store_true",
+        help="discard a label's existing samples instead of adding to them; "
+             "only when the old ones were actually wrong",
+    )
     parser.add_argument("--profile", default=str(PROFILE))
     args = parser.parse_args(argv)
 
@@ -83,16 +92,20 @@ def main(argv: list[str] | None = None) -> int:
     for label, box in zip(labels, boxes):
         pattern = list(box.pattern)
         known = glyphs.get(label)
-        if known is not None and list(known) != pattern and not args.replace:
-            print(
-                f"glyph {label!r} is already trained with a different shape; "
-                "pass --replace only if you are sure the old one was wrong",
-                file=sys.stderr,
-            )
-            return 4
-        if known is None or list(known) != pattern:
-            glyphs[label] = pattern
-            added.append(f"{label} ({box.width}x{box.height})")
+        samples = (
+            []
+            if known is None
+            else (known if known and isinstance(known[0], list) else [known])
+        )
+        if pattern in samples:
+            continue
+        # A label carries SEVERAL accepted renderings. The same "/" looks
+        # slightly different under the client's night tint, and both are the
+        # character - so a new shape is appended rather than replacing the
+        # old one, unless the caller explicitly says the old one was wrong.
+        samples = [pattern] if args.replace else samples + [pattern]
+        glyphs[label] = samples
+        added.append(f"{label} ({box.width}x{box.height}, sample {len(samples)})")
 
     if not added:
         print(f"{args.value} already reads correctly; nothing to add")
