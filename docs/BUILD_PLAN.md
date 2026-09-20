@@ -320,6 +320,30 @@ chờ quân về hàng giờ.
 
 ## M7 — Chạy thật · cần client, có phát input
 
+### Phát hiện 2026-09-20 — game có chu kỳ NGÀY/ĐÊM
+
+Đây là rủi ro hệ thống, không phải lỗi một module. Ban đêm client phủ tối toàn
+bản đồ. Đo trên cùng một khung nhìn cách nhau vài phút: độ sáng trung bình vùng
+toạ độ **117,6 → 74,6**.
+
+Hệ quả đã thấy: cảm biến toạ độ viết bằng OCR đạt **7/7 ban ngày**, rồi trả
+`PARTIAL` ngay trên đúng khung nhìn đó khi trời tối. **Không scale nào đọc được
+cả hai** — scale 2 đúng ban ngày và sai ban đêm, scale 1,5 thì ngược lại. Đã thử
+grayscale, min-max stretch, Otsu, CLAHE, nhị phân ngưỡng cố định, mỗi cái ở bốn
+scale: không cái nào đọc được hết.
+
+**Cách chữa đúng: đo tương phản cục bộ, không đo độ sáng tuyệt đối.** Cảm biến
+toạ độ nay đếm số cột có pixel sáng hơn **trung vị của chính vùng đó**. Trung vị
+trôi theo tông màu nên phép đo đứng yên: 121 cột ban ngày (trung vị 115), 132 cột
+ban đêm (trung vị 54), so với 0–2 cột khi không phải world map.
+
+**Việc phải làm:** mọi ROI hiệu chỉnh trước đó trong ngày **đều đo trên khung ban
+ngày**. Cần đo lại ban đêm: `top_resource_bar`, `queue_indicator_profile`,
+`resource_level_profile`, `main_view_profiles`. Chưa đo thì phải coi là chưa biết.
+
+---
+
+
 | Việc | Ghi chú |
 |---|---|
 | Nối `autorok.mission` vào `run_gather_tick.py` | |
