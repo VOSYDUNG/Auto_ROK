@@ -138,12 +138,53 @@ chối, không phải được chấp nhận như một đánh đổi.
 
 **Dự kiến:** −85 ms mỗi crop có scale. Với các crop hiện có ≈ **−500 đến −900 ms**.
 
-### M3.2 — Tiến trình OCR thường trú
+### M3.2 — Gọi Windows.Media.Ocr thẳng từ Python
 
-Một tiến trình sống lâu nhận đường dẫn ảnh qua stdin, trả JSON. Trả spawn 185 ms và nạp
-WinRT 91 ms về **một lần cho cả phiên** thay vì mỗi khung.
+> **Sửa hướng.** Bản đầu viết *"tiến trình OCR thường trú, −276 ms"*. Đúng nhưng nhỏ. Người
+> vận hành hỏi thẳng: *"hay do ta chồn chân vào một framework?"* — và số đo nói **đúng**.
 
-**Dự kiến:** −276 ms mỗi khung.
+Phân rã 1.036 ms còn lại, sau khi đã xoá khối 3 giây:
+
+| Giai đoạn | ms | Việc thật? |
+|---|---|---|
+| spawn `powershell.exe` | 185 | không |
+| nạp WinRT (`Add-Type`) | 116 | không |
+| băm SHA-256 ảnh | 151 | **không — Python đã băm rồi** |
+| giải mã PNG | 325 | **không — Python đã có pixel rồi** |
+| **OCR + dựng element** | **73** | **CÓ** |
+| dựng JSON | 22 | ranh giới |
+
+**73 ms việc thật trên 1.036 ms — 7%.** Còn lại là thuế ranh giới tiến trình và làm lại
+việc đã làm: `windows_capture_backend.py` có sẵn mảng numpy (dòng 222) và đã tính SHA-256
+(dòng 233), rồi mã hoá PNG, ghi đĩa, để PowerShell đọc lại, **băm lại**, **giải mã lại**.
+
+**Không cần C/C++.** `Windows.Media.Ocr` là WinRT, Python gọi thẳng được qua `winrt-*`
+(pywinrt 3.2.1, có bản cp312). Cùng một engine.
+
+**Đã đo trên bản mẫu:**
+
+| | |
+|---|---|
+| Qua PowerShell | 1.036 ms |
+| **Python gọi thẳng** | **93 ms** |
+| Nhanh hơn | **11,1 lần** |
+| Tổng từ đầu M3 | 4.863 → 93 ms = **52 lần** |
+| Ngưỡng N02 (400 ms) | **ĐẠT** |
+
+**`OCR-004` đã kiểm: 75 element, lệch 0** — trùng cả `text`, `bbox`, `line_index`,
+`word_index`.
+
+#### Và nó lộ ra một lỗi đang sống
+
+Khi đối chiếu, một phần tử lệch: PowerShell ra `'Crown`, Python ra `æCrown`. Không phải OCR
+khác nhau — **PowerShell xuất stdout bằng CP437 (codepage OEM)**, và `0x91` trong CP437
+chính là `æ`. Giải mã bằng cp1252 thì ra `'`.
+
+`harness/windows_live_observation.py` gọi `subprocess.run(..., text=True)` **không chỉ định
+encoding**, nên dùng locale mặc định — tức **đang đọc sai ký tự ngay lúc này, âm thầm**.
+
+Đây là `OCR-005`, và nó nghiêm trọng hơn tôi ghi hôm qua: không phải "may mà chạy được", mà
+là **đang hỏng**. Chuyển sang Python gọi thẳng xoá luôn cả lớp encoding này.
 
 ### M3.3 — Một mũi nhọn, không phải dao đa năng
 
