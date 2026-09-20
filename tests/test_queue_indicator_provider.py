@@ -40,7 +40,8 @@ def _frame_with(labels):
     x, y, _, _ = PROFILE.roi
     cursor = x + 12
     for label in labels:
-        pattern = PROFILE.glyphs[label]
+        # A label carries several accepted renderings; draw the first.
+        pattern = PROFILE.glyphs[label][0]
         for row_index, row in enumerate(pattern):
             for col_index, cell in enumerate(row):
                 if cell == "#":
