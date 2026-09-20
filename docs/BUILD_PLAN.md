@@ -103,12 +103,40 @@ C++**. Viết lại toàn bộ sẽ tốn hàng tuần để giải quyết 140 
 C/C++ chỉ đáng bàn **sau khi** M3.1–M3.3 xong. Khi đó 143 ms OCR lõi mới thành sàn thật,
 và lúc đó mới có câu hỏi đúng để hỏi.
 
-### M3.1 — Bỏ đường vòng qua đĩa
+### M3.1 — Giải mã thẳng vùng cần, bỏ scale-rồi-mã-hoá-lại
 
-Crop trực tiếp trên `SoftwareBitmap` đã giải mã, không `Save()` ra PNG rồi
-`GetFileFromPathAsync` đọc lại.
+> **Sửa tiền đề.** Bản kế hoạch đầu viết *"bỏ đường vòng qua đĩa, −1.000 ms"*. **Sai.**
+> Đo lại ngày 2026-09-20 có warmup và lấy trung vị:
+>
+> | | |
+> |---|---|
+> | crop + scale bicubic | **49,0 ms** |
+> | + mã hoá PNG **ra đĩa** | 85,0 ms |
+> | + mã hoá PNG **vào bộ nhớ** | 90,1 ms |
+> | **đĩa so với bộ nhớ** | **−5,1 ms — trong sai số** |
+>
+> Windows cache file làm việc ghi PNG tạm gần như ngang ghi RAM. Đĩa **không phải** nút
+> thắt. Chi phí thật là **scale bicubic 49 ms** cộng **mã hoá PNG 36 ms**.
+>
+> Con số 92 ms/lần đo lần đầu là đúng, nhưng tôi quy sai nguyên nhân cho đĩa.
 
-**Dự kiến:** −1.000 ms. **Không đổi hành vi.**
+Cách đúng: dùng `BitmapDecoder` + `BitmapTransform` để **giải mã thẳng vùng cần ở đúng tỉ
+lệ**, bỏ hẳn cả bước crop bằng `System.Drawing` lẫn bước mã hoá/giải mã PNG.
+
+Đo được: **38,8 ms/lần gồm cả OCR**, so với ~124 ms của đường cũ.
+
+**Một bẫy phải tránh:** `BitmapTransform` áp **scale trước rồi mới crop**, nên `Bounds`
+phải tính trong toạ độ **đã phóng**, không phải toạ độ gốc. Đặt sai thì async operation
+ném lỗi và trả `null` — không phải sai kết quả, mà là gãy hẳn.
+
+**Rủi ro thật cần kiểm:** đường cũ scale bằng `HighQualityBicubic` của `System.Drawing`,
+đường mới scale bằng bộ nội suy của WinRT. **Khác thuật toán thì có thể khác kết quả OCR.**
+`BitmapTransform.InterpolationMode` có `Cubic`, nhưng không đảm bảo trùng từng pixel.
+
+→ Bắt buộc chạy `M3.4` **trước khi** nhận M3.1. Nếu kết quả lệch một ký tự, M3.1 bị từ
+chối, không phải được chấp nhận như một đánh đổi.
+
+**Dự kiến:** −85 ms mỗi crop có scale. Với các crop hiện có ≈ **−500 đến −900 ms**.
 
 ### M3.2 — Tiến trình OCR thường trú
 
