@@ -108,6 +108,28 @@ là chấp nhận được. Tầng chiến thuật nên **giảm dần** sự th
 selector tất định thật sự bế tắc. Chỉ số `local_llm_entries_per_100_ticks` đo đúng điều này:
 càng thấp thì harness càng sâu.
 
+### D1b. Mọi module tri giác là một cảm biến, không phải bộ đoán
+
+Hệ quả trực tiếp của phép loại suy nhúng trong `PROJECT_DECLARATION` §1.
+
+Một encoder không bao giờ trả về vị trí phỏng đoán. Nó trả số, hoặc báo lỗi. Mọi module tri
+giác ở đây phải có đúng tính chất đó:
+
+| Bắt buộc | Vì sao |
+|---|---|
+| Trả giá trị **hoặc** mã từ chối, không có kiểu lai | Giá trị "chắc khoảng" là thứ lan ra cả hệ thống mà không ai chặn được |
+| Từ chối phải **phân loại được** | `UNKNOWN_GLYPH` khác `NO_TEXT` khác `BAD_SHAPE` — mỗi cái dẫn tới xử lý khác nhau |
+| Hoà nhau thì từ chối, không bẻ hoà | Chọn bừa là đoán khoác áo đọc |
+| Chỉ nhìn ROI đã hiệu chỉnh, không quét cả khung | Quét cả khung là cách mồi `(5/5)` lọt vào |
+| Không tự huấn luyện từ khung nó đọc hỏng | Hiệu chỉnh là thao tác có chủ ý, không phải tự bồi |
+
+`harness/queue_indicator.py` là bản mẫu. Mọi cảm biến viết sau phải theo đúng hình dạng đó,
+và khi rà soát một module tri giác thì rà đúng năm dòng trên.
+
+**Cách dùng khi có lỗi:** tín hiệu bẩn thì sửa cảm biến, đừng sửa bên tiêu thụ. Nếu bên tiêu
+thụ phải "xử lý trường hợp đọc ra 115" thì cảm biến đã sai, không phải bên tiêu thụ thiếu
+phòng thủ.
+
 ### D2. Thang suy giảm — fail-closed ở hành động, không dừng ở vòng lặp
 
 Người vận hành: *"tôi tác động nó thay đổi các quyết định thôi chứ không làm nó dừng vận hành"*.

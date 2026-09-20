@@ -47,6 +47,58 @@ Dự án này biết trước. Nên phần "biết" được đẩy ra khỏi tr
 Hệ quả: *"LLM local yếu"* không phải nhược điểm phải khắc phục. Nó là **điều kiện của bài
 toán**. Nếu dự án chỉ chạy được khi thay bằng model mạnh hơn, thì luận đề sai.
 
+### Phép loại suy quyết định: con chip nhúng điều khiển cánh tay robot
+
+Người vận hành, 2026-09-20:
+
+> *"Vì sao các thiết bị IoT lại điều khiển được một con robot cồng kềnh như vậy với con chip
+> cực nhỏ? Vì chip nó xử lý dựa vào **tín hiệu** và **knowledge từ những gì ta train** cho
+> module đó."*
+
+Một con ESP32 có khoảng 500 KB RAM và 240 MHz. Nó điều khiển được cánh tay robot nặng hàng
+chục ký, chính xác tới milimét, chạy liên tục nhiều tháng. **Không phải vì nó thông minh.**
+Vì bốn thứ:
+
+1. **Tín hiệu sạch** — encoder, công tắc hành trình, IMU. Mỗi cảm biến trả về một con số
+   đáng tin, hoặc **báo lỗi**. Không có cảm biến nào đoán.
+2. **Tri thức nạp sẵn** — bảng hiệu chỉnh, hằng số PID, phương trình động học. Được tính
+   trước và nạp vào module, không suy ra lúc chạy.
+3. **Vòng điều khiển tất định** — đọc → so với đích → tác động → xác minh. Lặp lại.
+4. **Trạng thái an toàn** — đọc hỏng thì dừng, không tác động. Luôn luôn.
+
+Trí tuệ nằm ở **kỹ thuật**, không nằm ở **năng lực tính toán**.
+
+### Hệ quả: nút thắt của dự án này không bao giờ là model
+
+Một model 20B chạy CPU mạnh hơn ESP32 khoảng **một triệu lần**. Nếu ESP32 chạy được robot,
+thì phần tính toán ở đây **thừa thãi**, không thiếu.
+
+Nên mỗi khi có thứ gì không chạy, câu hỏi đúng luôn là một trong hai:
+
+> **Tín hiệu nào đang bẩn?** hoặc **tri thức nào đang thiếu?**
+
+**Không bao giờ là "cần model to hơn".** Nếu câu trả lời hoá ra là cần model to hơn, thì
+luận đề của dự án sai và phải nói ra, chứ không lặng lẽ đổi model.
+
+Và một cái bẫy ngược, vì ta đang chạy trên Windows chứ không phải vi điều khiển: **có sẵn
+thư viện không có nghĩa là nên dùng thư viện để thay cho kỹ thuật.** ESP32 không có thư viện
+nào và vẫn chạy được. Bài học từ IoT là ta cần **ít hơn** tưởng, không phải nhiều hơn.
+
+### Bốn tính chất đó ánh xạ thẳng vào code
+
+| Bên nhúng | Bên này |
+|---|---|
+| Cảm biến trả số sạch hoặc báo lỗi | `harness/queue_indicator.py` — đọc `1/5`, hoặc trả `UNKNOWN_GLYPH`, không bao giờ đoán |
+| Bảng hiệu chỉnh nạp vào module | `config/*_profile.json` — main-view, resource-level, glyph hàng đợi. Đây là **hiệu chỉnh**, không phải cấu hình |
+| Vòng đọc → so → tác động → xác minh | `observe()` → `select()` → `execute()` → xác minh hậu điều kiện trên khung tươi |
+| Trạng thái an toàn khi đọc hỏng | fail-closed ở cấp hành động, thang suy giảm ở cấp vòng lặp |
+
+Ví dụ cụ thể, làm ngày 2026-09-20: chỉ số hàng đợi `1/5`. OCR trả về `115` — một con số
+**nghe hợp lý nhưng sai**. Cách nhúng là thay cảm biến: template matching trên ROI cố định,
+đọc đúng hoặc từ chối. Kết quả **0,207 ms** thay vì 4.863 ms, và không bao giờ sai.
+
+Đó không phải tối ưu hiệu năng. Đó là **làm sạch tín hiệu**, và tốc độ chỉ là hệ quả.
+
 ### Phạm vi làm luận đề mạnh lên, không yếu đi
 
 *"Chúng tôi làm AGI"* là câu không ai kiểm chứng được. Câu dưới đây thì có thể sai, nên nó
