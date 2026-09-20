@@ -133,12 +133,13 @@ không có dữ liệu để đề xuất.
 | LAD-002 | Bù từ số đang bay, không reset tỉ lệ | Vàng đang thừa thì slot mới không vào vàng | F09 | ĐÃ KIỂM |
 | LAD-003 | Phân bổ tất định | Hai lần gọi cho cùng kết quả | F09 | ĐÃ KIỂM |
 | LAD-004 | Tìm không ra mỏ → **vẫn lấp đầy slot** | Danh sách mỏ rỗng vẫn trả đủ số slot, chế độ `SCARCITY` | F15 | ĐÃ KIỂM |
-| LAD-010 | Khan mỏ nhận biết bằng **khung hình không đổi sau khi bấm Tìm kiếm** | Viewport đứng yên trong cửa sổ chờ = không có mỏ | F15 | **CHƯA XÂY** — thuộc tầng tri giác, không phải OCR |
+| LAD-010 | Khan mỏ nhận biết bằng **khung hình không đổi sau khi bấm Tìm kiếm** | Hoạt ảnh nền không tính là di chuyển; pan thì tính | F15 | **XONG** · `test_viewport_change` |
+| LAD-011 | Đọc nằm giữa hai ngưỡng thì **từ chối**, không làm tròn | `UNCOMPARABLE` không được ngầm hiểu là khan mỏ | F15 | **XONG** |
 | LAD-005 | Suy giảm chỉ được **nới lỏng**, không siết | Ngưỡng sàn cao hơn ngưỡng ưu tiên thì báo lỗi | F15 | ĐÃ KIỂM |
 | LAD-006 | Mỗi slot ghi rõ chế độ và **lý do** | Không assignment nào có lý do rỗng | F15 | ĐÃ KIỂM |
-| LAD-007 | Thang 5 bậc `ORDER_WORK → OBSERVE_ONLY` | Bậc bị chặn thì tụt đúng một bậc, không nhảy cóc | F15 | **CHƯA XÂY** |
-| LAD-008 | Mỗi lần tụt bậc ghi lý do vào kho đo | Bản ghi có bậc trước, bậc sau, nguyên nhân | F15 | CHƯA XÂY |
-| LAD-009 | **Không bao giờ có trạng thái "không có mục tiêu"** | Mọi tổ hợp đầu vào đều trả về đúng một bậc | F15, F16 | CHƯA XÂY |
+| LAD-007 | Thang 5 bậc `ORDER_WORK → OBSERVE_ONLY` | Tụt đúng một bậc; đi hết thang đúng thứ tự | F15 | **XONG** · `test_mission_ladder` |
+| LAD-008 | Mỗi lần tụt bậc ghi lý do | Lý do rỗng bị **từ chối ngay khi dựng** `Transition` | F15 | **XONG** |
+| LAD-009 | **Không bao giờ có trạng thái "không có mục tiêu"** | Tụt 20 lần vẫn luôn có một `Rung`; đáy là mục tiêu, không phải khoảng trống | F15, F16 | **XONG** |
 
 ### 3.6 Biên quyết định LLM — LLM
 
@@ -226,16 +227,16 @@ không có dữ liệu để đề xuất.
 | OCR | 8 | 8 | — | — | — |
 | STA trạng thái | 7 | 7 | — | — | — |
 | MIS order/đội hình | 16 | 12 | — | 4 | — |
-| LAD suy giảm | 10 | 6 | — | 4 | — |
+| LAD suy giảm | 11 | 11 | — | — | — |
 | LLM biên quyết định | 10 | 6 | 1 | 3 | — |
 | ONB onboarding | 5 | 1 | — | 4 | — |
 | ACT actuation | 6 | 6 | — | — | — |
 | EVI bằng chứng | 4 | 4 | — | — | — |
 | SAF an toàn | 6 | 3 | 1 | 2 | — |
 | DEL giao hàng | 15 | 6 | — | 4 | 5 |
-| **Tổng** | **94** | **66** | **2** | **21** | **5** |
+| **Tổng** | **95** | **71** | **2** | **17** | **5** |
 
-**Đọc bảng này:** 66/94 yêu cầu đã có test đang chạy. Phần chưa xây tập trung đúng bốn chỗ —
+**Đọc bảng này:** 71/95 yêu cầu đã có test đang chạy. Phần chưa xây tập trung đúng bốn chỗ —
 **thang suy giảm** (LAD-007…010), **tầng chiến lược của LLM** (LLM-005…009),
 **onboarding** (ONB-001…004), và **lịch biểu động** (MIS-013…016). Ba nhóm đầu là P1 trong
 `BUILD_PLAN`; nhóm thứ tư là mới, sinh ra từ buổi 2026-09-20.

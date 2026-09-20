@@ -75,6 +75,26 @@ nodes:
       - harness/mission_timeline.py
       - tests/test_llm_boundary.py
 
+  - id: degradation_ladder
+    kind: mission_policy
+    responsibility: Hold the active goal at all times, stepping down exactly one rung when an action is blocked and recording the reason, so the loop never stops even when a specific action fails closed.
+    authority: canonical
+    status: implemented
+    path: autorok/mission/ladder.py
+    evidence:
+      - tests/test_mission_ladder.py
+      - knowledge/farming_workflow_2026-09-19.yaml
+
+  - id: viewport_change_detector
+    kind: perception
+    responsibility: Decide from two consecutive frames whether a search panned the world view or the client stayed still, refusing when the reading falls between thresholds.
+    authority: canonical
+    status: implemented
+    path: harness/viewport_change.py
+    evidence:
+      - tests/test_viewport_change.py
+      - knowledge/farming_workflow_2026-09-19.yaml
+
   - id: windows_ocr_direct
     kind: perception
     responsibility: Call Windows.Media.Ocr in process on pixels the capture backend already holds, instead of spawning PowerShell to re-hash and re-decode the same frame.
@@ -798,6 +818,8 @@ nodes:
     blocker: A001
 
 edges:
+  - {from: viewport_change_detector, to: degradation_ladder, relation: signals_scarcity}
+  - {from: degradation_ladder, to: autorok_mission_layer, relation: selects_active_goal}
   - {from: windows_ocr_direct, to: observation_projection, relation: supplies_ocr_elements}
   - {from: march_queue_indicator, to: gather_fact_extractor, relation: supplies_queue_fact}
   - {from: model_input_boundary, to: local_decision_provider, relation: constrains}
