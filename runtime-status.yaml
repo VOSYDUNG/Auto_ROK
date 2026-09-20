@@ -1,0 +1,140 @@
+# Current runtime truth for Auto_ROK.
+#
+# This file is committed so the real state is visible on GitHub while heavy
+# raw evidence (frames, recon dumps, isolation traces) stays under the
+# gitignored workspace/. It is not a framework and not a database.
+#
+# It records what has been VERIFIED, never what is intended. Intent lives in
+# docs/GOAL.md, docs/PRD.md, docs/BUILD_PLAN.md and
+# config/engineering_graph.yaml, none of which are evidence of runtime
+# behaviour. The status vocabulary and its invariants are defined in
+# AGENTS.md under "Completion status levels".
+#
+# Evidence paths below are LOCAL ONLY - workspace/ is gitignored, so a clone
+# will not contain them. Hashes are recorded so a local copy can be checked
+# against what was actually observed.
+schema_version: 1
+
+head_basis:
+  sha: fe33d912ca5dbb30e68c84ade8b2090122994f1d
+  branch: master
+  recorded_at: "2026-09-20"
+
+objective:
+  id: M7.1_CHARACTER_01
+  statement: keep one character gathering continuously
+  # The lowest level across the capabilities the objective depends on. Reaching
+  # 5/5 once does not lift the objective above the parts that do not exist.
+  overall_status: UNIMPLEMENTED
+
+capabilities:
+
+  dispatch_queue_to_5_of_5:
+    status: LIVE_PROVEN_ONCE
+    evidence:
+      - path: workspace/runs/m7-live-20260920/ACCEPTANCE.png
+        sha256_prefix: d91751c2e5f630b3
+        note: fresh capture reading 5/5 with zero free slots
+      - path: workspace/runs/m7-live-20260920/queue-5of5.png
+        sha256_prefix: 72a81b12302b3018
+      - path: workspace/runs/m7-full-04/recon.json
+        sha256_prefix: 9ec6ef6ac4131e02
+        note: per-tick trace of the occurrence that dispatched the fifth march
+    limitations:
+      - operator approved each troop-selection occurrence individually
+      - manual intervention occurred (window focus, occurrence retries)
+      - achieved with the gathering buff OFF for the entire run
+      - not repeated; a second batch has never been attempted
+
+  queue_indicator_provider:
+    status: WIRED
+    implementation_commit: fe33d912ca5dbb30e68c84ade8b2090122994f1d
+    live_proof_after_commit: false
+    evidence:
+      - tests/test_live_tick_wiring.py
+      - note: >
+          Chain order extracted from the run_gather_tick AST places the
+          provider at line 318, ahead of GatherFactObservationProvider at 335,
+          which consumes its evidence. Replaying live-captured frames through
+          that real pair yields march_queue_used=5, march_queue_capacity=5,
+          march_queue_source=visible_ocr_march_queue_region - a value the
+          completion predicate accepts.
+    limitations:
+      - consumption shown on replayed frames, not on a fresh runtime pass
+
+  windows_direct_default:
+    status: WIRED
+    implementation_commit: fe33d912ca5dbb30e68c84ade8b2090122994f1d
+    live_proof_after_commit: false
+    evidence:
+      - tests/test_live_tick_wiring.py::test_the_live_ocr_backend_is_the_in_process_one
+
+  settle_after_action:
+    status: WIRED
+    implementation_commit: fe33d912ca5dbb30e68c84ade8b2090122994f1d
+    live_proof_after_commit: false
+    limitations:
+      - the 1.2s pause has never run against a live occurrence
+
+  stop_when_queue:
+    status: WIRED
+    implementation_commit: fe33d912ca5dbb30e68c84ade8b2090122994f1d
+    live_proof_after_commit: false
+    limitations:
+      - the early-stop branch has never been reached on a live occurrence
+
+  troops_panel_sensor:
+    status: UNIMPLEMENTED
+    note: >
+      knowledge/gathering_continuity_2026-09-19.yaml calls the Troops panel the
+      authoritative surface for farm rhythm. Nothing reads it, so
+      Character.batch_home_at() has no data source.
+
+  return_detection:
+    status: UNIMPLEMENTED
+
+  automatic_refill:
+    status: UNIMPLEMENTED
+
+  buff_sensor:
+    status: UNIMPLEMENTED
+
+  buff_top_up:
+    status: UNIMPLEMENTED
+
+# PRD section 3.4 condition 2 requires the queue to reach 5/5 AND hold, with
+# the buff never reaching zero. None of these four gates has passed.
+acceptance:
+  two_consecutive_unattended_5_of_5_batches:
+    passed: false
+  buff_never_reaches_zero:
+    passed: false
+    note: operator confirmed the gathering buff was off for the observed run
+  returns_detected_and_refilled:
+    passed: false
+  buffed_cycle_between_2h00_and_2h30:
+    passed: false
+    note: >
+      observed batch time 3:44:36 without buff, which sits in the operator's
+      weak band (3h30-4h00); both operator baselines assume the 50% buff
+
+known_blockers:
+  - post-fe33d91 live E2E proof requires a naturally free march slot
+  - Troops panel has no runtime sensor
+  - automatic refill does not exist
+  - buff sensing and use path do not exist
+
+next_live_falsification:
+  hypothesis: >
+    With QueueIndicatorObservationProvider wired into the live chain,
+    successful MARCH completion should no longer accumulate
+    "completion evidence is insufficient".
+  expected_observation: >
+    A fresh bounded occurrence ends from verified queue increase /
+    stop-when-queue instead of exhausting max-ticks.
+  baseline_measurement: >
+    Across 11 recon runs before the wiring change, 238 ticks: 64 reported
+    "completion evidence is insufficient", 55 UNKNOWN_STATE, and 31 (13%)
+    pressed anything.
+  prohibited_shortcut: >
+    Do not recall an active gathering march merely to create a free slot.

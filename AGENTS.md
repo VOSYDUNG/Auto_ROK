@@ -58,10 +58,66 @@ A package is accepted only when all of these are true:
 
 - its graph node has one clear responsibility/authority;
 - required incoming/outgoing edges are explicit;
-- focused tests or runtime artifacts support the claimed status;
+- focused tests or runtime artifacts support the claimed status, **at the level
+  those artifacts actually establish** — see "Completion status levels" below;
 - no unresolved blocker is silently bypassed;
 - the engineering graph validates with `python scripts/validate_engineering_graph.py`;
 - deterministic behavior remains deterministic; model calls are reserved for real bounded ambiguity.
+
+## Completion status levels
+
+Every capability claim must name the highest level it has actually evidenced.
+This applies to Claude and Codex alike: both operate as the same Engineering
+Agent and are bound by the same ladder.
+
+```text
+UNIMPLEMENTED      the capability does not exist in the canonical runtime
+IMPLEMENTED        the code exists and focused tests may pass
+WIRED              the canonical runtime imports and constructs the component,
+                   and a downstream consumer actually uses its output
+LIVE_PROVEN_ONCE   one fresh live occurrence proves the required postcondition
+REPEATABLE         the same capability succeeds across the required repeated
+                   occurrences with no code or tuning change between runs
+STABLE             the current milestone's acceptance criteria hold over the
+                   required operating window
+```
+
+### Invariants
+
+```text
+IMPLEMENTED      != WIRED
+WIRED            != LIVE_PROVEN_ONCE
+LIVE_PROVEN_ONCE != REPEATABLE
+REPEATABLE       != STABLE
+```
+
+### What is and is not evidence
+
+`docs/GOAL.md`, `docs/PRD.md`, `docs/BUILD_PLAN.md` and
+`config/engineering_graph.yaml` define **intended behaviour and scope**. They
+are not evidence that runtime behaviour is complete. A node marked
+`implemented` in the graph is a statement of intent, not of reach.
+
+Tests prove the code under test. They do **not** prove that the live
+entrypoint calls that code, unless a structural or runtime wiring test
+establishes that path — see `tests/test_live_tick_wiring.py`.
+
+This is not a hypothetical. Two components in this repository passed their own
+tests, were recorded as implemented, and were called by nothing:
+`QueueIndicatorObservationProvider` was imported by no module, and
+`--ocr-backend` defaulted to the PowerShell path while the comment beside that
+branch said it was not for live ticks.
+
+### Stating a claim
+
+A completion claim states the highest status actually evidenced, and what
+remains unevidenced. The words "done", "complete", "finished" and "all
+passing" are not used for an objective whose acceptance criteria are not met.
+
+Current runtime truth is tracked in `runtime-status.yaml`, which is committed
+so the state is visible on GitHub while heavy raw evidence stays under the
+gitignored `workspace/`. It records what has been verified, never what is
+intended.
 
 ## Current vertical slice
 
