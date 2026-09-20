@@ -11,12 +11,20 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Sequence
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import urlopen
 
 from autorok.llm.boundary import FORBIDDEN_KEY_PARTS
+from autorok.llm.transport import (
+    LocalLLMConfig,
+    build_request,
+    exactly_one,
+    json_content,
+    post,
+    raw_content,
+    usage_summary,
+)
 from harness.mission_runtime import ActionChoice, ToolSnapshot
 
 
@@ -220,85 +228,16 @@ def _missing_resource_intent(facts: Mapping[str, Any], candidates: Sequence[Acti
     )
 
 
-@dataclass(frozen=True)
-class LocalLLMConfig:
-    endpoint: str
-    model: str
-    timeout_seconds: float = 8.0
-    max_output_tokens: int = 128
-    temperature: float = 0.0
-    system_prompt: str = DEFAULT_SYSTEM_PROMPT
-
-    @classmethod
-    def from_mapping(cls, value: Mapping[str, Any]) -> "LocalLLMConfig":
-        endpoint = value.get("endpoint")
-        model = value.get("model")
-        if not isinstance(endpoint, str) or not endpoint.startswith("http://127.0.0.1"):
-            raise ValueError("local LLM endpoint must be loopback HTTP")
-        if not isinstance(model, str) or not model:
-            raise ValueError("local LLM model is required")
-        timeout = value.get("timeout_seconds", 8.0)
-        max_tokens = value.get("max_output_tokens", 128)
-        temperature = value.get("temperature", 0.0)
-        if type(timeout) not in (int, float) or not 0 < timeout <= 60:
-            raise ValueError("timeout_seconds must be within (0, 60]")
-        if type(max_tokens) is not int or not 1 <= max_tokens <= 1024:
-            raise ValueError("max_output_tokens must be within 1..1024")
-        if type(temperature) not in (int, float) or not 0 <= temperature <= 2:
-            raise ValueError("temperature must be within [0, 2]")
-        prompt = value.get("system_prompt", DEFAULT_SYSTEM_PROMPT)
-        if not isinstance(prompt, str) or not prompt:
-            raise ValueError("system_prompt must be non-empty text")
-        return cls(endpoint, model, float(timeout), max_tokens, float(temperature), prompt)
-
-
-def _completion_endpoint(endpoint: str) -> str:
-    clean = endpoint.rstrip("/")
-    if clean.endswith("/chat/completions"):
-        return clean
-    if clean.endswith("/v1"):
-        return clean + "/chat/completions"
-    return clean + "/v1/chat/completions"
-
-
-def _json_content(response: Mapping[str, Any]) -> Any:
-    choices = response.get("choices")
-    if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], Mapping):
-        raise ValueError("local LLM response must contain one choice")
-    message = choices[0].get("message")
-    if not isinstance(message, Mapping):
-        raise ValueError("local LLM response choice lacks message")
-    content = message.get("content")
-    if isinstance(content, Mapping):
-        return content
-    if not isinstance(content, str):
-        raise ValueError("local LLM response content must be JSON text")
-    text = content.strip()
-    if text.startswith("```"):
-        text = text.removeprefix("```").removeprefix("json").removesuffix("```").strip()
-    return json.loads(text)
-
-
-def _usage_summary(response: Mapping[str, Any]) -> dict[str, int | float] | None:
-    """Keep only provider-reported numeric token counters for telemetry."""
-    usage = response.get("usage")
-    if not isinstance(usage, Mapping):
-        return None
-    allowed = {
-        "prompt_tokens",
-        "completion_tokens",
-        "total_tokens",
-        "prompt_eval_count",
-        "eval_count",
-        "tokens_evaluated",
-        "tokens_predicted",
-    }
-    result: dict[str, int | float] = {}
-    for key in allowed:
-        value = usage.get(key)
-        if type(value) in (int, float):
-            result[key] = value
-    return result or None
+# The config, the transport and the "resolve to exactly one existing
+# candidate" rule now live in autorok.llm.transport, shared with the strategic
+# tier.  Re-exported here so every existing import site reads unchanged - the
+# same treatment the forbidden-key list got, and for the same reason: a rule
+# copied into two files is a rule already wrong in one of them.
+__all__ = [
+    "DEFAULT_SYSTEM_PROMPT",
+    "LocalLLMConfig",
+    "OpenAICompatibleDecisionProvider",
+]
 
 
 class OpenAICompatibleDecisionProvider:
@@ -374,42 +313,19 @@ class OpenAICompatibleDecisionProvider:
             "last_feedback": _model_feedback(snapshot.last_feedback),
             "candidates": candidate_payload,
         }
-        body = {
-            "model": self.config.model,
-            "messages": [
-                {"role": "system", "content": self.config.system_prompt},
-                {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False, sort_keys=True)},
-            ],
-            "temperature": self.config.temperature,
-            "max_tokens": self.config.max_output_tokens,
-            "response_format": {"type": "json_object"},
-        }
-        request_body = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        request_body = build_request(
+            self.config,
+            self.config.prompt_or(DEFAULT_SYSTEM_PROMPT),
+            user_payload,
+        )
         self.last_request_sha256 = hashlib.sha256(request_body).hexdigest()
         self.last_request_bytes = len(request_body)
-        request = Request(
-            _completion_endpoint(self.config.endpoint),
-            data=request_body,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
         request_started = time.perf_counter()
         try:
-            with self._opener(request, timeout=self.config.timeout_seconds) as response:
-                parsed = json.loads(response.read().decode("utf-8"))
-            if not isinstance(parsed, Mapping):
-                raise ValueError("local LLM response must be a JSON object")
-            self.last_usage = _usage_summary(parsed)
-            raw_choices = parsed.get("choices")
-            if isinstance(raw_choices, list) and len(raw_choices) == 1 and isinstance(raw_choices[0], Mapping):
-                raw_message = raw_choices[0].get("message")
-                if isinstance(raw_message, Mapping):
-                    raw_content = raw_message.get("content")
-                    if isinstance(raw_content, str):
-                        self.last_model_output = raw_content
-                    elif isinstance(raw_content, Mapping):
-                        self.last_model_output = json.dumps(raw_content, ensure_ascii=False, sort_keys=True)
-            choice = _json_content(parsed)
+            parsed = post(self.config, request_body, opener=self._opener)
+            self.last_usage = usage_summary(parsed)
+            self.last_model_output = raw_content(parsed)
+            choice = json_content(parsed)
             if not isinstance(choice, Mapping):
                 raise ValueError("local LLM response must be a JSON object")
             # A deliberate null action is the model's bounded abstention.  It
@@ -421,14 +337,15 @@ class OpenAICompatibleDecisionProvider:
             target_id = choice.get("target_id")
             if target_id is not None and not isinstance(target_id, str):
                 raise ValueError("local LLM target_id must be text or null")
-            matches = [
-                candidate
-                for candidate in candidates
-                if candidate.action_id == choice["action_id"] and candidate.target_id == target_id
-            ]
-            if len(matches) != 1:
-                raise ValueError("local LLM choice is not one unique bounded candidate")
-            return matches[0]
+            return exactly_one(
+                [
+                    candidate
+                    for candidate in candidates
+                    if candidate.action_id == choice["action_id"]
+                    and candidate.target_id == target_id
+                ],
+                what="action choice",
+            )
         except (HTTPError, URLError, OSError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
             self.last_error = f"{type(exc).__name__}: {exc}"
             return None

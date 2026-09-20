@@ -151,8 +151,8 @@ không có dữ liệu để đề xuất.
 | LLM-004 | `{"action_id": null}` là câu trả lời hợp lệ | Từ chối được xử lý như abstain, không phải lỗi | F05 | ĐÃ KIỂM |
 | LLM-005 | Một **mô-đun ranh giới duy nhất** cho cả hai tầng | Ba bản sao cũ nay trỏ về cùng **một đối tượng**; test quét cấm bản sao thứ tư | F05 | **XONG** · `test_llm_boundary` |
 | LLM-010 | Ranh giới chỉ được **thêm**, không được bớt | Bớt một mảnh là nới quyền của model, phải sửa Tuyên bố dự án trước | F05 | ĐÃ KIỂM |
-| LLM-006 | Tầng chiến lược nhận gói và trả `MissionIntent` | Gói chiến lược có người nhận, không bị vứt | F05 | **CHƯA XÂY** |
-| LLM-007 | Tần suất gọi ở tầng chiến thuật ≤ 5/100 tick | Đo trên một phiên chạy thật | SC-02 | CHƯA KIỂM |
+| LLM-006 | Tầng chiến lược nhận gói và trả `MissionIntent` | `decision_packets()` nay có người nhận thật; mỗi chu kỳ luôn trả về một intent | F05 | **XONG** · `test_llm_strategy`, `test_strategic_bridge` |
+| LLM-007 | Tần suất gọi ≤ 5/100 tick | Bộ đếm `entries_per_100_plans` đã có và đã test; **số thật cần M7** | SC-02 | MỘT PHẦN · đã đo được, chưa đo |
 | LLM-008 | `retraining_required` phải nêu *cái gì đổi* và *khung hình nào chứng minh* | Thiếu một trong hai thì tín hiệu không hợp lệ | F12 | CHƯA XÂY |
 | LLM-009 | Model **không được tự ghi** vào `knowledge/` | Chỉ sinh đề xuất; ghi cần thao tác của người vận hành | F12 | CHƯA XÂY |
 
@@ -228,18 +228,22 @@ không có dữ liệu để đề xuất.
 | STA trạng thái | 7 | 7 | — | — | — |
 | MIS order/đội hình | 16 | 12 | — | 4 | — |
 | LAD suy giảm | 11 | 11 | — | — | — |
-| LLM biên quyết định | 10 | 6 | 1 | 3 | — |
+| LLM biên quyết định | 10 | 7 | 1 | 2 | — |
 | ONB onboarding | 5 | 1 | — | 4 | — |
 | ACT actuation | 6 | 6 | — | — | — |
 | EVI bằng chứng | 4 | 4 | — | — | — |
 | SAF an toàn | 6 | 3 | 1 | 2 | — |
-| DEL giao hàng | 15 | 6 | — | 4 | 5 |
-| **Tổng** | **95** | **71** | **2** | **17** | **5** |
+| DEL giao hàng | 15 | 8 | — | 4 | 3 |
+| **Tổng** | **94** | **73** | **2** | **16** | **3** |
 
-**Đọc bảng này:** 71/95 yêu cầu đã có test đang chạy. Phần chưa xây tập trung đúng bốn chỗ —
-**thang suy giảm** (LAD-007…010), **tầng chiến lược của LLM** (LLM-005…009),
-**onboarding** (ONB-001…004), và **lịch biểu động** (MIS-013…016). Ba nhóm đầu là P1 trong
-`BUILD_PLAN`; nhóm thứ tư là mới, sinh ra từ buổi 2026-09-20.
+**Đọc bảng này:** 73/94 yêu cầu đã có test đang chạy. Phần chưa xây còn đúng ba chỗ —
+**phản hồi đổi game** (LLM-008, LLM-009), **onboarding** (ONB-001…004), và **lịch biểu
+động** (MIS-013…016). Thang suy giảm đã đóng ở M4; tầng chiến lược đã có người nhận ở M6.
+
+**Sửa bảng ngày 2026-09-20:** bảng này trước ghi tổng 95 và cộng không ra. Đếm lại theo
+đúng các dòng yêu cầu: tổng là **94**; nhóm DEL có **8** đã kiểm (không phải 6) và **3**
+khoá (không phải 5). Bảng đếm sai thì không dùng để quyết định được, nên sửa trước khi
+thêm số mới.
 
 Nhóm ACT, EVI, CAP, STA phủ kín — đó là phần harness đã trưởng thành.
 

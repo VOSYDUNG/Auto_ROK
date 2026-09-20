@@ -71,6 +71,12 @@ def strip_forbidden(
     Nested mappings are walked, because a forbidden key is just as forbidden
     one level down - and the qualified name is what gets tested, so a nested
     ``target.screen_rect`` is caught by its own segment rather than by luck.
+
+    Sequences are walked too. That was missing, and it was a live hole: the
+    strategic packet carries ``due_tasks`` as a LIST of mappings, so a
+    ``client_window_rect`` inside one of them passed straight through a
+    function whose whole job is to stop exactly that. Found by
+    ``test_llm_strategy`` before the strategic tier ever ran.
     """
     kept: dict[str, Any] = {}
     for key, value in facts.items():
@@ -79,11 +85,16 @@ def strip_forbidden(
         qualified = f"{prefix}.{key}" if prefix else key
         if is_forbidden_key(key) or is_forbidden_key(qualified):
             continue
-        if isinstance(value, Mapping):
-            kept[key] = strip_forbidden(value, prefix=qualified)
-        else:
-            kept[key] = value
+        kept[key] = _strip_value(value, prefix=qualified)
     return kept
+
+
+def _strip_value(value: Any, *, prefix: str) -> Any:
+    if isinstance(value, Mapping):
+        return strip_forbidden(value, prefix=prefix)
+    if isinstance(value, (list, tuple)):
+        return [_strip_value(item, prefix=prefix) for item in value]
+    return value
 
 
 __all__ = [

@@ -246,15 +246,41 @@ hết mọi nhân vật trước, rồi mới quay lại làm daily**.
 
 ## M6 — Biên quyết định LLM · không cần game
 
-| Yêu cầu | Việc |
-|---|---|
-| `LLM-006` | Người nhận cho gói chiến lược — hiện `decision_packets()` dựng gói rồi **vứt đi** |
-| `LLM-008` | `retraining_required` phải nêu *cái gì đổi* và *khung hình nào chứng minh* |
-| `LLM-009` | Model **đề xuất** tri thức, người vận hành duyệt; cấm tự ghi |
-| `ONB-001…004` | Onboarding 6 pha; chỉ pha 0 được chặn |
-| `LLM-007` | Đo tần suất gọi, đích ≤ 5/100 tick |
+| Yêu cầu | Việc | Trạng thái |
+|---|---|---|
+| `LLM-006` | Người nhận cho gói chiến lược — `decision_packets()` dựng gói rồi **vứt đi** | **XONG** |
+| `LLM-007` | Bộ đếm tần suất gọi, đích ≤ 5/100 tick | bộ đếm **xong**, số thật chờ M7 |
+| `LLM-008` | `retraining_required` phải nêu *cái gì đổi* và *khung hình nào chứng minh* | đang làm |
+| `LLM-009` | Model **đề xuất** tri thức, người vận hành duyệt; cấm tự ghi | đang làm |
+| `ONB-001…004` | Onboarding 6 pha; chỉ pha 0 được chặn | đang làm |
 
 **Xong khi:** một chu kỳ lập kế hoạch chạy offline và trả về một `MissionIntent` hợp lệ.
+
+### M6.1 đã làm — tầng chiến lược có người nhận
+
+`autorok/llm/intent.py` · `autorok/llm/strategy.py` · `harness/strategic_bridge.py`.
+
+Ba quyết định đáng ghi lại:
+
+**Harness dựng ứng viên, model chỉ trỏ.** Giống hệt tầng chiến thuật: model trả một
+`intent_id`, và `intent_id` được ánh xạ ngược về một object harness đã tạo. Không khớp thì
+**từ chối**, không sửa cho gần đúng.
+
+**Không gọi model khi câu hỏi đã ngã ngũ.** Không có ứng viên → `HOLD`. Đúng một ứng viên →
+lấy luôn. Chỉ từ hai ứng viên trở lên mới hỏi. Đây chính là `SC-02` được thực thi bằng cấu
+trúc chứ không bằng lời dặn.
+
+**Model chết thì harness tự quyết, và ghi rõ là mình quyết.** `decided_by` phân biệt
+`MODEL` · `HARNESS_ONLY_OPTION` · `HARNESS_FALLBACK`. Thiếu trường này thì một đêm model
+chết trông y hệt một đêm model quyết mọi bước.
+
+Thứ tự ưu tiên dự phòng đang dùng **giả thuyết slot dễ hỏng** — gửi quân trước, việc daily
+sau. Ghi rõ trong code là giả thuyết, chờ số của M5 bác bỏ hoặc xác nhận.
+
+**Một lỗ hổng thật tìm được khi viết test:** `strip_forbidden` đi vào mapping lồng nhau
+nhưng **không đi vào list**. Gói chiến lược mang `due_tasks` là *list các mapping*, nên
+`client_window_rect` nằm trong đó sẽ đi thẳng qua hàm có nhiệm vụ chặn đúng thứ đó. Đã vá
+và có test riêng.
 
 Đây là lúc 20,6 giây chuyển từ lỗi chặn thành không quan trọng — ở tầng này harness đang
 chờ quân về hàng giờ.

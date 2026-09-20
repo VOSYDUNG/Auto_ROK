@@ -108,6 +108,29 @@ def test_stripping_walks_nested_mappings():
     }
 
 
+def test_stripping_walks_into_lists_of_mappings():
+    """The hole this closed was live.
+
+    ``strip_forbidden`` recursed into mappings but not into sequences, so a
+    list of mappings went through untouched. The strategic packet carries
+    ``due_tasks`` as exactly that shape, which means the one function written
+    to stop geometry reaching a model would have forwarded it.
+    """
+    facts = {
+        "due_tasks": [
+            {"task_id": "CLAIM_VIP", "client_window_rect": [0, 0, 1920, 1080]},
+            {"task_id": "DONATE", "nested": {"image_path": "C:/frames/1.png"}},
+        ]
+    }
+    assert strip_forbidden(facts) == {
+        "due_tasks": [{"task_id": "CLAIM_VIP"}, {"task_id": "DONATE", "nested": {}}]
+    }
+
+
+def test_stripping_leaves_a_list_of_plain_values_alone():
+    assert strip_forbidden({"levels": [4, 5, 6]}) == {"levels": [4, 5, 6]}
+
+
 def test_stripping_drops_non_string_keys_rather_than_passing_them_through():
     assert strip_forbidden({1: "x", "state": "CITY_VIEW"}) == {"state": "CITY_VIEW"}
 

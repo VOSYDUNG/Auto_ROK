@@ -95,6 +95,30 @@ nodes:
       - tests/test_viewport_change.py
       - knowledge/farming_workflow_2026-09-19.yaml
 
+  - id: local_model_transport
+    kind: safety_contract
+    responsibility: Hold the one loopback-only endpoint check and the one rule that a model answer must resolve to exactly one candidate the harness already built, shared by both decision tiers.
+    authority: canonical
+    status: implemented
+    path: autorok/llm/transport.py
+    evidence:
+      - harness/local_llm_selector.py
+      - autorok/llm/strategy.py
+      - tests/test_llm_strategy.py
+
+  - id: strategic_decision_tier
+    kind: decision_edge
+    responsibility: Answer a strategic packet with exactly one MissionIntent bound to a harness-built candidate, falling back to a deterministic priority order when the model is unavailable or abstains, so a planning cycle always produces a decision.
+    authority: canonical
+    status: implemented
+    path: autorok/llm/strategy.py
+    evidence:
+      - autorok/llm/intent.py
+      - harness/strategic_bridge.py
+      - tests/test_llm_strategy.py
+      - tests/test_strategic_bridge.py
+      - docs/LLM_GAMEPLAY_SPEC.md
+
   - id: windows_ocr_direct
     kind: perception
     responsibility: Call Windows.Media.Ocr in process on pixels the capture backend already holds, instead of spawning PowerShell to re-hash and re-decode the same frame.
@@ -823,6 +847,12 @@ edges:
   - {from: windows_ocr_direct, to: observation_projection, relation: supplies_ocr_elements}
   - {from: march_queue_indicator, to: gather_fact_extractor, relation: supplies_queue_fact}
   - {from: model_input_boundary, to: local_decision_provider, relation: constrains}
+  - {from: model_input_boundary, to: strategic_decision_tier, relation: constrains}
+  - {from: local_model_transport, to: local_decision_provider, relation: binds_answer_to_candidate}
+  - {from: local_model_transport, to: strategic_decision_tier, relation: binds_answer_to_candidate}
+  - {from: mission_scheduler, to: strategic_decision_tier, relation: supplies_decision_packets}
+  - {from: degradation_ladder, to: strategic_decision_tier, relation: bounds_candidate_set}
+  - {from: strategic_decision_tier, to: autorok_mission_layer, relation: issues_mission_intent}
   - {from: model_input_boundary, to: mission_scheduler, relation: constrains}
   - {from: autorok_mission_layer, to: mission_scheduler, relation: supplies_work_process}
   - {from: mission_layer_config, to: mission_timeline, relation: declares_cadence_and_reset}

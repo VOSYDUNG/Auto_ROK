@@ -40,7 +40,7 @@ dev = ["pytest>=8"]
 # Four top-level packages, per docs/PROJECT_DECLARATION.md section 2:
 # harness is the 80% mechanism, autorok holds the rewritten work process,
 # knowledge is the game facts, operator_layer the account profiles.
-packages = ["autorok", "autorok.mission", "harness", "knowledge", "operator_layer"]
+packages = ["autorok", "autorok.llm", "autorok.mission", "harness", "knowledge", "operator_layer"]
 
 [tool.pytest.ini_options]
 # Before this file existed the suite only worked through `python -m pytest`,
