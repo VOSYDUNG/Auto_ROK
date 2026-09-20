@@ -28,6 +28,7 @@ from harness.gather_replay_evidence import (  # noqa: E402
 from harness.local_llm_selector import OpenAICompatibleDecisionProvider  # noqa: E402
 from harness.main_view_detector import MainViewProfile, MainViewVisualObservationProvider  # noqa: E402
 from harness.map_coordinate_provider import MapCoordinateObservationProvider  # noqa: E402
+from harness.queue_indicator_provider import QueueIndicatorObservationProvider  # noqa: E402
 from harness.mission_loader import compile_mission  # noqa: E402
 from harness.mission_runner import MissionRunner  # noqa: E402
 from harness.mission_runtime import MissionContext  # noqa: E402
@@ -307,6 +308,16 @@ def main(argv: list[str] | None = None) -> int:
             ocr_backend=args.ocr_backend,
         )
         observations = OcrSemanticObservationProvider(observations, candidate_specs)
+        # The template reader for the march queue.  Built in M3 and, until
+        # now, wired into nothing: the live tick got its queue fact only
+        # from whole-frame OCR, which is exactly the source this replaced.
+        # Completion is evidenced by the queue count RISING, so without
+        # this a successful march could never be proven and the runner
+        # kept ticking - 64 wasted ticks across today's runs, the single
+        # largest bucket.
+        observations = QueueIndicatorObservationProvider(
+            observations, ROOT / "config" / "queue_indicator_profile.json"
+        )
         observations = MainViewVisualObservationProvider(observations, main_view_profile)
         # Second, independent route to WORLD_MAP_VIEW.  The visual signature
         # above cannot carry that state - open terrain looks different

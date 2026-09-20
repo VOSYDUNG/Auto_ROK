@@ -114,3 +114,29 @@ def test_ambiguous_visible_levels_fail_closed():
     assert extract_visible_resource_level(source) is None
     result = GatherFactObservationProvider(One(source), character_id="hien").observe(CONTEXT)
     assert "selected_search_level" not in result.scene.facts
+
+
+def test_the_115_workaround_is_gone_from_provenance_too():
+    """It was removed from the extractor and survived in march_queue_source.
+
+    A second copy of a rule that was deliberately deleted is the same failure
+    the forbidden-key denylist had: the test guarded one call site, so the
+    other kept the behaviour. Here it could not invent a value, only claim
+    that a value came from the queue region - provenance asserted on the
+    strength of a pattern already known to read 213 as 2/3.
+    """
+    from pathlib import Path
+
+    from harness import gather_facts
+
+    # Comments explain why the pattern is gone and must be allowed to name it.
+    code = [
+        line
+        for line in Path(gather_facts.__file__).read_text(encoding="utf-8").splitlines()
+        if not line.lstrip().startswith("#")
+    ]
+    offenders = [line.strip() for line in code if "([0-9])1([0-9])" in line]
+    assert not offenders, (
+        f"the compact-ratio workaround is back in code: {offenders}; "
+        "it reads 213 as 2/3 and 919 as 9/9"
+    )

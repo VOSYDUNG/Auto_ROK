@@ -66,11 +66,13 @@ def march_queue_source(bundle: ObservationBundle) -> str | None:
             continue
         if evidence.metadata.get("acquisition") not in _QUEUE_ROI_ACQUISITIONS:
             continue
+        # The "115 means 1/5" workaround was removed from extract_march_queue
+        # above, and a second copy survived here until 2026-09-20. It is gone
+        # for the same reason: ([0-9])1([0-9]) also reads 213 as 2/3 and 919
+        # as 9/9. Here it could only mislabel PROVENANCE rather than a value,
+        # which is worse in its own way - it would claim a reading came from
+        # the queue region on the strength of a pattern known to be unsafe.
         ratios = _QUEUE_RATIO.findall(text)
-        if not ratios:
-            compact = re.fullmatch(r"([0-9])1([0-9])", text.strip())
-            if compact:
-                ratios = [(compact.group(1), compact.group(2))]
         for used_raw, capacity_raw in ratios:
             if (int(used_raw), int(capacity_raw)) == pair:
                 return "visible_ocr_march_queue_region"

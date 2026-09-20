@@ -42,6 +42,17 @@ DEFAULT_MAX_TICKS = 24
 #: Terminal-ish statuses that mean this occurrence has nothing left to do.
 DONE_STATUSES = {"completed", "blocked", "failed"}
 
+#: Pause after a tick that actually pressed something, before observing again.
+#:
+#: The client animates: panels slide, the map pans, a march draws its path.
+#: Observing into the middle of that produced UNKNOWN_STATE on 55 ticks across
+#: a day of runs - the second largest bucket of wasted work. The harness was
+#: right to refuse; it was asked too early.
+#:
+#: Only after an action. A tick that pressed nothing has nothing to wait for,
+#: and sleeping there would just slow the loop down.
+SETTLE_AFTER_ACTION_SECONDS = 1.2
+
 
 def _focus_client() -> bool:
     """Bring the client forward without sending it any input."""
@@ -203,6 +214,14 @@ def main(argv: list[str] | None = None) -> int:
                         choices=("FOOD", "WOOD", "STONE", "GOLD"))
     parser.add_argument("--resource-level", type=int, default=6)
     parser.add_argument("--max-ticks", type=int, default=DEFAULT_MAX_TICKS)
+    parser.add_argument(
+        "--stop-when-queue",
+        type=int,
+        default=None,
+        help="stop as soon as the march queue reaches this many used slots; "
+             "without it the loop runs to --max-ticks even after the march "
+             "it was sent to make has already gone out",
+    )
     parser.add_argument("--focus-delay-seconds", type=float, default=2.0)
     parser.add_argument(
         "--recon-dir",
@@ -286,6 +305,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         if last.get("status") in DONE_STATUSES:
             break
+        if choice.get("action_id"):
+            time.sleep(SETTLE_AFTER_ACTION_SECONDS)
+        if args.stop_when_queue is not None and choice.get("action_id"):
+            reading = _read_queue()
+            used, _, _ = reading.partition("/")
+            if used.isdigit() and int(used) >= args.stop_when_queue:
+                print(f"  stopped: queue reached {reading}", flush=True)
+                break
         if last.get("status") == "needs_decision":
             # A decision the operator owns. Stopping is the point, so say so
             # plainly rather than burning the remaining ticks on it.
