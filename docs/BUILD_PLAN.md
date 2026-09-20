@@ -250,9 +250,10 @@ hết mọi nhân vật trước, rồi mới quay lại làm daily**.
 |---|---|---|
 | `LLM-006` | Người nhận cho gói chiến lược — `decision_packets()` dựng gói rồi **vứt đi** | **XONG** |
 | `LLM-007` | Bộ đếm tần suất gọi, đích ≤ 5/100 tick | bộ đếm **xong**, số thật chờ M7 |
-| `LLM-008` | `retraining_required` phải nêu *cái gì đổi* và *khung hình nào chứng minh* | đang làm |
-| `LLM-009` | Model **đề xuất** tri thức, người vận hành duyệt; cấm tự ghi | đang làm |
-| `ONB-001…004` | Onboarding 6 pha; chỉ pha 0 được chặn | đang làm |
+| `LLM-008` | `retraining_required` phải nêu *cái gì đổi* và *khung hình nào chứng minh* | **XONG** |
+| `LLM-009` | Model **đề xuất** tri thức, người vận hành duyệt; cấm tự ghi | **XONG** |
+| `ONB-001…003` | Onboarding 6 pha; chỉ pha 0 được chặn | **XONG** |
+| `ONB-004` | Khảo sát Tướng · City Hall · Chợ | **cần client** → M7 |
 
 **Xong khi:** một chu kỳ lập kế hoạch chạy offline và trả về một `MissionIntent` hợp lệ.
 
@@ -281,6 +282,36 @@ sau. Ghi rõ trong code là giả thuyết, chờ số của M5 bác bỏ hoặc
 nhưng **không đi vào list**. Gói chiến lược mang `due_tasks` là *list các mapping*, nên
 `client_window_rect` nằm trong đó sẽ đi thẳng qua hàm có nhiệm vụ chặn đúng thứ đó. Đã vá
 và có test riêng.
+
+### M6.2 đã làm — phản hồi đổi game, onboarding, và ranh giới bí mật
+
+`autorok/llm/retraining.py` · `autorok/onboarding.py` · `tests/test_no_plaintext_credentials.py`.
+
+**Tín hiệu đổi game không dựng được nếu thiếu bằng chứng.** `RetrainingSignal` bắt buộc
+*cái gì đổi* và *khung hình nào chứng minh*, kiểm ngay lúc dựng object — không phải lọc về
+sau. Và nó **không có chỗ nào** để ghi mục tiêu thay thế: báo nút `USE` biến mất là bằng
+chứng, đoán nút bên cạnh là nút mới thì là bịa.
+
+**`knowledge/` là của người vận hành, và điều đó được thi hành.** `write_proposal` **từ
+chối** mọi đích nằm trong `knowledge/`, không phân biệt hoa thường. `KnowledgeProposal`
+không có `apply()`, không có `accept()`. Test kiểm luôn rằng ghi một đề xuất không chạm
+vào bất kỳ file tri thức thật nào. Đây là đường ranh giữa *được người nuôi* và *tự nuôi* —
+nó phải là mã, không phải một dòng trong tài liệu.
+
+**Onboarding: chỉ pha 0 được chặn, và điều đó không thể vi phạm.** Dựng một `PhaseResult`
+`BLOCKED` ở pha 1–5 sẽ **ném lỗi**. Bước thiếu cũng được **ghi lại**, không im lặng bỏ
+qua — bỏ qua thầm lặng sẽ làm `may_decide` đúng trên một lượt chạy chưa từng nhìn vào game.
+
+Đáng ghi: nếu chỉ chạy pha 0 thì `may_decide` **vẫn đúng**, nhưng 5 pha thiếu tụt 5 bậc và
+thang chạm đáy `OBSERVE_ONLY` — nơi không phát input. Được phép quyết định, nhưng không còn
+gì để quyết ngoài việc quan sát. Đó là cách hai cơ chế khớp nhau, và test nói rõ điều đó.
+
+**`SAF-006` đóng luôn.** Quét toàn repo tìm **giá trị** gán cho mật khẩu/token/khoá, bỏ qua
+placeholder và mô tả. Đã gài thử một mẫu giả vào `config/` để xác nhận test **đỏ đúng lúc**
+rồi mới gỡ ra — một bộ quét không bao giờ bắt được gì thì không phải là bộ quét.
+
+Chỗ để bí mật khi xây đăng nhập: **Windows Credential Manager**, người vận hành nhập một
+lần, đọc lúc chạy. Không commit, không log, không đưa vào mission fact.
 
 Đây là lúc 20,6 giây chuyển từ lỗi chặn thành không quan trọng — ở tầng này harness đang
 chờ quân về hàng giờ.

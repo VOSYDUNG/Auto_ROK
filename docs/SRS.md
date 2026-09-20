@@ -153,16 +153,16 @@ không có dữ liệu để đề xuất.
 | LLM-010 | Ranh giới chỉ được **thêm**, không được bớt | Bớt một mảnh là nới quyền của model, phải sửa Tuyên bố dự án trước | F05 | ĐÃ KIỂM |
 | LLM-006 | Tầng chiến lược nhận gói và trả `MissionIntent` | `decision_packets()` nay có người nhận thật; mỗi chu kỳ luôn trả về một intent | F05 | **XONG** · `test_llm_strategy`, `test_strategic_bridge` |
 | LLM-007 | Tần suất gọi ≤ 5/100 tick | Bộ đếm `entries_per_100_plans` đã có và đã test; **số thật cần M7** | SC-02 | MỘT PHẦN · đã đo được, chưa đo |
-| LLM-008 | `retraining_required` phải nêu *cái gì đổi* và *khung hình nào chứng minh* | Thiếu một trong hai thì tín hiệu không hợp lệ | F12 | CHƯA XÂY |
-| LLM-009 | Model **không được tự ghi** vào `knowledge/` | Chỉ sinh đề xuất; ghi cần thao tác của người vận hành | F12 | CHƯA XÂY |
+| LLM-008 | `retraining_required` phải nêu *cái gì đổi* và *khung hình nào chứng minh* | Thiếu một trong hai thì **không dựng được object**; không có chỗ để đoán mục tiêu thay thế | F12 | **XONG** · `test_llm_retraining` |
+| LLM-009 | Model **không được tự ghi** vào `knowledge/` | `write_proposal` **từ chối** mọi đích nằm trong `knowledge/`; không có `apply()`; test xác nhận không file tri thức nào bị chạm | F12 | **XONG** · `test_llm_retraining` |
 
 ### 3.7 Onboarding — ONB
 
 | Mã | Mệnh đề | Tiêu chí chấp nhận | Nguồn | Trạng thái |
 |---|---|---|---|---|
-| ONB-001 | Sáu pha chạy đúng thứ tự trước mọi quyết định hành động | Bỏ qua pha nào thì không được phép ra quyết định | F16 | CHƯA XÂY |
-| ONB-002 | **Chỉ pha 0** được phép chặn toàn bộ | Pha 1–5 hỏng thì tụt bậc, không dừng | F16 | CHƯA XÂY |
-| ONB-003 | Mục chưa xác minh trong `knowledge/` được liệt kê ra, không im lặng | Khởi động ghi danh sách `UNVERIFIED` | F16 | CHƯA XÂY |
+| ONB-001 | Sáu pha chạy đúng thứ tự trước mọi quyết định hành động | Pha thiếu bước cũng **được ghi**, không im lặng bỏ qua; chưa chạy thì `may_decide` sai | F16 | **XONG** · `test_onboarding` |
+| ONB-002 | **Chỉ pha 0** được phép chặn toàn bộ | Pha 1–5 dựng `BLOCKED` sẽ **ném lỗi**; mỗi pha hỏng tụt đúng một bậc | F16 | **XONG** · `test_onboarding` |
+| ONB-003 | Mục chưa xác minh trong `knowledge/` được liệt kê ra, không im lặng | Quét cây thật: **5 mục** trong 2 file; liệt kê nhưng **không chặn** | F16 | **XONG** · `test_onboarding` |
 | ONB-004 | Chưa có profile thì khảo sát Tướng · City Hall · Chợ | Ba bề mặt đọc xong mới tính tốc độ farm | F16 | CHƯA XÂY — cần client |
 | ONB-005 | Khảo sát hỏng → dùng mốc người vận hành và **ghi rõ đang ước lượng** | Nguồn chu kỳ là `OPERATOR_BASELINE` | F16 | ĐÃ KIỂM (phần kiểu dữ liệu) |
 
@@ -195,7 +195,7 @@ không có dữ liệu để đề xuất.
 | SAF-003 | Tuyên bố và GOAL **vẫn còn** ghi điều khoản cấm | Nới lỏng tài liệu thì test đỏ | §5.1 Tuyên bố | ĐÃ KIỂM |
 | SAF-004 | Hộp xác nhận nối đất theo nhãn chữ, không theo màu/vị trí | `YES` đỏ bên trái, `NO` xanh bên phải — ngược quy ước | F11 | CHƯA XÂY |
 | SAF-005 | Hành động tiêu gem thuộc quyền người vận hành | Agent chỉ được đề xuất | §3.3 PRD | CHƯA XÂY |
-| SAF-006 | Không lưu thông tin đăng nhập dạng chữ thường trong repo | Quét không thấy trường mật khẩu | §3.3 PRD | CHƯA KIỂM |
+| SAF-006 | Không lưu thông tin đăng nhập dạng chữ thường trong repo | Quét toàn repo tìm **giá trị** gán cho mật khẩu/token/khoá; đã thử gài một mẫu giả và test **đỏ đúng lúc** | §3.3 PRD | **XONG** · `test_no_plaintext_credentials` |
 
 ### 3.11 Giao hàng — DEL *(toàn bộ đang KHOÁ)*
 
@@ -228,17 +228,25 @@ không có dữ liệu để đề xuất.
 | STA trạng thái | 7 | 7 | — | — | — |
 | MIS order/đội hình | 16 | 12 | — | 4 | — |
 | LAD suy giảm | 11 | 11 | — | — | — |
-| LLM biên quyết định | 10 | 7 | 1 | 2 | — |
-| ONB onboarding | 5 | 1 | — | 4 | — |
+| LLM biên quyết định | 10 | 9 | 1 | — | — |
+| ONB onboarding | 5 | 4 | — | 1 | — |
 | ACT actuation | 6 | 6 | — | — | — |
 | EVI bằng chứng | 4 | 4 | — | — | — |
-| SAF an toàn | 6 | 3 | 1 | 2 | — |
+| SAF an toàn | 6 | 4 | — | 2 | — |
 | DEL giao hàng | 15 | 8 | — | 4 | 3 |
-| **Tổng** | **94** | **73** | **2** | **16** | **3** |
+| **Tổng** | **94** | **79** | **1** | **11** | **3** |
 
-**Đọc bảng này:** 73/94 yêu cầu đã có test đang chạy. Phần chưa xây còn đúng ba chỗ —
-**phản hồi đổi game** (LLM-008, LLM-009), **onboarding** (ONB-001…004), và **lịch biểu
-động** (MIS-013…016). Thang suy giảm đã đóng ở M4; tầng chiến lược đã có người nhận ở M6.
+**Đọc bảng này:** 79/94 yêu cầu đã có test đang chạy. 11 mục chưa xây chia làm hai loại:
+
+| Cần client | Làm được không cần game |
+|---|---|
+| `MIS-013…016` lịch biểu động — **phải đo trước** | `SAF-005` tiêu gem cần người vận hành duyệt |
+| `DEL-012…015` đường giao hàng | `SAF-004` nối đất hộp xác nhận theo nhãn chữ |
+| `ONB-004` khảo sát Tướng · City Hall · Chợ | |
+
+Phần lớn khối lượng còn lại **cần mở game**, và `MIS-015` thì chính người vận hành đã
+chốt là đo trước mới quyết. Hai mục `SAF` còn lại không cần game nhưng đều là **cổng phê
+duyệt của người vận hành**, nên chúng thuộc về M7/M8 chứ không phải làm thêm ở đây.
 
 **Sửa bảng ngày 2026-09-20:** bảng này trước ghi tổng 95 và cộng không ra. Đếm lại theo
 đúng các dòng yêu cầu: tổng là **94**; nhóm DEL có **8** đã kiểm (không phải 6) và **3**

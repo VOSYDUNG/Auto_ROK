@@ -119,6 +119,38 @@ nodes:
       - tests/test_strategic_bridge.py
       - docs/LLM_GAMEPLAY_SPEC.md
 
+  - id: credential_boundary
+    kind: safety_contract
+    responsibility: Keep every account secret out of the repository, so the login flow can be described and built while the value itself stays in Windows Credential Manager, entered once by the operator.
+    authority: canonical
+    status: implemented
+    path: tests/test_no_plaintext_credentials.py
+    evidence:
+      - docs/SRS.md
+      - docs/PRD.md
+
+  - id: game_change_feedback
+    kind: safety_contract
+    responsibility: Carry a claim that the game changed only when it names what changed and the frame that proves it, and keep the model's knowledge suggestions out of knowledge/ until the operator writes them.
+    authority: canonical
+    status: implemented
+    path: autorok/llm/retraining.py
+    evidence:
+      - tests/test_llm_retraining.py
+      - docs/LLM_GAMEPLAY_SPEC.md
+      - knowledge/farming_workflow_2026-09-19.yaml
+
+  - id: onboarding_phases
+    kind: mission_policy
+    responsibility: Run the six cold-start phases in order before any action decision, letting only phase zero block and demoting exactly one rung for each later phase that fails.
+    authority: canonical
+    status: partial
+    path: autorok/onboarding.py
+    evidence:
+      - tests/test_onboarding.py
+      - docs/LLM_GAMEPLAY_SPEC.md
+    gap: Phase 2 reads commanders, city hall and the trading post on a live client - ONB-004, deferred to M7.
+
   - id: windows_ocr_direct
     kind: perception
     responsibility: Call Windows.Media.Ocr in process on pixels the capture backend already holds, instead of spawning PowerShell to re-hash and re-decode the same frame.
@@ -853,6 +885,10 @@ edges:
   - {from: mission_scheduler, to: strategic_decision_tier, relation: supplies_decision_packets}
   - {from: degradation_ladder, to: strategic_decision_tier, relation: bounds_candidate_set}
   - {from: strategic_decision_tier, to: autorok_mission_layer, relation: issues_mission_intent}
+  - {from: onboarding_phases, to: degradation_ladder, relation: demotes_on_phase_failure}
+  - {from: onboarding_phases, to: strategic_decision_tier, relation: gates_first_decision}
+  - {from: degradation_ladder, to: game_change_feedback, relation: raises_persistent_degradation}
+  - {from: credential_boundary, to: autorok_mission_layer, relation: constrains_account_rotation}
   - {from: model_input_boundary, to: mission_scheduler, relation: constrains}
   - {from: autorok_mission_layer, to: mission_scheduler, relation: supplies_work_process}
   - {from: mission_layer_config, to: mission_timeline, relation: declares_cadence_and_reset}
