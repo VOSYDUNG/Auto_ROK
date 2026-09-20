@@ -299,6 +299,146 @@ def _checked_roi(
     return (x, y, w, h)
 
 
+#: Regions read in addition to the whole frame on every live observation.
+#:
+#: A whole-frame sweep is not reliable on this client - it returned 3
+#: elements on a city frame and 75 on a world frame, and it caught the
+#: dispatch drawer on some ticks and not others. These regions are the ones
+#: the state machine depends on, read through their own calibrated scales so
+#: they are deterministic rather than lucky.
+#:
+#: Kept short on purpose. Each OCR call costs about 33 ms of fixed overhead
+#: regardless of area, so this list is a latency budget as much as a
+#: capability one: three regions plus the frame measures about 277 ms against
+#: the 400 ms of OCR-003.
+SEMANTIC_REGIONS: tuple[str, ...] = (
+    "search_level_strip",
+    "troop_drawer_queue",
+    "troop_drawer_button",
+    "troop_drawer_prompt",
+)
+
+
+def merge_region_elements(
+    payload: dict[str, Any],
+    region_payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Let a calibrated region replace the whole-frame read of its own area.
+
+    The region's boxes arrive in scaled-crop pixels and are converted to
+    client pixels, because downstream reads everything as client pixels and
+    two coordinate spaces in one element list is a trap.
+
+    Whole-frame elements inside the region are DROPPED, and every region
+    element is appended - none are skipped as duplicates. That matters more
+    than it looks. An earlier version deduplicated token by token, and on the
+    search panel the whole-frame pass had already found the digit while the
+    region supplied the label, so "6" was dropped as a duplicate and "Level:"
+    landed at the end of the joined text with nothing after it. The fact
+    extractor looks for "Level" followed by a number, so a correct reading of
+    a correct panel produced no fact at all.
+
+    Adjacency is part of the reading. Splitting a phrase across two passes
+    destroys it, so the region wins its whole area or does not touch it.
+    """
+    crop = region_payload.get("crop") or [0, 0, 0, 0]
+    scale_x = float(region_payload.get("scale_x") or 1.0)
+    scale_y = float(region_payload.get("scale_y") or 1.0)
+    crop_x, crop_y = int(crop[0]), int(crop[1])
+    crop_w, crop_h = int(crop[2]), int(crop[3])
+
+    region_elements = region_payload.get("elements") or []
+    if not region_elements:
+        # Nothing read here; leave the frame's own view of the area alone
+        # rather than blanking it.
+        return payload
+
+    def _inside(item: Mapping[str, Any]) -> bool:
+        box = item.get("bbox")
+        if not isinstance(box, (list, tuple)) or len(box) != 4:
+            return False
+        centre_x = box[0] + box[2] / 2
+        centre_y = box[1] + box[3] / 2
+        return (
+            crop_x <= centre_x <= crop_x + crop_w
+            and crop_y <= centre_y <= crop_y + crop_h
+        )
+
+    kept = [item for item in payload["elements"] if not _inside(item)]
+    next_line = max((int(i.get("line_index", 0)) for i in kept), default=-1) + 1
+
+    for item in region_elements:
+        box = item.get("bbox")
+        if not isinstance(box, (list, tuple)) or len(box) != 4:
+            continue
+        kept.append(
+            {
+                "bbox": [
+                    crop_x + round(box[0] / scale_x),
+                    crop_y + round(box[1] / scale_y),
+                    max(1, round(box[2] / scale_x)),
+                    max(1, round(box[3] / scale_y)),
+                ],
+                "word_index": int(item.get("word_index", 0)),
+                "confidence": None,
+                "text": str(item.get("text")),
+                "line_index": next_line + int(item.get("line_index", 0)),
+            }
+        )
+
+    payload["elements"] = kept
+    payload["text"] = " ".join(str(item["text"]) for item in kept)
+    return payload
+
+
+def recognize_with_regions(
+    image: str | Path,
+    capture: Mapping[str, Any],
+    *,
+    engine: "WindowsOcr | None" = None,
+    roi_profile: Any = None,
+    regions: Sequence[str] = SEMANTIC_REGIONS,
+    window_size: tuple[int, int] | None = None,
+) -> dict[str, Any]:
+    """Whole-frame OCR plus the calibrated regions the state machine needs.
+
+    The whole-frame pass is kept because it still supplies most text on most
+    frames. The regions are added because it cannot be relied on for the few
+    strings a decision turns on.
+
+    A region that is not registered, or does not fit this client, is skipped
+    rather than raised: a missing region means less evidence, and the
+    downstream contract already treats missing evidence as a refusal.
+    """
+    ocr = engine or WindowsOcr()
+    payload = recognize_path(image, capture, engine=ocr)
+    if not regions:
+        return payload
+
+    if roi_profile is None:
+        from harness.cpu_roi import load_default_cpu_roi_profile  # noqa: PLC0415
+
+        roi_profile = load_default_cpu_roi_profile()
+    size = window_size or (
+        int(payload["crop"][2]),
+        int(payload["crop"][3]),
+    )
+    for roi_id in regions:
+        try:
+            resolved = roi_profile.resolve(roi_id, size)
+            region_payload = recognize_path(
+                image,
+                capture,
+                engine=ocr,
+                roi=tuple(resolved.rect.as_list()),
+                scale=resolved.ocr_scale,
+            )
+        except Exception:  # noqa: BLE001 - a missing region is less evidence
+            continue
+        payload = merge_region_elements(payload, region_payload)
+    return payload
+
+
 def recognize_path(
     image: str | Path,
     capture: Mapping[str, Any],
@@ -326,6 +466,9 @@ def recognize_path(
 
 __all__ = [
     "BACKEND_NAME",
+    "SEMANTIC_REGIONS",
+    "merge_region_elements",
+    "recognize_with_regions",
     "SCHEMA_VERSION",
     "WindowsOcr",
     "WindowsOcrError",

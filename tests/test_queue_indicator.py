@@ -53,11 +53,26 @@ def _render(profile: QueueIndicatorProfile, labels, frame=None) -> np.ndarray:
     return frame
 
 
-def test_the_profile_ships_with_the_glyphs_actually_observed(profile):
+def test_the_profile_holds_only_glyphs_that_were_actually_observed(profile):
+    """The profile GROWS as the queue takes new values, and only then.
+
+    It shipped knowing 1, / and 5 because that is all the training frame
+    showed. "2" was added on 2026-09-20 from a live frame after a second
+    march went out, through scripts/train_queue_glyph.py, which requires the
+    operator to state what the indicator reads. Each entry must trace back to
+    a frame; a digit nobody saw is a digit nobody can vouch for.
+    """
     raw = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
     assert raw["observed_value"] == "1/5"
-    assert set(profile.glyphs) == {"1", "/", "5"}
     assert profile.client_size == (1366, 768)
+
+    assert {"1", "/", "5"} <= set(profile.glyphs), "the original glyphs must survive"
+    trained_from = raw.get("trained_from") or {}
+    for label in set(profile.glyphs) - {"1", "/", "5"}:
+        assert any(label in value for value in trained_from), (
+            f"glyph {label!r} has no frame recorded in trained_from; add it "
+            "with scripts/train_queue_glyph.py rather than by hand"
+        )
 
 
 def test_it_reads_the_queue_it_was_trained_on(profile):

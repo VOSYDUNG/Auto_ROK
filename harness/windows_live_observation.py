@@ -69,13 +69,19 @@ class WindowsLiveObservationProvider:
         from harness.windows_ocr_direct import (  # noqa: PLC0415
             WindowsOcr,
             WindowsOcrError,
-            recognize_path,
+            recognize_with_regions,
         )
 
         try:
             if self._direct_ocr is None:
                 self._direct_ocr = WindowsOcr()
-            return recognize_path(image, capture, engine=self._direct_ocr)
+            # Whole frame PLUS the calibrated regions the state machine turns
+            # on.  The sweep alone is not dependable on this client - it
+            # returned 3 elements on a city frame against 75 on a world one,
+            # and it caught the dispatch drawer on some ticks and not others.
+            # The regions cost about 110 ms together and make those strings
+            # deterministic.
+            return recognize_with_regions(image, capture, engine=self._direct_ocr)
         except WindowsOcrError as exc:
             raise LiveObservationError(str(exc)) from exc
 

@@ -50,6 +50,17 @@
       "....##",
       "#####.",
       ".###.."
+    ],
+    "2": [
+      "..#..",
+      "#####",
+      "....#",
+      "....#",
+      "...##",
+      "..##.",
+      ".###.",
+      "####.",
+      ".####"
     ]
   },
   "calibration": {
@@ -59,5 +70,8 @@
     "evidence": "across 161 stored 1366x768 frames, READ went 14 -> 17 and UNKNOWN_GLYPH 7 -> 3; no frame that already READ changed its value, and every newly recovered read was verified by eye to be 1/5",
     "glyph_shapes": "1 is 4x8, / is 3x10, 5 is 6x8 at this threshold, against 3x7 / 3x10 / 4x8 at 200",
     "stability_check": "at 160 and 180 the three glyphs segment identically on both the training frame and an independent live frame; at 200 and 220 they do not"
+  },
+  "trained_from": {
+    "2/5": "queue-2of5.png"
   }
 }

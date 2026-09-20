@@ -107,40 +107,29 @@ regions:
   #
   # Scale 3 measured; at scale 1 only the "Level:" label survives and the
   # digit - the only part that matters - is lost.
-  search_level_readout_barbarians:
-    rect: [316, 505, 160, 36]
+  # ONE strip spanning every panel position, rather than five regions.
+  # Each OCR call costs about 33ms of fixed overhead regardless of area, so
+  # five small regions cost five times as much as one wide one for no gain:
+  # the strip reads "Level: 6" under Cropland and "Level: 4" under Logging
+  # Camp in a single call, and reads nothing at all on the world map or in
+  # the dispatch drawer.
+  #
+  # Its width is what encodes the geometry: the panel is centred under the
+  # SELECTED category icon, the icons sit exactly 142px apart, and the strip
+  # covers all five. Measured centres: Barbarians 396, Cropland 538, Logging
+  # Camp 680, Stone 822, Gold 964. The same 142px rule is what
+  # harness/resource_level_control.py shifts the slider by - if one is ever
+  # recalibrated, the other has to move with it.
+  search_level_strip:
+    rect: [316, 505, 728, 36]
     ocr_scale: 3.0
-    purpose: "selected resource level, panel under the Barbarians category"
-  search_level_readout_food:
-    rect: [458, 505, 160, 36]
-    ocr_scale: 3.0
-    purpose: "selected resource level, panel under Cropland"
+    purpose: "selected resource level, wherever the search panel is"
     calibration:
       measured_on: "2026-09-20"
-      exact_reads: "Level: 6"
-  search_level_readout_wood:
-    rect: [600, 505, 160, 36]
-    ocr_scale: 3.0
-    purpose: "selected resource level, panel under Logging Camp"
-    calibration:
-      measured_on: "2026-09-20"
-      exact_reads: "Level: 4"
-  search_level_readout_stone:
-    rect: [742, 505, 160, 36]
-    ocr_scale: 3.0
-    purpose: "selected resource level, panel under Stone Deposit"
-    calibration:
+      exact_reads: "Level: 6 under Cropland, Level: 4 under Logging Camp"
       note: >-
-        EXTRAPOLATED from the measured 142px spacing, not read directly.
-        Verify on a live STONE run before trusting it.
-  search_level_readout_gold:
-    rect: [884, 505, 160, 36]
-    ocr_scale: 3.0
-    purpose: "selected resource level, panel under Gold Deposit"
-    calibration:
-      note: >-
-        EXTRAPOLATED from the measured 142px spacing, not read directly.
-        Verify on a live GOLD run before trusting it.
+        Scale 3 measured. At scale 1 only the "Level:" label survives and the
+        digit - the only part that matters - is lost.
 
   # The troop dispatch drawer, which slides in from the right.  It carries
   # its OWN queue readout - "Queue 1/5" at a different place from the bare
@@ -158,13 +147,28 @@ regions:
     calibration:
       measured_on: "2026-09-20"
       exact_reads: "Queue 1/5 at scale 2, 3 and 4"
-  troop_drawer_text:
-    rect: [1085, 140, 165, 100]
-    ocr_scale: 2.0
-    purpose: "dispatch prompt and New Troop button label"
+  troop_drawer_button:
+    # The New Troop BUTTON only.  Deliberately not the whole drawer: the
+    # prompt above it reads "Dispatch a new troop from your city", so a
+    # region covering both offers the words "new troop" TWICE and grounding
+    # NEW_TROOP becomes ambiguous by construction.  Two candidates is a
+    # refusal, which is correct and also useless.
+    #
+    # Measured 2026-09-20 on a daylight and a night frame: both read exactly
+    # ["New", "Troop"] and nothing else.
+    rect: [1080, 200, 175, 48]
+    ocr_scale: 3.0
+    purpose: "the New Troop button label, for grounding CREATE_NEW_TROOP"
     calibration:
       measured_on: "2026-09-20"
-      exact_reads: "Dispatch a new troop from your city / New Troop"
+      exact_reads: "New Troop, day and night"
+  troop_drawer_prompt:
+    rect: [1080, 140, 175, 55]
+    ocr_scale: 3.0
+    purpose: "dispatch prompt, a state anchor rather than an action target"
+    calibration:
+      measured_on: "2026-09-20"
+      exact_reads: "Dispatch a new troop from your city, day and night"
 
   center_canvas:
     rect: [190, 64, 1086, 556]
