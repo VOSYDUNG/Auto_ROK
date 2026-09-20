@@ -64,6 +64,34 @@ regions:
         frame this same panel yields ZERO, and cropped it yields 37.  The
         frame around the text decides whether the text is read at all, which
         is why every sensor takes a region rather than a screenshot.
+  map_coordinate_readout:
+    # The "#1296 X:1065 Y:587" widget in the top-left corner.  Calibrated
+    # 2026-09-20 while diagnosing why a live world-map frame classified as
+    # UNKNOWN_STATE: the coordinates were plainly on screen, and a
+    # whole-frame OCR sweep did not read them, so the classifier lost its
+    # world-map discriminator and refused.
+    #
+    # Read through this ROI at scale 2 it separates 7/7 stored frames:
+    # present on every bare world-map frame, absent in city view, absent
+    # behind the troop panel, and absent when the search panel is open -
+    # the client replaces the widget with a back arrow.  That last case makes
+    # it sharper than "is this the world map": it means "world map with
+    # nothing on top of it".
+    #
+    # Height 36 and scale 2 are both measured.  At height 24 the glyphs clip
+    # and only "Y:587" survives; at scale 1 nothing reads; at scale 3 the
+    # words fragment and "X:1065" is lost again.
+    rect: [160, 0, 185, 36]
+    ocr_scale: 2.0
+    purpose: "world-map coordinate readout, used as a presence signal"
+    calibration:
+      measured_on: "2026-09-20"
+      exact_reads: "7/7 across world, city, troop panel and search panel frames"
+      note: >-
+        Presence matters more than the value here.  A classifier that asks
+        "are map coordinates visible" is reading a UI fact; one that asks the
+        whole frame for text is hoping, and on this client that hope failed.
+
   center_canvas:
     rect: [190, 64, 1086, 556]
     purpose: "central game scene visual processing"
