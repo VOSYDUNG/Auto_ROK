@@ -75,6 +75,87 @@ def _read_queue() -> str:
     return f"{reading.used}/{reading.capacity}"
 
 
+def _latest_runtime_frame() -> Path | None:
+    """The frame the last tick actually observed.
+
+    The runtime overwrites one ``current.png`` per occurrence, so recon has to
+    copy it before the next tick lands or the evidence is gone.
+    """
+    candidates = list((ROOT / "workspace" / "runtime").glob("*/current.png"))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: item.stat().st_mtime)
+
+
+def _sensor_sweep(frame: Path) -> dict:
+    """Every sensor's answer on one frame, so walls are inventoried together.
+
+    Deliberately reads through the same calibrated profiles the runtime uses.
+    A recon that measured pixels its own way would report on a harness nobody
+    is running.
+    """
+    import cv2
+    import numpy as np
+
+    from harness.cpu_roi import load_default_cpu_roi_profile
+    from harness.map_coordinate import reader_from_profile
+    from harness.queue_indicator import QueueIndicatorProfile, QueueIndicatorReader
+
+    out: dict = {}
+    roi_profile = load_default_cpu_roi_profile()
+    image = cv2.imread(str(frame))
+    if image is None:
+        return {"error": f"could not decode {frame}"}
+    grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # Lighting context, so a night frame is identifiable afterwards.
+    out["frame_median"] = int(np.median(grey))
+
+    try:
+        reading = reader_from_profile(roi_profile, (image.shape[1], image.shape[0])).read(frame)
+        out["map_coordinates"] = f"{reading.status.value}({reading.text_columns})"
+    except Exception as exc:  # noqa: BLE001
+        out["map_coordinates"] = f"ERROR {exc}"
+
+    try:
+        queue = QueueIndicatorReader(
+            QueueIndicatorProfile.load(ROOT / "config" / "queue_indicator_profile.json")
+        ).read(grey)
+        out["queue"] = (
+            f"{queue.used}/{queue.capacity}" if queue.status.value == "READ" else queue.status.value
+        )
+    except Exception as exc:  # noqa: BLE001
+        out["queue"] = f"ERROR {exc}"
+
+    # Every OCR region, through its calibrated scale, plus a whole-frame sweep
+    # for comparison - the gap between them is itself the finding.
+    try:
+        from harness.windows_ocr_direct import WindowsOcr, recognize_path
+
+        engine = WindowsOcr()
+        texts: dict = {}
+        for roi_id in ("top_resource_bar", "left_quest_panel", "search_level_readout"):
+            try:
+                resolved = roi_profile.resolve(roi_id, (image.shape[1], image.shape[0]))
+            except Exception:  # noqa: BLE001 - region may not be registered yet
+                continue
+            payload = recognize_path(
+                frame,
+                {"frame": {}},
+                engine=engine,
+                roi=tuple(resolved.rect.as_list()),
+                scale=resolved.ocr_scale,
+            )
+            texts[roi_id] = [str(item["text"]) for item in payload["elements"]]
+        whole = recognize_path(frame, {"frame": {}}, engine=engine)
+        texts["whole_frame_count"] = len(whole["elements"])
+        texts["whole_frame_has_level"] = "Level" in whole["text"]
+        out["ocr"] = texts
+    except Exception as exc:  # noqa: BLE001
+        out["ocr"] = f"ERROR {exc}"
+    return out
+
+
 def _run(command: list[str]) -> dict:
     """Run one harness command and return its last JSON line."""
     completed = subprocess.run(
@@ -124,6 +205,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-ticks", type=int, default=DEFAULT_MAX_TICKS)
     parser.add_argument("--focus-delay-seconds", type=float, default=2.0)
     parser.add_argument(
+        "--recon-dir",
+        help="snapshot every tick's frame and run every sensor over it, so a "
+             "whole run's walls can be inventoried in one pass instead of "
+             "being fixed one at a time",
+    )
+    parser.add_argument(
         "--approve-current-troop-selection",
         action="store_true",
         help="approve whatever troop/commander selection the client shows for "
@@ -161,10 +248,35 @@ def main(argv: list[str] | None = None) -> int:
     if args.approve_current_troop_selection:
         tick_command.append("--approve-current-troop-selection")
 
+    recon_dir = Path(args.recon_dir).resolve() if args.recon_dir else None
+    recon: list[dict] = []
+    if recon_dir is not None:
+        recon_dir.mkdir(parents=True, exist_ok=True)
+
     last: dict = {}
     for tick in range(1, args.max_ticks + 1):
         last = _run(tick_command)
         choice = last.get("choice") or {}
+        if recon_dir is not None:
+            entry = {
+                "tick": tick,
+                "status": last.get("status"),
+                "state": last.get("state"),
+                "reason": last.get("reason")
+                or (last.get("error") or {}).get("message"),
+                "action": choice.get("action_id"),
+                "target": choice.get("target_id"),
+            }
+            source = _latest_runtime_frame()
+            if source is not None:
+                kept = recon_dir / f"tick-{tick:02d}.png"
+                kept.write_bytes(source.read_bytes())
+                entry["frame"] = kept.name
+                entry["sensors"] = _sensor_sweep(kept)
+            recon.append(entry)
+            (recon_dir / "recon.json").write_text(
+                json.dumps(recon, indent=2), encoding="utf-8"
+            )
         print(
             f"  tick {tick:>2} rev={last.get('checkpoint_revision')} "
             f"{str(last.get('status')):<13} {str(last.get('state')):<24} "

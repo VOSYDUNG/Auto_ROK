@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from harness.action_surface import ActionRequest
 from harness.contracts import Evidence, Observation
 from harness.mission_runtime import MissionContext
@@ -150,3 +152,61 @@ def test_production_profile_maps_observed_level_handles_to_live_client_points():
     # The persisted training frames show handle centres at x=459, 505, 575;
     # y=546 is the vertical centre of the observed control.
     assert points == [(459, 546), (505, 546), (575, 546)]
+
+
+def test_the_panel_moves_with_the_selected_category():
+    """Measured live 2026-09-20 - this cost a whole run to find.
+
+    The search panel is centred under whichever category icon is selected,
+    and the icons sit exactly 142px apart. The slider profile was trained
+    with Cropland (FOOD) selected, so on a WOOD run every trained coordinate
+    was 142px left of the real control: the level-6 click, which lands at the
+    right end of the track, came down on the NEXT panel's minus button and
+    walked the level DOWN from 6 to 4.
+    """
+    from harness.resource_level_control import (
+        CATEGORY_CENTRE_X,
+        ResourceLevelProfile,
+        category_offset,
+    )
+
+    spacings = sorted(CATEGORY_CENTRE_X.values())
+    gaps = {b - a for a, b in zip(spacings, spacings[1:])}
+    assert gaps == {142}, f"the category bar is evenly spaced; got {gaps}"
+
+    assert category_offset("FOOD", 1366) == 0
+    assert category_offset("WOOD", 1366) == 142
+    assert category_offset(None, 1366) == 0
+    assert category_offset("NOT_A_CATEGORY", 1366) == 0
+
+    profile = ResourceLevelProfile.load(
+        Path(__file__).resolve().parents[1] / "config" / "resource_level_profile.json"
+    )
+    food = profile.bbox(1366, 768, resource_type="FOOD")
+    wood = profile.bbox(1366, 768, resource_type="WOOD")
+    assert wood.x1 - food.x1 == 142
+    assert wood.x2 - food.x2 == 142
+    assert (wood.y1, wood.y2) == (food.y1, food.y2)
+
+
+def test_a_panel_shifted_off_the_client_is_refused_not_clamped():
+    """Clamping would click whatever control happens to be at the edge.
+
+    Note the offset scales with the client width, so simply using a narrower
+    window does NOT push the track off - both move together. What triggers it
+    is a track trained near the right edge, which is why this constructs one
+    rather than shrinking the client.
+    """
+    from harness.resource_level_control import (
+        CONTROL_MODE,
+        ResourceLevelProfile,
+        ResourceLevelProfileError,
+    )
+
+    near_edge = ResourceLevelProfile(
+        True, 1, 6, (0.90, 0.69, 0.98, 0.72), 0.95, ("SEARCH",), CONTROL_MODE
+    )
+    # FOOD is where it was trained, so it still fits.
+    assert near_edge.bbox(1366, 768, resource_type="FOOD").x2 <= 1366
+    with pytest.raises(ResourceLevelProfileError, match="outside the"):
+        near_edge.bbox(1366, 768, resource_type="GOLD")

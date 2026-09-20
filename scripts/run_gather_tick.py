@@ -300,7 +300,15 @@ def main(argv: list[str] | None = None) -> int:
         # above cannot carry that state - open terrain looks different
         # everywhere you pan - so the coordinate readout carries it instead.
         observations = MapCoordinateObservationProvider(observations)
-        observations = ResourceLevelControlObservationProvider(observations, resource_level_profile)
+        observations = ResourceLevelControlObservationProvider(
+            observations,
+            resource_level_profile,
+            # The search panel is centred under the SELECTED category, so
+            # the trained slider geometry is only correct for the category
+            # it was trained on.  Without this the level click lands on the
+            # neighbouring panel's minus button.
+            resource_type=args.resource_type,
+        )
         observations = GatherFactObservationProvider(observations, character_id=args.character_id)
         observations = PolicyEvidenceObservationProvider(observations, approvals)
 

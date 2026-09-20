@@ -92,6 +92,80 @@ regions:
         "are map coordinates visible" is reading a UI fact; one that asks the
         whole frame for text is hoping, and on this client that hope failed.
 
+  # The resource search panel is NOT at a fixed position.  It is centred
+  # under whichever category icon is selected, and the icons sit 142px apart.
+  # Measured 2026-09-20 on two live frames: with Cropland selected the panel
+  # centred on 538, with Logging Camp on 680, and the same Level readout
+  # offset (-80, 505, 160, 36) read correctly in both.
+  #
+  # This is why a single search_level_readout region read nothing: it was
+  # calibrated with Cropland selected and the run had selected Logging Camp,
+  # so it was looking 142px to the left of the panel.
+  #
+  # Category centres read off the label bar of a live frame:
+  #   Barbarians 396 · Cropland 538 · Logging Camp 680 · Stone 822 · Gold 964
+  #
+  # Scale 3 measured; at scale 1 only the "Level:" label survives and the
+  # digit - the only part that matters - is lost.
+  search_level_readout_barbarians:
+    rect: [316, 505, 160, 36]
+    ocr_scale: 3.0
+    purpose: "selected resource level, panel under the Barbarians category"
+  search_level_readout_food:
+    rect: [458, 505, 160, 36]
+    ocr_scale: 3.0
+    purpose: "selected resource level, panel under Cropland"
+    calibration:
+      measured_on: "2026-09-20"
+      exact_reads: "Level: 6"
+  search_level_readout_wood:
+    rect: [600, 505, 160, 36]
+    ocr_scale: 3.0
+    purpose: "selected resource level, panel under Logging Camp"
+    calibration:
+      measured_on: "2026-09-20"
+      exact_reads: "Level: 4"
+  search_level_readout_stone:
+    rect: [742, 505, 160, 36]
+    ocr_scale: 3.0
+    purpose: "selected resource level, panel under Stone Deposit"
+    calibration:
+      note: >-
+        EXTRAPOLATED from the measured 142px spacing, not read directly.
+        Verify on a live STONE run before trusting it.
+  search_level_readout_gold:
+    rect: [884, 505, 160, 36]
+    ocr_scale: 3.0
+    purpose: "selected resource level, panel under Gold Deposit"
+    calibration:
+      note: >-
+        EXTRAPOLATED from the measured 142px spacing, not read directly.
+        Verify on a live GOLD run before trusting it.
+
+  # The troop dispatch drawer, which slides in from the right.  It carries
+  # its OWN queue readout - "Queue 1/5" at a different place from the bare
+  # world map's "1/5" - so the world-map queue ROI reads NO_TEXT here and is
+  # right to.  Two surfaces, two regions.
+  #
+  # Registered 2026-09-20 because the classifier reached this state only
+  # INTERMITTENTLY: a whole-frame sweep returned 11-13 elements and caught
+  # the drawer text on some ticks and not others.  Both regions below read
+  # exactly and identically at scale 2, 3 and 4.
+  troop_drawer_queue:
+    rect: [1270, 124, 96, 22]
+    ocr_scale: 3.0
+    purpose: "queue counter inside the troop dispatch drawer"
+    calibration:
+      measured_on: "2026-09-20"
+      exact_reads: "Queue 1/5 at scale 2, 3 and 4"
+  troop_drawer_text:
+    rect: [1085, 140, 165, 100]
+    ocr_scale: 2.0
+    purpose: "dispatch prompt and New Troop button label"
+    calibration:
+      measured_on: "2026-09-20"
+      exact_reads: "Dispatch a new troop from your city / New Troop"
+
   center_canvas:
     rect: [190, 64, 1086, 556]
     purpose: "central game scene visual processing"

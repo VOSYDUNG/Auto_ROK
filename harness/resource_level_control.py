@@ -29,6 +29,50 @@ class ResourceLevelProfileError(ValueError):
     pass
 
 
+#: Horizontal centre of each search-category icon, in client pixels at the
+#: trained 1366x768 size.  Measured 2026-09-20 off a live category bar; the
+#: icons sit exactly 142px apart.
+CATEGORY_CENTRE_X: Mapping[str, int] = {
+    "BARBARIANS": 396,
+    "FOOD": 538,
+    "WOOD": 680,
+    "STONE": 822,
+    "GOLD": 964,
+}
+
+#: The category that was selected when the slider profile was trained. The
+#: search panel is centred under the SELECTED category, so the trained track
+#: is only in the right place for this one.
+TRAINED_CATEGORY = "FOOD"
+
+
+def category_offset(resource_type: str | None, width: int) -> int:
+    """How far the panel has moved from where the profile was trained.
+
+    The search panel is not at a fixed position - it is centred under the
+    selected category icon. Measured live on 2026-09-20: with Cropland
+    selected the panel centred on x=538, with Logging Camp on x=680.
+
+    The profile was trained with Cropland selected, so on a WOOD run every
+    trained coordinate was 142px to the LEFT of the real control. The level-6
+    click, which lands at the right-hand end of the track, came down on the
+    NEXT panel's minus button and walked the level DOWN from 6 to 4 - away
+    from the value it was asked for.
+
+    That is the failure this function removes. Returning 0 for an unknown
+    resource type keeps the old behaviour rather than guessing an offset.
+    """
+    if resource_type is None:
+        return 0
+    key = str(resource_type).strip().upper()
+    if key not in CATEGORY_CENTRE_X:
+        return 0
+    delta = CATEGORY_CENTRE_X[key] - CATEGORY_CENTRE_X[TRAINED_CATEGORY]
+    # Scale with the client, because the trained centres are in the trained
+    # client's pixels.
+    return round(delta * width / 1366)
+
+
 @dataclass(frozen=True)
 class ResourceLevelProfile:
     trained: bool
@@ -79,15 +123,25 @@ class ResourceLevelProfile:
             CONTROL_MODE,
         )
 
-    def bbox(self, width: int, height: int) -> BoundingBox:
+    def bbox(
+        self, width: int, height: int, *, resource_type: str | None = None
+    ) -> BoundingBox:
+        """The slider track, shifted to the panel the run actually opened."""
         if not self.trained or self.control_mode != CONTROL_MODE or self.track_normalized is None:
             raise ResourceLevelProfileError("resource-level control profile is not trained")
         x1, y1, x2, y2 = self.track_normalized
-        left = max(0, min(width - 1, round(x1 * width)))
+        shift = category_offset(resource_type, width)
+        left = round(x1 * width) + shift
+        right = round(x2 * width) + shift
+        if left < 0 or right > width:
+            raise ResourceLevelProfileError(
+                f"the {resource_type} search panel would put the level track at "
+                f"{left}..{right}, outside the {width}px client; refusing rather "
+                "than clamping onto whatever control sits at the edge"
+            )
         top = max(0, min(height - 1, round(y1 * height)))
-        right = max(left + 1, min(width, round(x2 * width)))
         bottom = max(top + 1, min(height, round(y2 * height)))
-        return BoundingBox(left, top, right, bottom)
+        return BoundingBox(left, top, max(left + 1, right), bottom)
 
 
 def _visible_texts(bundle: ObservationBundle) -> set[str]:
@@ -103,9 +157,18 @@ def _visible_texts(bundle: ObservationBundle) -> set[str]:
 class ResourceLevelControlObservationProvider:
     """Ground the trained slider only when its current search-panel anchors exist."""
 
-    def __init__(self, inner: ObservationProvider, profile: ResourceLevelProfile) -> None:
+    def __init__(
+        self,
+        inner: ObservationProvider,
+        profile: ResourceLevelProfile,
+        *,
+        resource_type: str | None = None,
+    ) -> None:
         self.inner = inner
         self.profile = profile
+        #: Which category's panel this run opened. Without it the trained
+        #: geometry is only correct for FOOD.
+        self.resource_type = resource_type
 
     def observe(self, context: MissionContext) -> ObservationBundle:
         bundle = self.inner.observe(context)
@@ -121,7 +184,14 @@ class ResourceLevelControlObservationProvider:
             return ObservationBundle(bundle.observation, replace(bundle.scene, facts=facts))
 
         width, height = bundle.observation.window_size
-        bbox = self.profile.bbox(width, height)
+        try:
+            bbox = self.profile.bbox(width, height, resource_type=self.resource_type)
+        except ResourceLevelProfileError as exc:
+            facts["resource_level_control"] = {
+                "status": "not_grounded",
+                "reason": str(exc),
+            }
+            return ObservationBundle(bundle.observation, replace(bundle.scene, facts=facts))
         target = VisualTarget(
             TARGET_ID,
             bundle.observation.frame_id,
@@ -143,6 +213,8 @@ class ResourceLevelControlObservationProvider:
             "min_level": self.profile.min_level,
             "max_level": self.profile.max_level,
             "track_bbox_client": [bbox.x1, bbox.y1, bbox.x2, bbox.y2],
+            "panel_category": self.resource_type,
+            "panel_offset_px": category_offset(self.resource_type, width),
             "source": "trained_resource_level_profile",
         }
         contracts = dict(facts.get("typed_action_contracts") or {})
