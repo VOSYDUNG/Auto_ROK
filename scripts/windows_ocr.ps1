@@ -575,118 +575,15 @@ if ($elements.Count -eq 0 -or $hasSearchPanelSurface -or $hasCardKeywords -or $h
 # every frame, not only when drawer keywords are present.  Plain ``1/5`` text
 # is accepted by gather_facts only with this explicit acquisition provenance;
 # generic full-frame ratios (for example dates) remain unusable.
-if ([int]$capture.frame.width -gt 0) {
-    $queueRect = [System.Drawing.Rectangle]::FromLTRB(1200, 90, 1366, 190)
-    if ($queueRect.Right -le $capture.frame.width -and $queueRect.Bottom -le $capture.frame.height) {
-        $queueBmp = [System.Drawing.Bitmap]::FromFile($imagePath)
-        try {
-            $queueCrop = $queueBmp.Clone($queueRect, $queueBmp.PixelFormat)
-            $queueScale = 6
-            $scaledQueue = New-Object System.Drawing.Bitmap ($queueCrop.Width * $queueScale), ($queueCrop.Height * $queueScale)
-            $g = [System.Drawing.Graphics]::FromImage($scaledQueue)
-            $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-            $g.DrawImage($queueCrop, 0, 0, $scaledQueue.Width, $scaledQueue.Height)
-            $g.Dispose()
-            $queueCrop.Dispose()
-
-            $tmpQueue = [System.IO.Path]::GetTempFileName() + ".png"
-            $scaledQueue.Save($tmpQueue, [System.Drawing.Imaging.ImageFormat]::Png)
-            $scaledQueue.Dispose()
-            $queueRes = Recognize-File $engine $tmpQueue
-            [System.IO.File]::Delete($tmpQueue)
-
-                foreach ($line in $queueRes.Lines) {
-                $wordIndex = 0
-                foreach ($word in $line.Words) {
-                    $cleanWord = [regex]::Replace($word.Text, '[\x00-\x08\x0B\x0C\x0E-\x1F]', '')
-                    if ($cleanWord.Length -eq 0) { continue }
-                    $box = $word.BoundingRect
-                    $origX = [int]($box.X / $queueScale) + 1200
-                    $origY = [int]($box.Y / $queueScale) + 90
-                    $origW = [int]($box.Width / $queueScale)
-                    $origH = [int]($box.Height / $queueScale)
-                    $elements += @{
-                        text = $cleanWord
-                        bbox = @($origX, $origY, $origW, $origH)
-                        confidence = $null
-                        line_index = $lineIndex
-                        word_index = $wordIndex
-                        acquisition = 'ocr_march_queue_region'
-                        grounding_authority = 'ocr_backend'
-                    }
-                    $wordIndex += 1
-                }
-                    $lineIndex += 1
-                }
-
-                # Windows.Media.Ocr can return only the word ``Queue`` for
-                # the small white ``0/5`` glyph.  When the installed CPU-only
-                # Tesseract executable is available, run one tight grayscale
-                # fixed-ROI fallback and accept only a bounded Queue N/M
-                # phrase.  This is still passive, frame-bound OCR; it never
-                # supplies an action coordinate or a gameplay policy.
-                $tesseractPath = 'C:\Program Files\Tesseract-OCR\tesseract.exe'
-                if (Test-Path -LiteralPath $tesseractPath) {
-                    try {
-                        $queueTextRect = [System.Drawing.Rectangle]::FromLTRB(1275, 120, 1366, 150)
-                        if ($queueTextRect.Right -le $queueBmp.Width -and $queueTextRect.Bottom -le $queueBmp.Height) {
-                            $queueTextCrop = $queueBmp.Clone($queueTextRect, $queueBmp.PixelFormat)
-                            $queueTextScale = 10
-                            $scaledText = New-Object System.Drawing.Bitmap ($queueTextCrop.Width * $queueTextScale), ($queueTextCrop.Height * $queueTextScale)
-                            $g = [System.Drawing.Graphics]::FromImage($scaledText)
-                            $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-                            $g.DrawImage($queueTextCrop, 0, 0, $scaledText.Width, $scaledText.Height)
-                            $g.Dispose()
-                            $queueTextCrop.Dispose()
-
-                            $textRect = [System.Drawing.Rectangle]::new(0, 0, $scaledText.Width, $scaledText.Height)
-                            $textData = $scaledText.LockBits($textRect, [System.Drawing.Imaging.ImageLockMode]::ReadWrite, $scaledText.PixelFormat)
-                            $textBytes = New-Object byte[] ([Math]::Abs($textData.Stride) * $scaledText.Height)
-                            [System.Runtime.InteropServices.Marshal]::Copy($textData.Scan0, $textBytes, 0, $textBytes.Length)
-                            for ($i = 0; $i -lt $textBytes.Length; $i += 4) {
-                                $lum = [int](0.299 * $textBytes[$i+2] + 0.587 * $textBytes[$i+1] + 0.114 * $textBytes[$i])
-                                $textBytes[$i] = $lum
-                                $textBytes[$i+1] = $lum
-                                $textBytes[$i+2] = $lum
-                                $textBytes[$i+3] = 255
-                            }
-                            [System.Runtime.InteropServices.Marshal]::Copy($textBytes, 0, $textData.Scan0, $textBytes.Length)
-                            $scaledText.UnlockBits($textData)
-
-                            $tmpTesseract = [System.IO.Path]::GetTempFileName() + '.png'
-                            $scaledText.Save($tmpTesseract, [System.Drawing.Imaging.ImageFormat]::Png)
-                            $scaledText.Dispose()
-                            $tesseractText = (& $tesseractPath $tmpTesseract 'stdout' '--psm' '7' '--oem' '3' 2>$null | Out-String).Trim()
-                            [System.IO.File]::Delete($tmpTesseract)
-                            if ($tesseractText -match '(?i)\bQueue\s*(\d{1,2})\s*/\s*(\d{1,2})\b') {
-                                $used = [int]$Matches[1]
-                                $capacity = [int]$Matches[2]
-                                if ($used -ge 0 -and $used -le $capacity -and $capacity -le 20) {
-                                    $elements += @{
-                                        text = "Queue $used/$capacity"
-                                        bbox = @(1275, 120, 91, 30)
-                                        confidence = $null
-                                        line_index = $lineIndex
-                                        word_index = 0
-                                        acquisition = 'ocr_march_queue_region'
-                                        grounding_authority = 'tesseract_cpu_fixed_roi'
-                                    }
-                                    $lineIndex += 1
-                                }
-                            }
-                        }
-                    }
-                    catch {
-                        # Optional fallback: Windows.Media.Ocr remains the
-                        # authoritative backend if Tesseract cannot run.
-                    }
-                }
-            }
-        finally {
-            $queueBmp.Dispose()
-        }
-    }
-}
+# The march-queue indicator used to be read here: crop, scale six times, a
+# per-pixel luminance loop in PowerShell, then a Tesseract subprocess.  It ran
+# on every frame unconditionally and cost 3,031 ms - 75% of this whole pass -
+# while emitting byte-identical elements, because it never actually succeeded.
+#
+# harness/queue_indicator.py reads the same indicator in 0.207 ms by template
+# matching on a calibrated ROI, and refuses instead of guessing.  It is wired
+# in through harness/queue_indicator_provider.py under the same
+# ocr_march_queue_region acquisition tag, so nothing downstream changed.
 
 $fullText = ($elements | ForEach-Object { $_.text }) -join ' '
 

@@ -72,9 +72,26 @@ def test_queue_ratio_is_accepted_only_from_authorized_march_queue_roi():
     assert result.scene.facts["march_queue_source"] == "visible_ocr_march_queue_region"
 
 
-def test_queue_roi_normalizes_thin_slash_ocr_without_opening_generic_ratio_path():
-    source = roi_bundle("115")
-    assert extract_march_queue(source) == (1, 5)
+def test_a_mangled_ocr_shape_is_no_longer_repaired_downstream():
+    """"115" used to be normalised to 1/5 here. That workaround is gone.
+
+    Windows.Media.Ocr renders the thin queue slash as a middle 1, and the fix
+    was applied at the consumer. It was unsafe on its own terms: the pattern
+    ([0-9])1([0-9]) also turns 213 into 2/3 and 919 into 9/9.
+
+    The sensor was replaced instead - harness/queue_indicator.py reads the
+    glyphs directly and emits "1/5", or refuses. Nothing downstream has to
+    know the shape OCR used to mangle it into.
+    """
+    assert extract_march_queue(roi_bundle("115")) is None
+    assert extract_march_queue(roi_bundle("213")) is None
+    assert extract_march_queue(roi_bundle("919")) is None
+
+
+def test_a_clean_reading_from_the_queue_roi_is_still_accepted():
+    """What the template reader actually emits."""
+    assert extract_march_queue(roi_bundle("1/5")) == (1, 5)
+    assert extract_march_queue(roi_bundle("5/5")) == (5, 5)
 
 
 def test_bare_date_like_ratio_is_rejected_without_roi_provenance():

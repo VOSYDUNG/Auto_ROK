@@ -37,15 +37,15 @@ def extract_march_queue(bundle: ObservationBundle) -> tuple[int, int] | None:
         ratios = explicit
         if not explicit and evidence.metadata.get("acquisition") in _QUEUE_ROI_ACQUISITIONS:
             ratios = _QUEUE_RATIO.findall(text)
-            if not ratios:
-                # Windows.Media.Ocr can render the thin slash in the fixed
-                # queue glyph as a middle ``1`` (for example ``1/5`` ->
-                # ``115``).  This normalization is permitted only for the
-                # dedicated queue ROI and only for the exact three-digit
-                # shape; it never applies to full-frame OCR or date-like text.
-                compact = re.fullmatch(r"([0-9])1([0-9])", text.strip())
-                if compact:
-                    ratios = [(compact.group(1), compact.group(2))]
+            # A "115" normalization used to live here, because
+            # Windows.Media.Ocr renders the thin queue slash as a middle 1.
+            # It was removed on 2026-09-20 with the OCR path that produced it:
+            # the queue now comes from harness/queue_indicator.py, which reads
+            # the glyphs directly and refuses rather than emitting a shape that
+            # needs repairing downstream.
+            #
+            # The pattern was also unsafe on its own terms - ([0-9])1([0-9])
+            # turns 213 into 2/3 and 919 into 9/9.
         for used_raw, capacity_raw in ratios:
             used, capacity = int(used_raw), int(capacity_raw)
             if 0 <= used <= capacity <= 20:
