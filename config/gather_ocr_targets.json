@@ -1,42 +1,59 @@
 [
   {
     "target_id": "SEARCH_CATEGORY_FOOD",
-    "labels": ["Cropland"],
+    "labels": [
+      "Cropland"
+    ],
     "allow_unscored_exact": true
   },
   {
     "target_id": "SEARCH_CATEGORY_WOOD",
-    "labels": ["Logging Camp"],
+    "labels": [
+      "Logging Camp"
+    ],
     "allow_unscored_exact": true
   },
   {
     "target_id": "SEARCH_CATEGORY_STONE",
-    "labels": ["Stone Deposit"],
+    "labels": [
+      "Stone Deposit"
+    ],
     "allow_unscored_exact": true
   },
   {
     "target_id": "SEARCH_CATEGORY_GOLD",
-    "labels": ["Gold Deposit"],
+    "labels": [
+      "Gold Deposit"
+    ],
     "allow_unscored_exact": true
   },
   {
     "target_id": "SEARCH_EXECUTE",
-    "labels": ["SEARCH"],
+    "labels": [
+      "SEARCH"
+    ],
     "allow_unscored_exact": true
   },
   {
     "target_id": "RESOURCE_GATHER",
-    "labels": ["GATHER"],
+    "labels": [
+      "GATHER"
+    ],
     "allow_unscored_exact": true
   },
   {
     "target_id": "NEW_TROOP",
-    "labels": ["New Troop"],
-    "allow_unscored_exact": true
+    "labels": [
+      "New Troop"
+    ],
+    "allow_unscored_exact": true,
+    "require_acquisition": "ocr_troop_drawer_button"
   },
   {
     "target_id": "TROOP_MARCH",
-    "labels": ["MARCH"],
+    "labels": [
+      "MARCH"
+    ],
     "allow_unscored_exact": true
   }
 ]

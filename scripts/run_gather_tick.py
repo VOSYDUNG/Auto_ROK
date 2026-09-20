@@ -63,6 +63,7 @@ def _candidate_specs(path: str | None) -> tuple[OcrTargetSpec, ...]:
         labels = item.get("labels")
         confidence = item.get("min_confidence", 0.90)
         allow_unscored = item.get("allow_unscored_exact", False)
+        require_acquisition = item.get("require_acquisition")
         if (
             not isinstance(target_id, str)
             or not target_id
@@ -71,9 +72,18 @@ def _candidate_specs(path: str | None) -> tuple[OcrTargetSpec, ...]:
             or not all(isinstance(label, str) and label for label in labels)
             or type(confidence) not in (int, float)
             or type(allow_unscored) is not bool
+            or (require_acquisition is not None and not isinstance(require_acquisition, str))
         ):
             raise ValueError(f"invalid candidate entry: {item!r}")
-        result.append(OcrTargetSpec(target_id, tuple(labels), float(confidence), allow_unscored))
+        result.append(
+            OcrTargetSpec(
+                target_id,
+                tuple(labels),
+                float(confidence),
+                allow_unscored,
+                require_acquisition,
+            )
+        )
     return tuple(result)
 
 
@@ -185,9 +195,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--workspace-root", default=str(ROOT / "workspace" / "runtime"))
     parser.add_argument(
         "--ocr-backend",
-        choices=("windows", "rapidocr_fixed_roi_experiment"),
-        default="windows",
-        help="observation OCR backend; RapidOCR option is experiment-only and keeps Windows OCR as the base",
+        choices=("windows_direct", "windows", "rapidocr_fixed_roi_experiment"),
+        default="windows_direct",
+        help="observation OCR backend. windows_direct calls Windows.Media.Ocr "
+             "in process and reads the calibrated regions; windows is the "
+             "older PowerShell path, kept for replaying stored evidence",
     )
     parser.add_argument("--checkpoint-root", default=str(ROOT / "workspace" / "checkpoints"))
     parser.add_argument(

@@ -24,6 +24,20 @@ class OcrTargetSpec:
     labels: tuple[str, ...]
     min_confidence: float = 0.90
     allow_unscored_exact: bool = False
+    #: Only ground from text read through this acquisition tag.
+    #:
+    #: Some labels are ambiguous by construction and no amount of reading
+    #: fixes it. The dispatch drawer's prompt says "Dispatch a new troop from
+    #: your city" and its button says "New Troop"; phrase assembly produces
+    #: every sub-phrase of a line, so the prompt yields "new troop", which
+    #: normalizes exactly to the button's label. Two boxes, both correct,
+    #: grounding refuses as ambiguous - and it is right to, because the words
+    #: alone cannot tell them apart.
+    #:
+    #: WHERE the text was read can. Naming the calibrated region here says
+    #: "the button is the thing in the button's region", which is a fact
+    #: about the UI rather than a tie-break.
+    require_acquisition: str | None = None
 
     def __post_init__(self) -> None:
         if not self.target_id:
@@ -41,6 +55,7 @@ class _Token:
     confidence: float
     confidence_known: bool
     index: int
+    acquisition: str | None = None
 
 
 class OcrSemanticObservationProvider:
@@ -138,6 +153,9 @@ class OcrSemanticObservationProvider:
             value = item.value if isinstance(item.value, str) else item.label
             if self._normalize(value) not in labels:
                 continue
+            if spec.require_acquisition is not None:
+                if item.metadata.get("acquisition") != spec.require_acquisition:
+                    continue
             known = item.metadata.get("confidence_known") is True
             if known and item.confidence >= spec.min_confidence:
                 matches.append(item)
@@ -183,19 +201,27 @@ class OcrSemanticObservationProvider:
                     )
                     known = all(item.confidence_known for item in chunk)
                     confidence = min(item.confidence for item in chunk) if known else 0.0
+                    # A phrase inherits an acquisition tag only when every
+                    # word came through the same one. A phrase spanning two
+                    # sources belongs to neither, and claiming otherwise
+                    # would let a region vouch for text outside it.
+                    sources = {item.acquisition for item in chunk}
+                    metadata = {
+                        "frame_id": observation.frame_id,
+                        "confidence_known": known,
+                        "phrase_line": line_id,
+                        "source_element_indices": tuple(item.index for item in chunk),
+                        "grounding_mode": "scored_phrase" if known else "unscored_phrase",
+                    }
+                    if len(sources) == 1 and (only := next(iter(sources))) is not None:
+                        metadata["acquisition"] = only
                     phrases.append(Evidence(
                         "ocr_phrase",
                         text,
                         confidence,
                         bbox,
                         text,
-                        {
-                            "frame_id": observation.frame_id,
-                            "confidence_known": known,
-                            "phrase_line": line_id,
-                            "source_element_indices": tuple(item.index for item in chunk),
-                            "grounding_mode": "scored_phrase" if known else "unscored_phrase",
-                        },
+                        metadata,
                     ))
         return tuple(phrases)
 
@@ -213,12 +239,14 @@ class OcrSemanticObservationProvider:
             index = item.metadata.get("ocr_element_index")
             if type(index) is not int:
                 index = fallback_index
+            acquisition = item.metadata.get("acquisition")
             tokens.append(_Token(
                 value.strip(),
                 item.bbox,
                 item.confidence,
                 item.metadata.get("confidence_known") is True,
                 index,
+                acquisition if isinstance(acquisition, str) else None,
             ))
         return tuple(tokens)
 

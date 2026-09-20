@@ -409,6 +409,10 @@ def merge_region_elements(
                 "text": str(item.get("text")),
                 "line_index": next_line + int(item.get("line_index", 0)),
                 "source_region": region_id or "region",
+                # Travels into evidence metadata via observation_bridge, so a
+                # target can require that its label was read HERE and not
+                # somewhere that merely uses the same words.
+                "acquisition": f"ocr_{region_id}" if region_id else None,
             }
         )
 
