@@ -356,6 +356,97 @@ bởi code.
 
 ---
 
+## M7.1 — Hoàn thiện MỘT nhân vật trước khi nhân rộng
+
+Người vận hành, 2026-09-20: *"phải hoàn thiện 1 nhân vật trước khi upscale sang
+nhân vật khác, rồi mới qua tài khoản khác"*. Thứ tự này là ràng buộc, không phải
+gợi ý — nhân rộng một quy trình chưa ổn định thì chỉ nhân lên số lỗi.
+
+### Số đo thực địa — bảng Troops, 2026-09-20
+
+| # | Cặp tướng | Quân | Còn lại | Toạ độ |
+|---|---|---|---|---|
+| 1 | Wak Chanil Ajaw / Ishida Mitsunari | 44.675 | *đang đi* 00:00:33 → Lvl 6 Cropland | X:1100 Y:589 |
+| 2 | Seondeok / Cleopatra VII | 15.123 | 03:44:36 | X:1083 Y:570 |
+| 3 | Constance / Matilda of Flanders | 35.416 | 03:13:14 | X:1082 Y:567 |
+| 4 | Centurion / Joan of Arc | 39.757 | 02:48:50 | X:1077 Y:575 |
+| 5 | Šárka / Gaius Marius | 34.391 | 02:06:52 | X:1065 Y:586 |
+
+**Tổng quân đã ra đồng: 169.362 / 189.000 = 89,6%.**
+
+**Đính chính:** trước đó tôi đọc `Units 34.391/189.000` trên panel New Troop là
+"đạo quân chỉ đầy 18%" và đề xuất thêm bước bấm MAX. **Sai.** 189.000 là tổng
+quân trong thành, không phải sức chứa một chuyến. Chênh lệch giữa các chuyến
+(15.123 … 44.675, **3,0 lần**) đi theo **cấp tướng** — Seondeok 27/27 chở 15k,
+Centurion 37/27 chở 39,7k. Đòn bẩy là **nâng cấp tướng**, không phải nút MAX.
+
+**Đuôi rảnh: 01:37:44 — chiếm 44% chu kỳ.** Slot về sớm nhất (02:06:52) nằm
+không tới khi cả lô về (03:44:36, và chuyến #1 còn chưa bắt đầu đào nên con số
+thật còn dài hơn). Đây chính là đại lượng `Character.idle_tail()` tính, nay có
+số thật lần đầu.
+
+**Giả thuyết mạnh nhất, cần kiểm ngay:** mốc của người vận hành là 2h00–2h30
+(farm mạnh) và 3h30–4h00 (farm yếu), **cả hai đều giả định buff thu thập 50%
+đang chạy**. Quan sát 03:44:36 rơi đúng dải **yếu**. Nhiều khả năng **buff đang
+tắt** — và đó là đòn bẩy lớn nhất hiện có, đúng thứ người vận hành hỏi.
+
+### Hiệu suất vòng lặp, đo trên 11 lượt recon hôm nay
+
+```
+238 tick   ·   13% tick thực sự bấm gì đó   ·   29% UNKNOWN_STATE
+```
+
+Gửi được 5 đạo quân tốn ~238 tick. Đạt 5/5 **một lần** không phải là xong;
+**lặp lại được mà không cần người can thiệp** mới là xong.
+
+### Bốn việc, theo thứ tự phụ thuộc
+
+**1. Cảm biến bảng Troops — thiếu, và là mảnh còn thiếu lớn nhất.**
+`knowledge/gathering_continuity_2026-09-19.yaml` đã ghi bảng này là *"the
+authoritative surface for measuring farm rhythm"*, nhưng chưa có code đọc nó.
+Mỗi dòng cho: toạ độ mỏ, cặp tướng, số quân, **thời gian đào còn lại**.
+
+Đây là nguồn dữ liệu cho `MIS-006` (chu kỳ khấu hao theo đạo chậm nhất) và
+`MIS-007` (chỉ vào lại khi cả 5 về) — hiện `Character.batch_home_at()` **không
+có nguồn nào cấp số**. Panel này lấp đúng chỗ đó.
+
+Lưu ý ngữ nghĩa đã ghi trong `LLM_GAMEPLAY_SPEC` Pha 3: đồng hồ `Gathering` là
+**thời gian đào còn lại, KHÔNG gồm đường về**. Thời gian về phải suy ra.
+
+**2. Vòng dùng vật phẩm — buff không được chạm đáy.**
+Tri thức đã có đủ và **chưa có code**:
+- `8-Hour Enhanced Gathering`, **cộng dồn THỜI LƯỢNG, không cộng phần trăm**
+- 3 vật phẩm = phủ 24h; không có lý do canh lúc hết hạn
+- Hộp xác nhận **tự nói ra tổng thời lượng sau khi dùng** → đó là postcondition
+- **BẪY:** `YES` màu **đỏ, bên TRÁI**; `NO` màu **xanh, bên PHẢI** — ngược quy
+  ước thường gặp. Nối đất **bắt buộc theo nhãn chữ**, cấm theo màu hoặc vị trí
+  (`SAF-004`)
+- Tiêu vật phẩm là **spend-class**: một lần xác nhận có thể tiêu nhiều món →
+  cần cổng phê duyệt của người vận hành (`SAF-005`)
+
+**3. Vòng nạp lại — hiện mỗi chuyến là một lệnh tay.**
+Biết lúc nào quân về (từ việc 1) thì tự gửi lại. Không có việc này thì 5/5 là
+một ảnh chụp, không phải một nhịp.
+
+**4. Độ tin cậy — 13% tick có tác dụng là quá thấp.**
+Phần lớn tick trôi vào `UNKNOWN_STATE` giữa các hoạt ảnh. Không chặn 5/5 nhưng
+chặn việc chạy không người trông.
+
+### Xong MỘT nhân vật khi nào
+
+| Cổng | Điều kiện | Đo bằng |
+|---|---|---|
+| A | Đạt 5/5 **hai lô liên tiếp**, không can thiệp tay | log occurrence |
+| B | Buff thu thập **không chạm 0** suốt hai lô đó | đọc buff + sổ dùng item |
+| C | Quân về được **phát hiện và nạp lại tự động** | cảm biến bảng Troops |
+| D | Chu kỳ đo được rơi vào dải **2h00–2h30** khi có buff | bảng Troops |
+
+**Chỉ khi A–D xanh mới sang nhân vật thứ hai.** Sang nhân vật là thêm bước
+chuyển nhân vật; sang tài khoản là thêm đăng nhập — mỗi bậc thêm một lớp lỗi
+mới, và không lớp nào đáng thêm khi lớp dưới còn rung.
+
+---
+
 ## M8 — Giao hàng · sau cùng
 
 | Yêu cầu | Trạng thái |
