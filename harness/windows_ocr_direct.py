@@ -143,9 +143,20 @@ def build_payload(
     width: int,
     height: int,
     language: str,
+    crop: tuple[int, int, int, int] | None = None,
+    scale: float = 1.0,
 ) -> dict[str, Any]:
-    """Assemble the record in the shape scripts/windows_ocr.ps1 emitted."""
+    """Assemble the record in the shape scripts/windows_ocr.ps1 emitted.
+
+    ``crop`` is in client pixels and ``scale`` is what the crop was magnified
+    by before OCR; element boxes stay in scaled-crop pixels, which is what
+    ``coordinate_space`` has always declared and what
+    ``observation_bridge`` divides back out. Reporting either of them wrongly
+    puts every grounded target in the wrong place, so they are computed here
+    rather than assumed.
+    """
     frame = capture.get("frame") or {}
+    box = crop if crop is not None else (0, 0, int(width), int(height))
     return {
         "schema_version": SCHEMA_VERSION,
         "frame_id": frame.get("id"),
@@ -159,9 +170,9 @@ def build_payload(
             "version": _os_version(),
             "language": language,
         },
-        "crop": [0, 0, int(width), int(height)],
-        "scale_x": 1.0,
-        "scale_y": 1.0,
+        "crop": [int(value) for value in box],
+        "scale_x": float(scale),
+        "scale_y": float(scale),
         "text": " ".join(str(item["text"]) for item in elements),
         "elements": list(elements),
     }
@@ -173,6 +184,8 @@ def recognize_frame(
     *,
     engine: WindowsOcr | None = None,
     png_bytes: bytes | None = None,
+    roi: tuple[int, int, int, int] | None = None,
+    scale: float = 1.0,
 ) -> dict[str, Any]:
     """OCR a frame the caller already holds in memory.
 
@@ -180,6 +193,36 @@ def recognize_frame(
     ``png_bytes`` is optional: pass the encoded frame only if the caller wants
     the hash recomputed here, otherwise the hash already in ``capture`` is
     trusted - it was computed from the same pixels moments earlier.
+
+    ``roi`` and ``scale`` exist because whole-frame OCR is not reliable, and
+    the way it fails is silent. Measured on 2026-09-20, two 1366x768 frames
+    from the same client, same engine, same session:
+
+        world map, whole frame      75 elements
+        city view, whole frame       3 elements
+
+    The quest panel is byte-identical in both. Inside the world frame it
+    contributes 32 elements; inside the city frame, 0. Cropped out on its own
+    it reads 33 in EITHER case. So the busy city background does not obscure
+    the text - it makes Windows.Media.Ocr abandon text it reads perfectly
+    well when that text is handed over by itself.
+
+    That makes ROI-only reading a correctness requirement rather than the
+    performance preference it looks like. docs/DESIGN_BRIEF.md D1b already
+    said never to sweep the frame; this is the number behind it.
+
+    Scale is a second, separate effect, and it bites on small regions:
+
+        header strip, scale 1    0 elements     31 ms
+        header strip, scale 4    4 elements     16 ms   exact
+        whole frame, scale 1.5  63 elements    198 ms   but "1,000" -> "l,cm"
+        whole frame, scale 2    64 elements    407 ms   over the OCR-003 budget
+
+    Upscaling a calibrated ROI is both cheaper AND more accurate than
+    upscaling the frame, so there is no trade-off to balance. The old
+    PowerShell path magnified each region by 3, 4 or 8 for this reason; the
+    in-process rewrite kept ``scale_x: 1`` and had no way to express a crop at
+    all, which is what this signature adds back.
     """
     import cv2  # noqa: PLC0415 - optional, only needed for the colour convert
     import numpy as np  # noqa: PLC0415
@@ -204,11 +247,23 @@ def recognize_frame(
     if png_bytes is not None and frame.get("image_sha256") not in (None, digest):
         raise WindowsOcrError("image hash does not match capture metadata")
 
-    bgra = array if array.shape[2] == 4 else cv2.cvtColor(array, cv2.COLOR_BGR2BGRA)
+    box = _checked_roi(roi, width, height)
+    if not 1.0 <= scale <= 8.0:
+        raise WindowsOcrError("scale must be within 1..8")
+
+    crop_x, crop_y, crop_w, crop_h = box
+    region = array[crop_y : crop_y + crop_h, crop_x : crop_x + crop_w]
+    if scale != 1.0:
+        region = cv2.resize(
+            region,
+            (max(1, round(crop_w * scale)), max(1, round(crop_h * scale))),
+            interpolation=cv2.INTER_CUBIC,
+        )
+
+    bgra = region if region.shape[2] == 4 else cv2.cvtColor(region, cv2.COLOR_BGR2BGRA)
+    bgra = np.ascontiguousarray(bgra)
     ocr = engine or WindowsOcr()
-    elements = ocr.recognize(
-        np.ascontiguousarray(bgra).tobytes(), width, height
-    )
+    elements = ocr.recognize(bgra.tobytes(), bgra.shape[1], bgra.shape[0])
     return build_payload(
         elements,
         capture,
@@ -216,7 +271,32 @@ def recognize_frame(
         width=width,
         height=height,
         language=ocr.language,
+        crop=box,
+        scale=scale,
     )
+
+
+def _checked_roi(
+    roi: tuple[int, int, int, int] | None, width: int, height: int
+) -> tuple[int, int, int, int]:
+    """Validate a region, or default to the whole frame.
+
+    A region that runs off the edge is refused rather than clamped. Clamping
+    would silently change which pixels were read, and every box that came back
+    would map to the wrong place in client coordinates.
+    """
+    if roi is None:
+        return (0, 0, int(width), int(height))
+    if len(roi) != 4:
+        raise WindowsOcrError("roi must be (x, y, width, height)")
+    x, y, w, h = (int(value) for value in roi)
+    if w <= 0 or h <= 0:
+        raise WindowsOcrError("roi width and height must be positive")
+    if x < 0 or y < 0 or x + w > width or y + h > height:
+        raise WindowsOcrError(
+            f"roi {(x, y, w, h)} does not fit inside the {width}x{height} frame"
+        )
+    return (x, y, w, h)
 
 
 def recognize_path(
@@ -224,6 +304,8 @@ def recognize_path(
     capture: Mapping[str, Any],
     *,
     engine: WindowsOcr | None = None,
+    roi: tuple[int, int, int, int] | None = None,
+    scale: float = 1.0,
 ) -> dict[str, Any]:
     """OCR a frame already written to disk.
 
@@ -237,7 +319,9 @@ def recognize_path(
     array = cv2.imread(str(path))
     if array is None:
         raise WindowsOcrError(f"could not decode {path}")
-    return recognize_frame(array, capture, engine=engine, png_bytes=data)
+    return recognize_frame(
+        array, capture, engine=engine, png_bytes=data, roi=roi, scale=scale
+    )
 
 
 __all__ = [
