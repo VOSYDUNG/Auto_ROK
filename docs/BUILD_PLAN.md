@@ -77,19 +77,71 @@ dấu (`Šárka`) không làm gãy · tồn kho khớp header.
 
 **Vì sao ở đây chứ không sớm hơn:** 4,8 giây một khung không làm sai kết quả, nó chỉ làm
 **một lượt vào nhân vật kéo dài**. Mà trần thời gian mỗi lượt (`MIS-015`) là bài toán 7h
-sáng — nên tốc độ là tiền đề của M4, không phải của M1.
+sáng — nên tốc độ là tiền đề của M5, không phải của M1.
 
-| Yêu cầu | Việc |
-|---|---|
-| `OCR-003` | 4.863 ms → dưới 400 ms: crop trong bộ nhớ (bỏ 11 lần ghi/đọc PNG), tiến trình OCR thường trú |
-| `OCR-004` | Kết quả sau tối ưu **giống hệt** trước trên toàn corpus |
+### Đo trước khi sửa — kết quả ngày 2026-09-20
 
-**Xong khi:** < 400 ms/khung và corpus khớp từng ký tự.
+| Giai đoạn | Thời gian | Tính chất |
+|---|---|---|
+| Khởi động `powershell.exe` | 185 ms | mỗi lần gọi |
+| Nạp WinRT | 91 ms | mỗi lần gọi |
+| Tạo engine OCR | 7 ms | rẻ |
+| Đọc + giải mã ảnh chính | 279 ms | mỗi khung |
+| **OCR toàn khung** | **143 ms** | **đây là phép tính thật** |
+| Crop + scale + **ghi PNG ra đĩa** | **92 ms / lần** | ×11 ≈ 1.000 ms, **phí hoàn toàn** |
+| Đọc lại từ đĩa + OCR crop | 39 ms / lần | ×11 ≈ 430 ms |
 
-**Chỉ khi vẫn chưa đạt mới tính tới binary native.** Phát input đang dưới 1 ms nên không có
-gì để giành ở phía chuột.
+**Kết luận quyết định hướng sửa:** trong 4.863 ms, phần *tính toán thật* chỉ khoảng
+**140 ms**. Phần còn lại là khởi động tiến trình, đi vòng qua đĩa, và giải mã lặp lại.
 
----
+### Vì sao chưa viết lại bằng C/C++
+
+Người vận hành nêu đúng rằng C/C++ nhanh hơn Python. Nhưng số đo cho thấy **nút thắt không
+phải ngôn ngữ**: spawn tiến trình, I/O đĩa và giải mã ảnh **không nhanh lên vì viết bằng
+C++**. Viết lại toàn bộ sẽ tốn hàng tuần để giải quyết 140 ms.
+
+C/C++ chỉ đáng bàn **sau khi** M3.1–M3.3 xong. Khi đó 143 ms OCR lõi mới thành sàn thật,
+và lúc đó mới có câu hỏi đúng để hỏi.
+
+### M3.1 — Bỏ đường vòng qua đĩa
+
+Crop trực tiếp trên `SoftwareBitmap` đã giải mã, không `Save()` ra PNG rồi
+`GetFileFromPathAsync` đọc lại.
+
+**Dự kiến:** −1.000 ms. **Không đổi hành vi.**
+
+### M3.2 — Tiến trình OCR thường trú
+
+Một tiến trình sống lâu nhận đường dẫn ảnh qua stdin, trả JSON. Trả spawn 185 ms và nạp
+WinRT 91 ms về **một lần cho cả phiên** thay vì mỗi khung.
+
+**Dự kiến:** −276 ms mỗi khung.
+
+### M3.3 — Một mũi nhọn, không phải dao đa năng
+
+Nguyên tắc của người vận hành: *"module ta tải về quá cồng kềnh để làm việc all-in-one,
+nhưng có khi của chúng ta chỉ cần một mũi nhọn."*
+
+`harness/queue_indicator.py` đã chứng minh: đọc `1/5` bằng template mất **0,207 ms**, còn
+OCR tổng quát mất 4.863 ms **và đọc sai thành `115`**.
+
+Rà 11 lần nhận dạng hiện tại, tách làm hai nhóm:
+
+- **Trường cố định, font bitmap** — số tài nguyên, cấp mỏ, số quân, chỉ số hàng đợi. Đây là
+  chỗ dùng template. Mỗi lần thay thế tiết kiệm **~131 ms** (39 ms OCR + 92 ms đĩa) và đổi
+  lại được **độ chính xác tuyệt đối**.
+- **Chữ thật sự biến thiên** — tên người chơi, mô tả vật phẩm. Giữ OCR, vì template không
+  làm được.
+
+**Đây là phần đáng giá nhất của M3**, và nó không phải tối ưu tốc độ — nó là **làm sạch
+tín hiệu**, tốc độ chỉ là hệ quả. Xem `PROJECT_DECLARATION` §1.
+
+### M3.4 — Chứng minh không đổi kết quả
+
+`OCR-004`: đầu ra sau tối ưu phải **giống hệt từng ký tự** trước đó trên toàn corpus. Không
+có ngoại lệ — một tối ưu làm đổi kết quả OCR là một lỗi, không phải một đánh đổi.
+
+**Xong khi:** < 400 ms/khung · corpus khớp từng ký tự · `OCR-005` (UTF-8) đã xong ở M1.
 
 ## M4 — Không bao giờ đứng hình · không cần game
 
