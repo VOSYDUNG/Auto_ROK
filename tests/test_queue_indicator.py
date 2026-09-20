@@ -180,3 +180,49 @@ def test_it_reads_one_of_five_from_the_real_captured_frame(profile):
     assert reading.status is QueueReadStatus.READ
     assert (reading.used, reading.capacity) == (1, 5)
     assert reading.free_slots == 4
+
+
+def test_it_reads_an_independent_live_frame_not_just_its_training_frame():
+    """Recalibrated 2026-09-20 after the sensor refused a real 1/5.
+
+    The profile was trained at threshold 200 on one frame, with a one-pixel
+    tolerance. On a live frame captured right after the agent dispatched its
+    first march, one pixel of antialiasing shrank the "/" from 3x10 to 2x8 -
+    a different SHAPE, so it could not even be compared, and a true 1/5 came
+    back UNKNOWN_GLYPH.
+
+    Measured across thresholds, 160 and 180 segment the three glyphs
+    identically on both frames while 200 and 220 do not. 200 was sitting on
+    a cliff edge.
+
+    This test exists because one training frame cannot show that. A second,
+    independently captured frame can.
+    """
+    import cv2
+
+    root = Path(__file__).resolve().parents[1]
+    live = root / "workspace" / "runs" / "m7-live-20260920" / "queue-1of5-live.png"
+    if not live.exists():
+        pytest.skip("live 1/5 frame not present")
+
+    profile = QueueIndicatorProfile.load(root / "config" / "queue_indicator_profile.json")
+    reading = QueueIndicatorReader(profile).read(
+        cv2.cvtColor(cv2.imread(str(live)), cv2.COLOR_BGR2GRAY)
+    )
+    assert reading.status is QueueReadStatus.READ
+    assert (reading.used, reading.capacity) == (1, 5)
+    assert reading.free_slots == 4
+
+
+def test_the_threshold_is_not_back_on_the_cliff_edge():
+    """200 refused a real reading; 180 does not. Do not drift back."""
+    root = Path(__file__).resolve().parents[1]
+    profile = QueueIndicatorProfile.load(root / "config" / "queue_indicator_profile.json")
+    assert profile.threshold <= 180, (
+        "raising the threshold above 180 shrinks the / glyph on dimmer "
+        "frames and turns real readings into UNKNOWN_GLYPH"
+    )
+    assert profile.max_glyph_distance <= 1, (
+        "widening the glyph distance to paper over a threshold problem would "
+        "make 1 and 4 confusable; fix the threshold instead"
+    )
