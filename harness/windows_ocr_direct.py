@@ -322,6 +322,8 @@ SEMANTIC_REGIONS: tuple[str, ...] = (
 def merge_region_elements(
     payload: dict[str, Any],
     region_payload: Mapping[str, Any],
+    *,
+    region_id: str | None = None,
 ) -> dict[str, Any]:
     """Let a calibrated region replace the whole-frame read of its own area.
 
@@ -353,7 +355,30 @@ def merge_region_elements(
         # rather than blanking it.
         return payload
 
-    def _inside(item: Mapping[str, Any]) -> bool:
+    # Words this region has authoritatively read. The sweep's own copy of
+    # them is dropped WHEREVER it put them, not just inside the rectangle.
+    #
+    # That is deliberate and it was learned the hard way. The dispatch drawer
+    # does not sit at a fixed y, so the sweep reported "New Troop" outside
+    # the calibrated crop; both copies survived, the NEW_TROOP target matched
+    # two candidates, and grounding refused as ambiguous. Two readings of one
+    # button is not two buttons. The region is the calibrated sensor and the
+    # sweep is best-effort, so for text the region owns, the region wins.
+    owned = {
+        str(item.get("text", "")).casefold()
+        for item in region_elements
+        if str(item.get("text", "")).strip()
+    }
+
+    def _superseded(item: Mapping[str, Any]) -> bool:
+        # Never supersede another region's reading. The prompt region also
+        # contains the words "new" and "troop", so without this it would
+        # delete the button region's tokens and leave nothing to ground.
+        # Regions only ever outrank the sweep, never each other.
+        if item.get("source_region"):
+            return False
+        if str(item.get("text", "")).casefold() in owned:
+            return True
         box = item.get("bbox")
         if not isinstance(box, (list, tuple)) or len(box) != 4:
             return False
@@ -364,7 +389,7 @@ def merge_region_elements(
             and crop_y <= centre_y <= crop_y + crop_h
         )
 
-    kept = [item for item in payload["elements"] if not _inside(item)]
+    kept = [item for item in payload["elements"] if not _superseded(item)]
     next_line = max((int(i.get("line_index", 0)) for i in kept), default=-1) + 1
 
     for item in region_elements:
@@ -383,6 +408,7 @@ def merge_region_elements(
                 "confidence": None,
                 "text": str(item.get("text")),
                 "line_index": next_line + int(item.get("line_index", 0)),
+                "source_region": region_id or "region",
             }
         )
 
@@ -435,7 +461,7 @@ def recognize_with_regions(
             )
         except Exception:  # noqa: BLE001 - a missing region is less evidence
             continue
-        payload = merge_region_elements(payload, region_payload)
+        payload = merge_region_elements(payload, region_payload, region_id=roi_id)
     return payload
 
 
