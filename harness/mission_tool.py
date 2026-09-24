@@ -259,6 +259,7 @@ class BoundedMissionTool:
             classification,
             bundle.scene,
             self.compiled.flow,
+            observation_timestamp=bundle.observation.timestamp,
         )
         if not snapshot.frame_id:
             raise ValueError("mission observation must have a frame id")

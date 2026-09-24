@@ -16,15 +16,29 @@
 schema_version: 1
 
 head_basis:
-  sha: fe33d912ca5dbb30e68c84ade8b2090122994f1d
+  sha: 7855c6165846ac53ed88d18a2701237fbf4bc539
   branch: master
-  recorded_at: "2026-09-20"
+  recorded_at: "2026-09-24"
+  context: FIRST DONE offline foundation validated against this source basis; F1/F2-A/F2-B/F2-C wired offline, F3 audit implemented offline
 
 objective:
-  id: M7.1_CHARACTER_01
-  statement: keep one character gathering continuously
-  # The lowest level across the capabilities the objective depends on. Reaching
-  # 5/5 once does not lift the objective above the parts that do not exist.
+  id: FIRST_DONE_GATHER_FIVE_MARCHES
+  statement: >
+    One startup-authorized GATHER job autonomously dispatches five farm marches
+    for one visible character/client, preserving each fresh New Troop screen's
+    game-filled pair and verifying queue transitions 0/5 to 5/5 after each march.
+  required_capabilities:
+    - bounded_gather_job
+    - startup_job_issuance
+    - client_binding
+    - new_troop_formation_fact
+    - startup_ui_character_identity
+    - fresh_0_of_5_queue_baseline
+    - five_transition_job_coordinator
+    - five_march_job_driver
+    - first_done_job_audit
+    - dispatch_queue_to_5_of_5
+  # Historical operator-assisted 5/5 does not prove this autonomous job.
   overall_status: UNIMPLEMENTED
 
 capabilities:
@@ -43,8 +57,94 @@ capabilities:
     limitations:
       - operator approved each troop-selection occurrence individually
       - manual intervention occurred (window focus, occurrence retries)
+      - no provenance-safe 0/5 queue baseline or autonomous five-transition chain
       - achieved with the gathering buff OFF for the entire run
       - not repeated; a second batch has never been attempted
+
+  bounded_gather_job:
+    status: WIRED
+    live_proof_after_commit: false
+    evidence:
+      - workspace/agents/f1a-job-scope/root/HANDOFF.md
+      - workspace/agents/f1b-job-wiring/root/HANDOFF.md
+    limitations:
+      - synthetic MissionRunner and guarded input only; job live arming remains blocked
+      - F1 reservation and F2 verified journal/recovery are wired offline
+
+  startup_job_issuance:
+    status: WIRED
+    live_proof_after_commit: false
+    evidence:
+      - tests/test_create_gather_job.py
+      - scripts/create_gather_job.py
+      - tests/test_run_gather_job.py
+    limitations:
+      - offline artifact issuance only; no game observation, model call or input authority
+      - reviewed launch spec is consumed by the driver; no live job has been issued or run
+
+  client_binding:
+    status: WIRED
+    live_proof_after_commit: false
+    evidence:
+      - workspace/agents/f1c-client-binding/tho_dung/HANDOFF.md
+      - workspace/agents/f1c-evidence/root/HANDOFF.md
+    limitations:
+      - binds capture HWND/PID/process path in the offline canonical fixture
+      - does not establish the character identity displayed by the game
+
+  new_troop_formation_fact:
+    status: WIRED
+    live_proof_after_commit: false
+    evidence:
+      - workspace/agents/f1c-formation-fact/tho_dung/HANDOFF.md
+      - workspace/agents/f1c-evidence/root/HANDOFF.md
+    limitations:
+      - four archived positive frames and synthetic negative cases; no fresh live job
+      - no real empty or disabled New Troop negative frame in the surveyed archive
+
+  startup_ui_character_identity:
+    status: UNIMPLEMENTED
+    note: character_id remains an operator assertion, not a UI-derived startup fact
+
+  fresh_0_of_5_queue_baseline:
+    status: UNIMPLEMENTED
+    note: >
+      The archive survey found no supported 0/5 march-queue frame. An OCR 0/5
+      from the quest panel is not a queue observation.
+
+  five_transition_job_coordinator:
+    status: WIRED
+    live_proof_after_commit: false
+    evidence:
+      - tests/test_gather_job_coordinator.py
+      - tests/test_gather_job_cli_wiring.py
+    note: >
+      Caller-driven F2-B is consumed by canonical gather CLI. F2-A recovery,
+      durable journal and F2-B closeout pass offline synthetic tests and ROOT's
+      full suite. Job-scoped live preflight and a fresh game occurrence remain
+      unevidenced.
+
+  five_march_job_driver:
+    status: WIRED
+    live_proof_after_commit: false
+    evidence:
+      - tests/test_run_gather_job.py
+      - scripts/run_gather_job.py
+      - workspace/agents/f2c-driver-review/kiem_luat/HANDOFF.md
+    limitations:
+      - reviewed synthetic five-run cross-CLI replay and already-closed recovery pass; no game observation or input
+      - live arm deliberately rejects until job-scoped preflight exists
+
+  first_done_job_audit:
+    status: IMPLEMENTED
+    live_proof_after_commit: false
+    evidence:
+      - tests/test_audit_first_done_job.py
+      - scripts/audit_first_done_job.py
+    limitations:
+      - independently reviewed synthetic real-runner replay produces only OFFLINE_REPLAY_PASS
+      - the canonical driver does not invoke this auditor; no native live closeout evidence
+      - audit currently requires all five VERIFIED slots in one driver attempt and cannot yet accept a resumed attempt chain
 
   queue_indicator_provider:
     status: WIRED
@@ -84,11 +184,13 @@ capabilities:
       - the early-stop branch has never been reached on a live occurrence
 
   troops_panel_sensor:
-    status: UNIMPLEMENTED
+    status: IMPLEMENTED
+    live_proof_after_commit: false
     note: >
-      knowledge/gathering_continuity_2026-09-19.yaml calls the Troops panel the
-      authoritative surface for farm rhythm. Nothing reads it, so
-      Character.batch_home_at() has no data source.
+      Offline projection exists for one 1366x768 Troops layout, but return/home
+      and canonical live consumption are not proven.
+    evidence:
+      - workspace/agents/p1-observation-projection/root/validation.json
 
   return_detection:
     status: UNIMPLEMENTED
@@ -102,39 +204,58 @@ capabilities:
   buff_top_up:
     status: UNIMPLEMENTED
 
-# PRD section 3.4 condition 2 requires the queue to reach 5/5 AND hold, with
-# the buff never reaching zero. None of these four gates has passed.
+# These gates belong to FIRST DONE only. Each requires one new job occurrence;
+# historical 5/5 and offline replay do not pass them.
 acceptance:
-  two_consecutive_unattended_5_of_5_batches:
+  one_startup_authorized_job_without_per_march_approval:
     passed: false
-  buff_never_reaches_zero:
+  one_visible_client_and_ui_confirmed_character:
     passed: false
-    note: operator confirmed the gathering buff was off for the observed run
-  returns_detected_and_refilled:
+  fresh_game_filled_new_troop_pair_preserved_on_each_march:
     passed: false
-  buffed_cycle_between_2h00_and_2h30:
+  five_fresh_verified_queue_increments_0_to_5_of_5:
     passed: false
     note: >
-      observed batch time 3:44:36 without buff, which sits in the operator's
-      weak band (3h30-4h00); both operator baselines assume the 50% buff
+      Requires same job/client/character, five dispatch receipts and five fresh
+      queue postchecks; the archived queue frames are independent snapshots.
+  immutable_job_close_report:
+    passed: false
+
+later_milestones:
+  daily_farm:
+    overall_status: UNIMPLEMENTED
+    required_capabilities:
+      - troops_panel_sensor
+      - return_detection
+      - automatic_refill
+      - buff_sensor
+      - buff_top_up
+    acceptance:
+      two_consecutive_unattended_5_of_5_batches: {passed: false}
+      buff_never_reaches_zero:
+        passed: false
+        note: operator confirmed the gathering buff was off for the observed run
+      returns_detected_and_refilled: {passed: false}
+      buffed_cycle_between_2h00_and_2h30:
+        passed: false
+        note: >
+          observed batch time 3:44:36 without buff, which sits in the
+          operator's weak band; both operator baselines assume the 50% buff
 
 known_blockers:
-  - post-fe33d91 live E2E proof requires a naturally free march slot
-  - Troops panel has no runtime sensor
-  - automatic refill does not exist
-  - buff sensing and use path do not exist
+  - no provenance-safe fresh 0/5 march-queue baseline for a new job
+  - startup character identity is not read from the game UI
+  - F3 audit is accepted offline but is not invoked by the canonical driver or able to audit resumed attempt chains
+  - no autonomous live job occurrence
+  - job live arming remains blocked; this status file grants no input authority
 
 next_live_falsification:
   hypothesis: >
-    With QueueIndicatorObservationProvider wired into the live chain,
-    successful MARCH completion should no longer accumulate
-    "completion evidence is insufficient".
+    Once separately authorized, one GATHER job for a UI-confirmed character
+    starts at a fresh queue 0/5 and completes five independent +1 postchecks.
   expected_observation: >
-    A fresh bounded occurrence ends from verified queue increase /
-    stop-when-queue instead of exhausting max-ticks.
-  baseline_measurement: >
-    Across 11 recon runs before the wiring change, 238 ticks: 64 reported
-    "completion evidence is insufficient", 55 UNKNOWN_STATE, and 31 (13%)
-    pressed anything.
+    Append-only evidence binds job/client/character, each New Troop formation
+    and dispatch receipt, each newer verified queue frame, then closeout at 5/5.
   prohibited_shortcut: >
-    Do not recall an active gathering march merely to create a free slot.
+    Do not treat a quest 0/5, independent archive frames, dispatch receipts, or
+    the operator-assisted historical 5/5 as this job's verification.

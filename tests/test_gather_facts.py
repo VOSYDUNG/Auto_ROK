@@ -1,8 +1,9 @@
-from harness.contracts import Evidence, Observation
+from harness.contracts import BoundingBox, Evidence, Observation
 from harness.gather_facts import (
     GatherFactObservationProvider,
     extract_march_queue,
     extract_visible_resource_level,
+    extract_visible_troops_status,
 )
 from harness.mission_runtime import MissionContext
 from harness.mission_tool import ObservationBundle
@@ -140,3 +141,82 @@ def test_the_115_workaround_is_gone_from_provenance_too():
         f"the compact-ratio workaround is back in code: {offenders}; "
         "it reads 213 as 2/3 and 919 as 9/9"
     )
+
+
+def troops_layout_bundle(*, status_box=None, missing_box=False, status_frame=None,
+                         status_hash=None, extra_status=None, raw_text=""):
+    """Synthetic OCR from the saved frame's observed relative layout."""
+    frame = "troops-f1"
+    image_hash = "a" * 64
+    labels_and_boxes = [
+        ("Troops", (646, 172, 719, 191)),
+        ("Unrestricted", (575, 224, 648, 235)),
+        ("Troop", (651, 224, 686, 237)),
+        ("Movement", (690, 224, 753, 235)),
+        ("Guide", (756, 224, 790, 235)),
+        ("Gathering", status_box or (681, 318, 732, 330)),
+    ]
+    if extra_status:
+        labels_and_boxes.append(extra_status)
+    evidence = tuple(Evidence(
+        "ocr", label, 0.0, value=label,
+        bbox=None if missing_box and label == "Gathering" else BoundingBox(*coords),
+        metadata={
+            "frame_id": status_frame if label == "Gathering" and status_frame else frame,
+            "image_sha256": status_hash if label == "Gathering" and status_hash else image_hash,
+        },
+    ) for label, coords in labels_and_boxes)
+    return ObservationBundle(
+        Observation(1.0, frame, (1366, 768), evidence),
+        SceneGraph(frame, None, facts={"image_sha256": image_hash, "raw_text": raw_text}),
+    )
+
+
+def test_one_panel_anchored_gathering_token_projects_with_provenance():
+    source = troops_layout_bundle()
+    assert extract_visible_troops_status(source) == "Gathering"
+    facts = GatherFactObservationProvider(One(source), character_id="hien").observe(CONTEXT).scene.facts
+    assert facts["troops_visible_status"] == "Gathering"
+    assert facts["troops_visible_status_source"] == "same_frame_ocr_troops_layout"
+    assert facts["troops_visible_status_frame_id"] == "troops-f1"
+    assert facts["troops_visible_status_image_sha256"] == "a" * 64
+    assert not any(key in facts for key in ("troop_row_id", "return_detected", "free_slot",
+                                              "buff_remaining", "return_travel_seconds"))
+
+
+def test_troops_layout_rejects_unrelated_missing_and_stale_status_labels():
+    complete = troops_layout_bundle()
+    missing_subtitle = ObservationBundle(
+        Observation(1.0, "troops-f1", (1366, 768),
+                    tuple(item for item in complete.observation.evidence if item.label != "Guide")),
+        complete.scene,
+    )
+    for source in (
+        missing_subtitle,
+        troops_layout_bundle(status_box=(20, 600, 71, 612)),
+        troops_layout_bundle(missing_box=True),
+        troops_layout_bundle(status_box=(732, 318, 681, 330)),
+        troops_layout_bundle(status_frame="old-frame"),
+        troops_layout_bundle(status_hash="b" * 64),
+        troops_layout_bundle(extra_status=("Returning", (681, 350, 732, 362))),
+        troops_layout_bundle(extra_status=("Gathering", (681, 350, 732, 362))),
+    ):
+        assert extract_visible_troops_status(source) is None
+        facts = GatherFactObservationProvider(One(source), character_id="hien").observe(CONTEXT).scene.facts
+        assert "troops_visible_status" not in facts
+
+
+def test_raw_text_does_not_substitute_for_panel_status_evidence():
+    source = troops_layout_bundle(status_frame="old-frame", raw_text="Troops Gathering")
+    assert extract_visible_troops_status(source) is None
+
+
+def test_troops_layout_requires_evidenced_window_profile():
+    source = troops_layout_bundle()
+    other_size = ObservationBundle(
+        Observation(1.0, "troops-f1", (1280, 720), source.observation.evidence),
+        source.scene,
+    )
+    assert extract_visible_troops_status(other_size) is None
+    facts = GatherFactObservationProvider(One(other_size), character_id="hien").observe(CONTEXT).scene.facts
+    assert "troops_visible_status" not in facts

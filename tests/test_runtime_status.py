@@ -7,7 +7,8 @@ would let it drift back into wishful reporting:
   * the status vocabulary is closed - no inventing a level that sounds done;
   * a capability cannot claim it was proven live while its own
     live_proof_after_commit field says false;
-  * M7.1 cannot call itself STABLE while an acceptance gate is false.
+  * FIRST DONE cannot outrank its required capabilities or unfinished gates;
+  * daily-farm gates stay in their later milestone.
 
 Deliberately specific to this one file. A generic status framework would be a
 second authority over completion, and AGENTS.md is the first.
@@ -87,9 +88,12 @@ def test_a_capability_cannot_claim_live_proof_it_denies_having(status):
 
 def test_the_objective_cannot_outrank_the_capabilities_it_needs(status):
     """A milestone is only as proven as its weakest dependency."""
+    required = status["objective"]["required_capabilities"]
+    assert required
+    assert set(required) <= set(status["capabilities"])
     levels = [
-        STATUS_LEVELS.index(entry["status"])
-        for entry in status["capabilities"].values()
+        STATUS_LEVELS.index(status["capabilities"][name]["status"])
+        for name in required
     ]
     overall = STATUS_LEVELS.index(status["objective"]["overall_status"])
     assert overall <= min(levels), (
@@ -98,27 +102,57 @@ def test_the_objective_cannot_outrank_the_capabilities_it_needs(status):
     )
 
 
-def test_m7_1_cannot_claim_stable_while_a_gate_is_false(status):
+def test_first_done_cannot_claim_live_while_a_gate_is_false(status):
     gates = status["acceptance"]
     failing = [name for name, gate in gates.items() if gate.get("passed") is not True]
     if failing:
-        assert status["objective"]["overall_status"] != "STABLE", (
-            f"objective claims STABLE while these acceptance gates are not "
+        assert status["objective"]["overall_status"] not in LIVE_LEVELS, (
+            f"objective claims live proof while these FIRST DONE gates are not "
             f"passed: {failing}"
         )
 
 
-def test_the_four_prd_acceptance_gates_are_all_present(status):
-    """PRD section 3.4 condition 2, so a gate cannot be quietly dropped."""
-    expected = {
+def test_first_done_gates_match_the_current_prd_scope(status):
+    expected_first_done = {
+        "one_startup_authorized_job_without_per_march_approval",
+        "one_visible_client_and_ui_confirmed_character",
+        "fresh_game_filled_new_troop_pair_preserved_on_each_march",
+        "five_fresh_verified_queue_increments_0_to_5_of_5",
+        "immutable_job_close_report",
+    }
+    assert set(status["acceptance"]) == expected_first_done
+    assert all(type(gate.get("passed")) is bool for gate in status["acceptance"].values())
+
+    expected_later = {
         "two_consecutive_unattended_5_of_5_batches",
         "buff_never_reaches_zero",
         "returns_detected_and_refilled",
         "buffed_cycle_between_2h00_and_2h30",
     }
-    assert expected <= set(status["acceptance"]), (
-        f"missing acceptance gates: {expected - set(status['acceptance'])}"
-    )
+    daily = status["later_milestones"]["daily_farm"]
+    assert set(daily["acceptance"]) == expected_later
+    assert daily["overall_status"] not in LIVE_LEVELS
+
+
+def test_first_done_cannot_inherit_operator_assisted_live_proof(status):
+    objective = status["objective"]
+    capabilities = status["capabilities"]
+    assert objective["id"] == "FIRST_DONE_GATHER_FIVE_MARCHES"
+    assert capabilities["dispatch_queue_to_5_of_5"]["status"] == "LIVE_PROVEN_ONCE"
+    for name in (
+        "bounded_gather_job",
+        "client_binding",
+        "new_troop_formation_fact",
+        "startup_ui_character_identity",
+        "fresh_0_of_5_queue_baseline",
+        "five_transition_job_coordinator",
+    ):
+        assert name in objective["required_capabilities"]
+    if any(
+        capabilities[name]["status"] not in LIVE_LEVELS
+        for name in objective["required_capabilities"]
+    ):
+        assert objective["overall_status"] not in LIVE_LEVELS
 
 
 def test_agents_md_defines_the_same_vocabulary(status):

@@ -64,3 +64,16 @@ def test_completed_checkpoint_is_durable(tmp_path):
     saved = store.save(checkpoint(status=CheckpointStatus.COMPLETE), expected_revision=0)
     assert store.load(CONTEXT).status is CheckpointStatus.COMPLETE
     assert saved.revision == 1
+
+
+def test_verified_transition_roundtrips_and_malformed_type_fails_closed(tmp_path):
+    store = JsonMissionStore(tmp_path)
+    proof = {"source": "mission_engine_complete_verified", "before_snapshot": {"observed_at": 100.0}}
+    store.save(checkpoint(status=CheckpointStatus.COMPLETE, verified_transition=proof))
+    assert store.load(CONTEXT).verified_transition == proof
+    path = next(tmp_path.glob("*.json"))
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["checkpoint"]["verified_transition"] = "receipt-only"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="verified_transition"):
+        store.load(CONTEXT)

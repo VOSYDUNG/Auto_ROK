@@ -1,10 +1,11 @@
 # B003 — occurrence-bound troop/commander approval
 
-B003 is closed for the current live occurrence, but remains a per-occurrence
-gate.  The harness does not infer a safe commander or troop composition from
-OCR, and opening ROK does not authorize host input.  Before each live
-one-character `GATHER_RESOURCE` run, the operator must approve the *currently
-visible* selection for one exact tuple:
+This records the **historical B003/R3 occurrence path**. It is not the authority
+for [FIRST DONE](GOAL.md) or its startup-authorized five-march job; see the
+current [job authority contract](SESSION_AUTHORITY.md). The command below is an
+archive of that path, not the next step for FIRST DONE. B003 did not establish
+that the harness could rank a commander pair from OCR. In the B003 path, the
+operator approved the currently visible selection for one exact tuple:
 
 `mission_id + task_id + run_id + character_id`.
 
@@ -25,10 +26,10 @@ final `VERIFIED` completion record are persisted at:
 - `workspace/evidence/host/gather-admin-20260919-03-20260919T011737622239Z-04-assessment.json`
 - `workspace/evidence/gather/gather-e9f395858e63a2dcb7d0/revision-000005-1789780669952972900.json`
 
-The approval is not reusable: another run must create and validate a new
-occurrence-bound artifact.
+The approval is not reusable. A separate B003/R3 occurrence would need its own
+artifact; the FIRST DONE job does not consume one.
 
-## Next occurrence handoff
+## Historical occurrence handoff
 
 After the operator has launched the elevated ROK client and left it in the
 foreground, use a new run id and a new session id. The helper waits for the
@@ -53,7 +54,7 @@ previous approval, and cannot proceed while `MASS.exe` is absent or not
 foreground. A non-zero result remains evidence of a blocked/failed occurrence;
 it must not be counted as Queue +1.
 
-When the operator has separately authorized the R3 repetition set, add
+For a separately authorized historical R3 repetition set, add
 `--r3-endurance-authorization workspace/evidence/gather/R3_ENDURANCE_AUTHORIZATION.json`.
 The helper then validates the exact manifest identity and reserves the run in
 the append-only `R3_RUN_RESERVATIONS.jsonl` ledger immediately after the
@@ -73,5 +74,6 @@ explicit operator decision. A non-authorizing template is kept at
 operator actually approves the bounded run set. The readiness audit accepts it only when it has
 `scope: r3_live_gather_repetition`, `approved: true`, the exact
 `GATHER_RESOURCE` / `one-character` / `char-direct-01` identity, an ISO-8601
-`approved_at`, and `max_additional_runs >= 8`. This authorization does not
-replace per-occurrence B003 approval or direct-host preflight.
+`approved_at`, and `max_additional_runs >= 8`. On that R3 path, this
+authorization does not replace per-occurrence B003 approval or direct-host
+preflight. Neither R3 nor B003 is per-march approval for FIRST DONE.

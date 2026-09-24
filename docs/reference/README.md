@@ -11,15 +11,19 @@ transcripts or model weights part of the product source tree.
 - `LLM-LOCAL`: local routing, DeepSeek Harness evaluation notes and the
   Qwen/GPT-OSS loopback model contract.
 
-## Authoritative documents
+## Current authority map
 
-This directory is a reference layer, not a definition layer. Scope, goal and
-status are defined only by:
+This directory is a reference layer, not a definition layer. The current
+coordination entry and source ownership are in [`docs/ROOT.md`](../ROOT.md):
 
-- Project declaration (highest): [`docs/PROJECT_DECLARATION.md`](../PROJECT_DECLARATION.md)
-- Goal and the G1-G6 definition of done: [`docs/GOAL.md`](../GOAL.md)
+- Intent and boundaries: [`docs/PROJECT_DECLARATION.md`](../PROJECT_DECLARATION.md)
+- Goal and G1–G6: [`docs/GOAL.md`](../GOAL.md)
 - Product requirements: [`docs/PRD.md`](../PRD.md)
-- Measured coverage: [`docs/COVERAGE.md`](../COVERAGE.md)
+- Verified capability levels: [`runtime-status.yaml`](../../runtime-status.yaml)
+- Evidence-to-gate audit: [`docs/COMPLETION_AUDIT.md`](../COMPLETION_AUDIT.md)
+
+[`docs/COVERAGE.md`](../COVERAGE.md) is a dated 2026-09-19 snapshot, not the
+current state authority.
 
 ## Canonical local copies
 

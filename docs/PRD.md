@@ -1,10 +1,9 @@
 # PRD — Auto_ROK
 
-Ngày: 2026-09-19 · Phiên bản 1 · Chịu sự điều chỉnh của [`docs/PROJECT_DECLARATION.md`](PROJECT_DECLARATION.md)
-
-Tài liệu này thay thế `docs/reference/LOCAL_HARNESS_PRD.md` (ngày 2026-09-13). Bản cũ
-được giữ trong `docs/archive/` làm lịch sử; các hệ đánh số R1a/R1b/R2/R3/R4 và P0–P6 của
-nó **không còn hiệu lực**, đã quy về G1–G6.
+Sản phẩm và nghiệm thu hiện hành · Theo [PROJECT_DECLARATION](PROJECT_DECLARATION.md).
+FIRST DONE do người vận hành chốt phạm vi ngày 2026-09-23. Lịch sử sửa đổi nằm trong
+Git; bằng chứng đã đạt thuộc [COMPLETION_AUDIT](COMPLETION_AUDIT.md) và
+[runtime-status](../runtime-status.yaml), không nằm trong các ô trạng thái của PRD.
 
 ---
 
@@ -20,9 +19,10 @@ không người trông.
 
 ## 2. Người dùng
 
-Một người vận hành duy nhất, sở hữu máy và tài khoản, ngồi cùng máy với game. Người này
-phê duyệt các hành động rủi ro, cung cấp kiến thức game, và là người duy nhất được quyền
-uỷ quyền chạy endurance.
+Một người vận hành duy nhất, sở hữu máy và tài khoản. Người này cấu hình/ủy quyền
+phiên farm, cung cấp kiến thức game và giữ quyền với hành động tiêu tài sản.
+FIRST DONE không cần người đó duyệt từng lượt điều quân; cơ chế quyền phiên có
+giới hạn phải được thiết kế và kiểm chứng trước khi chạy live.
 
 ## 3. Phạm vi (Scope)
 
@@ -33,8 +33,13 @@ uỷ quyền chạy endurance.
 
 Phát biểu để có thể sai:
 
-> Với cùng một model ~20B chạy CPU, harness đưa hiệu suất vận hành từ *không chạy nổi* lên
-> *trong khoảng X% mốc người chơi giỏi*, trong khi model vào cuộc dưới N lần / 100 tick.
+> Với cùng một model local được chọn tại thời điểm đo, harness đưa hiệu suất vận
+> hành từ *không chạy nổi* lên *trong khoảng X% mốc người chơi giỏi*, trong khi
+> model vào cuộc dưới N lần / 100 tick.
+
+Model, phần cứng, X và N là tham số của phép đo, không phải hằng số hay điều
+kiện nghiệm thu FIRST DONE. Cấu hình runtime chọn model có thể thay thế; mọi
+kết quả benchmark ghi lại model đã dùng để so sánh được.
 
 Đo bằng **hai nhánh**, ghi trong `config/harness_benchmark_matrix.json`:
 
@@ -51,6 +56,10 @@ mà người chơi có. Người chơi giỏi chính là trần.
 
 ### 3.2 Trong phạm vi
 
+**FIRST DONE** chỉ lấy một vòng `GATHER_RESOURCE` của một nhân vật: tự điều
+quân 5 đạo bằng cặp New Troop được game tự điền và xác minh hàng đợi 5/5. Tự nhận diện quân về,
+nạp lại, duy trì buff và chạy 24 giờ là phạm vi sản phẩm về sau.
+
 | Hạng mục | Nội dung |
 |---|---|
 | Miền | Rise of Kingdoms, **một máy Windows thật**, một client hiển thị |
@@ -58,7 +67,7 @@ mà người chơi có. Người chơi giỏi chính là trần.
 | Xoay vòng | đổi nhân vật trong game (Settings → Character), **không cần thông tin đăng nhập** |
 | Mission | `ACCUMULATE` theo hạn mức + thời hạn; `DEFAULT_FARM` tỉ lệ 1:1:1:2; `DAILY_CITIZEN` |
 | Suy giảm | thang 5 bậc, `SCARCITY_FILL` khi khan mỏ |
-| Giao hàng | **trong phạm vi nhưng đang KHOÁ** — chờ quan sát bảng cấp Chợ, đường giao, và số thuế |
+| Giao hàng | **trong phạm vi sau FIRST DONE nhưng đang KHOÁ** — đã có phép đo Chợ cấp 25; còn thiếu bảng cấp Chợ đầy đủ và đường giao live có hậu kiểm |
 | LLM | bộ chọn có ràng buộc ở hai tầng; chiến lược (phút) và chiến thuật (giây) |
 | Tri thức | `knowledge/*.yaml`, mỗi mẩu có nguồn và ngày |
 | Bằng chứng | bất biến, gắn occurrence, G1–G6 |
@@ -78,17 +87,42 @@ mà người chơi có. Người chơi giỏi chính là trần.
 | Nhiều máy, điều phối từ xa | một agent, một máy |
 | Model cloud, kể cả để đo | trần là người chơi, không cần cloud |
 
-### 3.4 Điều kiện đóng phạm vi này
+### 3.4 Nghiệm thu FIRST DONE và mốc sản phẩm sau đó
 
-Phạm vi coi là hoàn thành khi **đồng thời**:
+FIRST DONE là **một vòng năm đạo đã xuất phát** của cùng một nhân vật trên một
+client. Nhận mốc này chỉ khi đồng thời:
 
-1. **G1–G6 đạt** — trong đó G6 cần chữ ký uỷ quyền của người vận hành, không phải code;
-2. **Hàng đợi đội hình lên 5/5** và giữ được, buff không về 0;
-3. **H1 đo được và so được với trần** trên bốn thước: giờ chạy tự chủ · % hàng đợi đầy và
-   buff ≠ 0 · lần LLM vào cuộc / 100 tick · lần tự phát hiện game đổi;
-4. **`ACCUMULATE` chạy trọn một chu kỳ order**, kể cả khi gặp khan mỏ và tụt bậc.
+1. Người vận hành cấu hình và ủy quyền một công việc GATHER có giới hạn cho
+   đúng nhân vật. Harness tự đi năm đạo trong phạm vi đó, không hỏi duyệt từng
+   march. Quyền công việc không mở tài khoản, mật khẩu, xóa tài khoản, chuyển
+   tài sản, gem hay item tiêu hao; các hành động rủi ro/ngoài GATHER cần quyết
+   định riêng. Mỗi dispatch được kiểm scope, đúng cửa sổ và quan sát tươi.
+2. Trên **mỗi** màn New Troop mở mới, game tự điền cặp chỉ huy theo gợi ý của
+   nó. Harness không sửa cặp, chỉ bấm March khi khung hiện tại cho thấy đội
+   hình đã điền và nút March hợp lệ, không có can thiệp/đổi selection ngoài
+   luồng. Không cần đọc danh tính từng chỉ huy hay chứng minh nhãn xếp hạng
+   “best” riêng; thiếu đội hình hoặc state không rõ thì dừng.
+3. Năm lần điều quân có chuỗi bằng chứng append-only theo cùng nhân vật/công
+   việc. Hậu kiểm mới sau từng dispatch cho thấy `Queue used` tăng đúng một và
+   lần cuối đạt 5/5. `DISPATCHED` không phải `VERIFIED`; một ảnh 5/5 cũ hoặc
+   một lần có can thiệp tay không đủ chứng minh vòng tự chủ.
+4. Báo cáo đóng vòng ghi thời điểm, nguồn và ước lượng thời gian đào/về nếu có;
+   ước lượng được phân biệt với số đo và không là điều kiện kết thúc. Không
+   cần chờ quân về, nạp lại slot, duy trì buff hay chạy đủ 24 giờ.
 
-Giao hàng **không** nằm trong điều kiện đóng, vì nó đang khoá.
+Các kiểm tra an toàn G1/G2/G5 liên quan đến đường input và hậu kiểm phải có
+bằng chứng đúng occurrence mới trước khi nhận live. G3/B003/R3/G6 trong
+[GOAL](GOAL.md) vẫn là audit/benchmark/endurance tương ứng, không biến thành
+duyệt thủ công của năm march. Local LLM chỉ được chọn trong ứng viên đã lọc
+khi thực sự cần; benchmark/tần suất model không phải cổng giả cho đường
+deterministic này.
+
+Mốc **farm mỗi ngày** sau FIRST DONE còn cần tự phát hiện quân trở về, nạp lại,
+duy trì buff, đo H1 so với mốc người chơi trên giờ
+tự chủ, hàng đợi/buff, tần suất LLM và phát hiện game đổi; `ACCUMULATE` phải
+chạy trọn một chu kỳ order kể cả khan mỏ và tụt bậc. Nhiều nhân vật, nhiệm vụ
+hằng ngày và các nhánh khác chỉ mở khi lát cắt một nhân vật đã có bằng chứng.
+Giao hàng vẫn khoá và không thuộc nghiệm thu hiện tại.
 
 ### 3.5 Giả định
 
@@ -136,8 +170,9 @@ Thu hình client ROK đang hiển thị, chỉ bằng CPU/RAM, gắn HWND, kèm 
 Chuyển khung hình thành các hộp từ, rồi lắp thành cụm từ có nghĩa và nối đất tới các mục
 tiêu chính xác đã khai báo. Đường OCR chính thức là `Windows.Media.Ocr`.
 
-**Yêu cầu hiệu năng (mới, chưa đạt):** một khung hình phải hoàn tất dưới **400 ms**.
-Hiện trạng đo ngày 2026-09-19 là **4.525 ms** — xem `docs/COVERAGE.md` §4.
+**Yêu cầu hiệu năng:** một khung hình phải hoàn tất dưới **400 ms** theo phép đo
+được định nghĩa trong [SRS](SRS.md). Số đo và mức chứng minh hiện hành chỉ lấy từ
+[COMPLETION_AUDIT](COMPLETION_AUDIT.md) / [runtime-status](../runtime-status.yaml).
 
 ### F03 — Phân loại trạng thái
 Từ bằng chứng khung hình, phân loại tất định trạng thái UI trong từ vựng đã khai báo.
@@ -149,17 +184,33 @@ Biên dịch luồng mission đã huấn luyện thành đồ thị runtime, và
 ra tập hành động hợp lệ đã lọc. Đây là tập mà LLM được phép chọn trong đó.
 
 ### F05 — Biên quyết định LLM local
-Gửi gói ngữ cảnh tối thiểu khi và chỉ khi có `NEEDS_DECISION`/`UNKNOWN_STATE`. Nhận về
-một ứng viên có sẵn, hoặc `NEEDS_DECISION`, hoặc `retraining_required`. Mọi phản hồi
-không khớp ứng viên có sẵn đều bị từ chối.
+Chỉ gửi gói ngữ cảnh tối thiểu khi có bài toán lựa chọn thực sự và các ứng viên
+hợp lệ đã được harness lọc từ bằng chứng tươi. `UNKNOWN_STATE` không cấp quyền
+chọn hay phát input: dừng hành động, quan sát lại hoặc báo `retraining_required`.
+LLM chỉ được trả một ứng viên có sẵn, `NEEDS_DECISION` hoặc
+`retraining_required`. Mọi phản hồi không khớp tập ứng viên, lỗi hoặc timeout
+đều bị từ chối và ghi telemetry.
 
-### F06 — Actuation có chốt chặn
-Phát chuột/phím qua Win32 chỉ khi: cửa sổ đích đúng, foreground ổn định, khung hình còn
-tươi, phê duyệt của occurrence hiện tại có mặt. Bất kỳ điều kiện nào hỏng thì không phát.
+### F06 — Actuation có chốt chặn và quyền phiên
+Phát chuột/phím qua Win32 chỉ khi cửa sổ đích đúng, foreground ổn định, khung
+hình còn tươi, action/target được grounding chính xác và quyền còn hiệu lực.
+Trong FIRST DONE, người vận hành cấu hình/ủy quyền **một công việc năm đạo có
+giới hạn** trước khi chạy; quyền này ràng buộc nhân vật, hành động GATHER, tối
+đa năm dispatch, điều kiện dừng và log. Harness kiểm lại scope tại mỗi dispatch;
+đó là kiểm nội bộ, không yêu cầu duyệt thủ công từng lượt. Quyền theo occurrence
+của các phép thử B003 cũ không tự biến thành quyền công việc mới.
+Bộ hành động được phép phải là tập con của catalog semantic GATHER đã biên dịch;
+chuỗi lạ hoặc hành động ngoài GATHER không thể tự cấp quyền bằng cách ghi vào
+artifact công việc. FIRST DONE không cần dùng item; mọi thao tác dùng item ở
+mốc sau cần item và mục đích nằm trong quyền riêng.
+Bất kỳ điều kiện nào hỏng thì không phát.
 
 ### F07 — Xác minh hậu điều kiện
-Sau hành động, thu khung hình mới và chứng minh hậu điều kiện đã khai báo. Với GATHER,
-hậu điều kiện là `Queue used` tăng đúng 1.
+Sau hành động, thu khung hình mới và chứng minh hậu điều kiện đã khai báo. Với
+dispatch GATHER khi có slot, `Queue used` tăng đúng 1; FIRST DONE cần năm
+postcondition liên tiếp tới 5/5. Phát hiện quân trở về, nạp lại và dùng buff
+thuộc mốc sau và có hậu điều kiện riêng gắn quan sát mới. Không đồng nhất
+`DISPATCHED` với `VERIFIED` và không lấy biên nhận input làm bằng chứng.
 
 ### F08 — Bằng chứng bất biến
 Mỗi occurrence ghi bằng chứng append-only, gắn danh tính (mission/task/run/character).
@@ -175,15 +226,20 @@ Lưu bền các số đo nhịp và suy ra lịch từ chúng: thời gian quân
 gian quân về**, thời gian slot trống, thời gian còn lại của buff. Lịch **không** được lấy
 từ hằng số viết cứng trong code.
 
-### F11 — Liên tục hoá năng suất *(mới)*
-Giữ hàng đợi đầy và buff tăng tốc thu thập luôn khác 0.
+### F11 — Liên tục hoá năng suất sau FIRST DONE
+Trong mốc farm hằng ngày, đo thời gian hàng đợi đầy và slot trống; khi quân về,
+phát hiện và nạp lại theo trạng thái mới trong giới hạn slot trống đã cấu hình
+cho phiên. Quan sát thời gian buff còn lại và
+duy trì buff tăng tốc thu thập khác 0 khi item đã được phép và có sẵn; nếu
+không đủ điều kiện thì dừng đúng chốt, ghi gap, không tuyên bố đạt 24 giờ.
 - Buff `8-Hour Enhanced Gathering`: +50%, 8 giờ, **thời lượng cộng dồn** khi dùng thêm.
-- Ba item phủ đủ 24 giờ.
+- Ba item có thể phủ đủ 24 giờ theo thời lượng danh nghĩa; tồn kho và hiệu lực
+  thực tế phải được quan sát, không giả định.
 - Đường thao tác: mở Items → tab `BOOSTS` → chọn item → đọc khung chi tiết → `USE` →
   xác nhận.
 - **Chốt an toàn:** hộp thoại xác nhận có `YES` **màu đỏ bên trái** và `NO` **màu xanh
   bên phải** — ngược quy ước thường gặp. Nối đất bắt buộc theo nhãn chữ, cấm theo màu
-  hoặc vị trí.
+  hoặc vị trí. Dùng item phải thuộc quyền phiên đã giới hạn tại F06.
 
 ### F12 — Phát hiện game thay đổi *(mới)*
 Khi một control, nhãn, hay hình dạng hộp thoại đã huấn luyện không còn khớp khung hình
@@ -201,7 +257,8 @@ Game cho phép chuyển hết, nên **không có trần từng lần giao**. Rà
 an toàn: mỗi bút toán bắt buộc có tham chiếu bằng chứng, và biên nhận gửi lệnh không phải
 bằng chứng chuyển hàng.
 
-*Đã hiện thực: `autorok/mission/order.py`.*
+Module hợp đồng: `autorok/mission/order.py`; mức chứng minh runtime theo
+[runtime-status](../runtime-status.yaml), không suy từ sự tồn tại của file.
 
 ### F14 — Đội hình và xoay vòng hai cấp
 Mỗi nhân vật 5 đạo quân. Chỉ vào lại một nhân vật khi **cả 5 đạo đã về**. Năm đạo không về
@@ -214,53 +271,66 @@ tài khoản và nhân vật là **đầu vào lúc chạy**, không phải hằ
 "Hàng đợi đầy" đo ở **cấp đội hình**: một nhân vật cạn dần là bình thường, đội hình mới là
 thứ phải luôn bão hoà.
 
-*Đã hiện thực: `autorok/mission/fleet.py`.*
+Module hợp đồng: `autorok/mission/fleet.py`; mức chứng minh runtime theo
+[runtime-status](../runtime-status.yaml).
 
 ### F15 — Thang suy giảm
-Fail-closed ở **cấp hành động**, không bao giờ dừng ở **cấp vòng lặp**:
+Khi chỉ một hành động bị chặn vì thiếu điều kiện gameplay, tiếp tục vòng quan
+sát ở bậc an toàn hơn:
 
 ```
 ORDER_WORK → DEFAULT_FARM → SCARCITY_FILL → DAILY_CITIZEN → OBSERVE_ONLY
 ```
 
-Hành động bị chặn thì tụt bậc, không đứng hình. Mỗi lần tụt ghi lại kèm lý do; tụt bậc kéo
-dài là bằng chứng về vương quốc và phải được đưa lên LLM, không bị nuốt im.
+Mỗi lần tụt ghi lại kèm lý do; tụt bậc kéo dài là bằng chứng về vương quốc và
+phải được đưa lên LLM, không bị nuốt im. Hết quyền phiên, sai cửa sổ/foreground,
+không xác định được trạng thái hoặc vi phạm giới hạn an toàn là **điều kiện dừng
+phiên**, không được dùng thang suy giảm để tiếp tục phát input.
 
-*Bậc `SCARCITY_FILL` đã hiện thực: `autorok/mission/allocation.py`.*
+Module hợp đồng cho `SCARCITY_FILL`: `autorok/mission/allocation.py`; mức chứng
+minh runtime theo [runtime-status](../runtime-status.yaml).
 
 ### F16 — Onboarding của LLM local
 Sáu pha trước khi được ra bất kỳ quyết định hành động nào: nạp `knowledge/` · xác định vị trí
 · khảo sát nhân vật nếu chưa có profile · dựng trạng thái đội hình · xác định mục tiêu hiệu
 lực · kiểm tra buff.
 
-Chỉ pha 0 được phép chặn toàn bộ. Các pha khác hỏng thì tụt bậc theo F15.
-**Không bao giờ tồn tại trạng thái "không có mục tiêu".**
+Ở tầng lập kế hoạch, chỉ pha 0 chặn khởi động; pha khác hỏng thì chọn một mục
+tiêu dự phòng theo F15. Mục tiêu dự phòng không cấp quyền hành động: thiếu
+quan sát, quyền công việc hoặc chốt an toàn thì hành động GATHER phải dừng/quan sát
+an toàn theo F06/F15, không phát input. "Không có mục tiêu" không đồng nghĩa
+"luôn có hành động hợp lệ".
 
 *Đặc tả đầy đủ: [`docs/LLM_GAMEPLAY_SPEC.md`](LLM_GAMEPLAY_SPEC.md).*
 
 ### F17 — Giao hàng như bài toán logistics *(khoá)*
 Giao không phải một cú bấm. Người nhận là một người chơi được chỉ định, phải **tele lại gần**
-trước, và thông lượng bị chặn bởi **cấp Chợ**: hàng mỗi lượt × số xe, trong đó số xe chính là
-một hàng đợi thứ hai độc lập với 5 đạo quân.
+trước, và thông lượng bị chặn bởi **cấp Chợ** cùng số march dành cho vận chuyển.
+Vận chuyển dùng **chung 5 slot march với farm**, không có hàng đợi thứ hai;
+slot vận chuyển là slot tạm không farm. Hợp đồng số học tại Chợ cấp 25 được
+ghi trong [SRS §7](SRS.md) và kiểm bởi `tests/test_mission_transport.py`.
 
-**Trạng thái: khoá.** Chưa quan sát được bảng *cấp Chợ → hàng mỗi lượt*, chưa chọn đường giao,
-chưa có số thuế. Không xây nửa vời.
+**Trạng thái: khoá cho live.** Đã quan sát 10M net/chuyến và thuế 8% ở Chợ cấp
+25, nhưng chưa có bảng *cấp Chợ → hàng mỗi lượt* đầy đủ, đường giao và hậu
+kiểm live. Không suy các cấp khác từ một phép đo hoặc mở nhánh này trước FIRST
+DONE.
 
 ---
 
 ## 6. Yêu cầu phi chức năng
 
-| Mã | Yêu cầu | Ngưỡng | Hiện trạng |
-|---|---|---|---|
-| N01 | Chỉ CPU/RAM | không OpenCL, không CUDA | **đạt** |
-| N02 | Độ trễ OCR một khung hình | < 400 ms | **chưa đạt** — 4.525 ms |
-| N03 | Độ trễ phát input | < 5 ms | **đạt** — < 1 ms (SendInput) |
-| N04 | Độ trễ một quyết định LLM | < 10 s | **chưa đạt** — trung vị 20,6 s |
-| N05 | Không input ngoài ý muốn | 0 | **đạt** — có bằng chứng G1 |
-| N06 | Bằng chứng bất biến | 100% occurrence | **đạt** |
+| Mã | Yêu cầu | Ngưỡng |
+|---|---|---|
+| N01 | Chỉ CPU/RAM | không OpenCL, không CUDA |
+| N02 | Độ trễ OCR một khung hình | < 400 ms |
+| N03 | Độ trễ phát input | < 5 ms |
+| N04 | Độ trễ một quyết định LLM | < 10 s |
+| N05 | Không input ngoài ý muốn | 0 |
+| N06 | Bằng chứng bất biến | 100% occurrence |
 
-N02 và N04 là hai ràng buộc hiệu năng thật của dự án. Chúng nằm ở **OCR** và ở **model**,
-không nằm ở tốc độ di chuyển chuột.
+N02 và N04 là hai ràng buộc hiệu năng của sản phẩm. Số đo, môi trường đo và
+giới hạn của từng chứng cứ nằm tại [COMPLETION_AUDIT](COMPLETION_AUDIT.md) và
+[runtime-status](../runtime-status.yaml), không cập nhật trạng thái ở PRD.
 
 ---
 
@@ -271,7 +341,7 @@ không nằm ở tốc độ di chuyển chuột.
 | Game cập nhật đổi bố cục UI | toàn bộ nối đất sai | F12 phát hiện và dừng; huấn luyện lại |
 | Bấm nhầm `YES`/`NO` do đảo màu | tiêu item ngoài ý muốn | F11 bắt buộc nối đất theo nhãn chữ |
 | Tiêu tài nguyên ngoài ý muốn | mất tài sản không hoàn tác được | mọi hành động lớp `spend` thuộc quyền người vận hành |
-| Bằng chứng và sổ đăng ký kể hai chuyện khác nhau | nghiệm thu sai | một nguồn sự thật duy nhất, tính bằng máy |
+| Bằng chứng và trạng thái kể hai chuyện khác nhau | nghiệm thu sai | audit G1–G6 tính từ artifact; capability chỉ nâng trong `runtime-status.yaml` theo đúng mức chứng minh |
 | Harness không đủ sâu | LLM chậm và nhiễu | đo N02/N04 và siết dần |
 
 ---

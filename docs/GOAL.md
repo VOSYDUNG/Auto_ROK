@@ -1,138 +1,77 @@
 # Mục tiêu Auto_ROK
 
-Ngày: 2026-09-19 · Chịu sự điều chỉnh của [`docs/PROJECT_DECLARATION.md`](PROJECT_DECLARATION.md)
+Nguồn mục đích và ranh giới: [PROJECT_DECLARATION](PROJECT_DECLARATION.md).
+Nguồn yêu cầu/điều kiện sản phẩm: [PRD](PRD.md). Nguồn claim đã chứng minh:
+[runtime-status.yaml](../runtime-status.yaml) và [COMPLETION_AUDIT](COMPLETION_AUDIT.md).
+Tài liệu này sở hữu **mục tiêu hiện hành, FIRST DONE và định nghĩa G1–G6**;
+không ghi lại tiến độ thực thi như một bản thứ hai.
 
----
+## Kết quả muốn đạt
 
-## 1. Mục tiêu sản phẩm
+LLM local của người vận hành dùng một harness xác định để farm Rise of Kingdoms
+mỗi ngày. Harness quan sát, dựng fact có nguồn, lọc hành động, chặn input,
+checkpoint và xác minh; LLM chỉ nhận bài toán lựa chọn nhỏ, có thể từ chối.
+Không lấy việc gọi được model hay một lần điều quân làm bằng chứng đã đạt kết quả.
 
-Đưa một mô hình ngôn ngữ chạy cục bộ vào vị trí biên quyết định của một vòng lặp vận hành
-Rise of Kingdoms, trên đúng một máy Windows thật, một tài khoản đã đăng nhập, một client
-đang hiển thị, chỉ dùng CPU và RAM.
+## FIRST DONE — một vòng 5 đạo đã đi farm
 
-Chủ ngữ là **LLM local**. Harness tồn tại để biến một tình huống game thành một bài toán
-quyết định nhỏ, đáng tin, có bằng chứng — rồi thi hành đúng một hành động đã được chốt
-chặn và chứng minh kết quả nhìn thấy được.
+Trên một client ROK hiển thị và đã đăng nhập, ở một máy Windows, harness tự
+đưa **năm đạo của cùng một nhân vật** đi farm trong một công việc GATHER được
+người vận hành cấu hình/ủy quyền lúc bắt đầu. New Troop **tự điền cặp chỉ huy
+theo gợi ý của game**; harness giữ nguyên cặp đó, bấm March rồi hậu kiểm.
+Nếu cặp trên màn hiện tại trống/không đọc được hoặc bị đổi ngoài luồng thì
+dừng lượt, không tự xếp hạng thay game. Không duyệt thủ công từng march.
 
-Hệ thống chỉ được coi là thành công khi vòng lặp đó **xác định, đo được, và fail-closed**.
+Vòng hoàn tất khi cả năm lệnh điều quân có hậu kiểm bằng quan sát mới: hàng đợi
+tăng đúng một sau từng lượt và đạt 5/5 cho đúng nhân vật/công việc. Biên nhận
+input hoặc ảnh 5/5 của occurrence cũ không đủ. Thời gian đào/về có thể được
+ước lượng và ghi rõ nguồn, độ bất định; **không phải chờ quân về** để đạt FIRST
+DONE. Quyền công việc chỉ bao phủ đường GATHER cần để đưa năm đạo đi; hành động
+ngoài phạm vi hoặc rủi ro cao cần quyền riêng. Xem [PRD §3.4](PRD.md) và
+[SESSION_AUTHORITY](SESSION_AUTHORITY.md).
 
-> Lưu ý sửa sai: bản GOAL trước ngày 2026-09-19 viết *"harness là sản phẩm mà LLM local
-> được huấn luyện và kiểm thử xoay quanh nó"*. Đó là đảo ngược. Dự án xoay quanh LLM
-> local; harness là nền 80%.
+Đây là mục tiêu cần xây và chứng minh, chưa phải quyền phát input hiện có.
+[runtime-status](../runtime-status.yaml) giữ mức đã chứng minh; lần 5/5 lịch sử
+có can thiệp không chứng minh vòng tự chủ này. Duy trì farm 24 giờ, phát hiện
+quân về, nạp lại, buff và nhiều nhân vật là các mốc **sau** FIRST DONE. Lát cắt
+kỹ thuật hiện hành vẫn là `GATHER_RESOURCE` một nhân vật.
 
----
+## Hợp đồng quyết định
 
-## 2. User story của LLM local
+Khi có quan sát tươi, gắn nguồn gốc, và nhiều hơn một lựa chọn hợp lệ thật sự,
+harness gửi cho LLM local ngữ cảnh tối thiểu cùng các `ActionChoice` đã lọc.
+LLM được chọn đúng một ứng viên hiện có, trả `NEEDS_DECISION`, hoặc báo
+`retraining_required` khi giao diện đã đổi. Ứng viên bịa, sai format, hết hạn
+hoặc response chậm đều fail closed. Harness không đưa toạ độ thô, thông tin
+ẩn, quyền phát input, đồng hồ hoặc quyết định lịch cho model. Model local cụ
+thể là cấu hình chạy có thể thay thế; nó không định nghĩa mục tiêu hay quyền.
 
-Đây là tài liệu trung tâm của dự án, không phải phụ lục.
+Dịch vụ có thể sẵn sàng nhưng không bắt buộc nhận câu hỏi ở mỗi tick. Cặp
+New Troop tự điền là fact cần đọc, không phải bài toán xếp hạng cho model. Huấn
+luyện/benchmark mức tham gia của LLM là nhánh đo riêng; FIRST DONE không đặt
+số lần gọi model tùy ý làm điều kiện cho một đường deterministic đã đủ rõ.
 
-**Khi** harness có một quan sát tươi, gắn nguồn gốc, và có nhiều hơn một bước đi hợp lệ,
-**thì** LLM local nhận đúng một gói ngữ cảnh có cấu trúc tối thiểu cùng danh sách ứng
-viên đã được lọc sẵn.
+## G1–G6 — audit lịch sử và cổng cho đợt live tương ứng
 
-Nó trả về đúng một trong ba thứ:
-
-1. **một `ActionChoice` có sẵn trong danh sách** — không được bịa ra lựa chọn mới;
-2. **`NEEDS_DECISION`** — khi bằng chứng không đủ để chọn;
-3. **`retraining_required`** — khi nhận ra bề mặt game đã thay đổi so với kiến thức đã
-   huấn luyện.
-
-Nó **không bao giờ** nhìn thấy toạ độ màn hình thô, trạng thái game ẩn, bộ nhớ tiến trình,
-hay một bề mặt điều khiển desktop tự do. Nó **không bao giờ** phát chuột hay phím.
-
-Model mục tiêu thuộc lớp Qwen hoặc GPT-OSS chạy cục bộ. Phần suy luận của nó là một biên
-quyết định nhỏ, khoảng 20% vòng lặp; 80% còn lại và **toàn bộ** quyết định an toàn thuộc
-về logic xác định của harness.
-
-### Luôn bật, không luôn có việc
-
-Dịch vụ model chạy thường trực như người quan sát rảnh. "Luôn bật" không có nghĩa "luôn
-được giao nhiệm vụ". Harness chỉ gửi gói khi có tín hiệu `NEEDS_DECISION` hoặc
-`UNKNOWN_STATE` thật. Model không sở hữu đồng hồ, lịch, cờ hoàn thành, quyền tiêu tài
-nguyên, hay kênh phát input.
-
----
-
-## 3. Hợp đồng harness
-
-Harness sở hữu:
-
-- ROI client cố định đã huấn luyện, thu hình và tri giác chỉ bằng CPU;
-- OCR/CV, chiếu trạng thái, nguồn gốc khung hình;
-- đồ thị mission, chính sách, lọc ứng viên;
-- nối đất mục tiêu, cô lập input, actuation có chốt chặn;
-- phê duyệt gắn occurrence, checkpoint, retry/recovery, huỷ lệnh;
-- xác minh hậu điều kiện trên khung hình tươi, và bằng chứng bất biến;
-- dòng thời gian mission dựa trên dữ liệu, và kho kiến thức cục bộ cho các dữ kiện về
-  reset, cooldown, cửa sổ sự kiện và hàng đợi.
-
-**Toạ độ là ràng buộc quan sát/hiệu năng, không phải giấy phép để bấm.** Mọi hành động
-vẫn phải được nối đất vào khung hình hiện tại, occurrence hiện tại và trạng thái phê
-duyệt hiện tại.
-
----
-
-## 4. Lát cắt đang nhận
-
-`GATHER_RESOURCE` một nhân vật là lát cắt dọc tham chiếu. Các mission khác chưa được đưa
-vào nghiệm thu cho tới khi có hợp đồng quan sát, chính sách, hành động và xác minh của
-riêng chúng.
-
-Nhánh mission thứ hai `CLAIM_ALLIANCE_TERRITORY_RSS` đã có mặt ở mức **partial** và đang
-bị chặn bởi blocker `A001` — chữ ký hoàn thành sau nút Claim chưa được huấn luyện.
-
-Bản đồ trạng thái/mission có ràng buộc bằng chứng nằm ở
-[`docs/GAME_STATE_MISSION_MATRIX.md`](GAME_STATE_MISSION_MATRIX.md); nó là hàng rào phạm
-vi, ngăn việc nâng cấp các nhánh chưa được xác minh.
-
-Entrypoint duy nhất: `scripts/run_gather_tick.py`.
-
----
-
-## 5. Định nghĩa hoàn thành — G1 đến G6
-
-Đây là **hệ đánh số duy nhất** của dự án. Nó được thi hành bằng máy, không bằng lời:
-`scripts/audit_goal_readiness.py` đọc bằng chứng thật trong `workspace/evidence/` và trả
-về pass/blocked cho từng cổng.
-
-| Cổng | Nội dung |
+| Cổng | Điều kiện phải có bằng chứng |
 |---|---|
-| **G1** | Cô lập input trên host Windows thật: ràng buộc đúng cửa sổ đích, foreground ổn định, từ chối khung hình cũ, huỷ lệnh/khôi phục được, và không có input ngoài ý muốn |
-| **G2** | Ngưỡng CPU và OCR/trạng thái đạt trên tập holdout, mà không hạ đường nối đất runtime xuống mức mờ hoặc phụ thuộc GPU |
-| **G3** | Hợp đồng `NEEDS_DECISION` của LLM local được đo trên các ca holdout rời khung hình. Chỉ gọi được model thì không phải nghiệm thu |
-| **G4** | Phê duyệt B003 gắn tường minh vào occurrence, nhân vật, và lựa chọn quân/tướng đang nhìn thấy |
-| **G5** | Một tick GATHER có giới hạn chứng minh được hậu điều kiện nhìn thấy `Queue used +1`, kèm bằng chứng huỷ/tiếp tục/khôi phục, không replay ngoài phạm vi |
-| **G6** | Chỉ sau khi G1–G5 đạt mới được chạy endurance, và chỉ khi có uỷ quyền tường minh của người vận hành |
+| G1 | Cô lập input trên host Windows thật, đúng cửa sổ/foreground, từ chối khung cũ, có huỷ/khôi phục và không có input ngoài ý muốn |
+| G2 | CPU/OCR/trạng thái đạt trên holdout mà không hạ chuẩn grounding hoặc phụ thuộc GPU |
+| G3 | Biên `NEEDS_DECISION` của LLM local được đo trên ca rời khung; gọi được endpoint không đủ |
+| G4 | Audit hiện hành kiểm quyền B003 gắn một occurrence lịch sử; quyền cũ không dùng lại. B003 là đường benchmark/R3, không phải duyệt từng march của FIRST DONE |
+| G5 | GATHER có giới hạn chứng minh Queue used +1 bằng quan sát tươi, với cancel/resume/recovery đúng hợp đồng |
+| G6 | Chỉ sau G1–G5, đủ lặp R3 và uỷ quyền tường minh mới xét endurance; G6 thuộc promotion endurance sau FIRST DONE |
 
-Bằng chứng cũ, thiếu, mơ hồ, lệch nhau hay không kiểm chứng được đều **dừng vòng lặp**.
-Không phát input trước khi cổng liên quan và phê duyệt tương ứng có mặt.
+`scripts/audit_goal_readiness.py` kiểm G1–G6 từ artifact đã lưu. Audit PASS trên
+bằng chứng cũ không tự cấp quyền cho công việc mới. FIRST DONE cần quyền công
+việc GATHER ban đầu và hậu kiểm 5/5 theo PRD, không đợi G6 endurance; G4 hiện
+tại chỉ chứng minh phê duyệt của occurrence lịch sử. Không thay nó bằng cờ cho
+phép chung.
 
-### Điều kiện của G6
+## Ranh giới
 
-Lặp R3 phải được người vận hành uỷ quyền riêng. Bản audit chỉ chấp nhận file
-`workspace/evidence/gather/R3_ENDURANCE_AUTHORIZATION.json` gắn đúng hợp đồng occurrence
-GATHER đang hoạt động và có `max_additional_runs` tường minh. Bằng chứng runtime mỗi tick
-là append-only; đường dẫn trùng thì fail-closed chứ không ghi đè bản ghi cũ.
-
----
-
-## 6. Mục tiêu năng suất của lát cắt GATHER
-
-Ngoài việc đạt G1–G6, lát cắt GATHER có một mục tiêu vận hành đo được:
-
-- **lấp đầy hàng đợi hành quân** — đưa chỉ số `n/5` lên `5/5`;
-- **giữ buff tăng tốc thu thập không về 0** trong suốt chu kỳ 24h.
-
-Hai đòn bẩy này độc lập và đều có thể gãy nhịp độc lập. Cách tính và cách đo nằm ở
-[`knowledge/gathering_continuity_2026-09-19.yaml`](../knowledge/gathering_continuity_2026-09-19.yaml).
-
----
-
-## 7. Không thuộc phạm vi
-
-- không Docker, máy ảo, Hyper-V, không đường chạy GPU;
-- không tác tử desktop tự do không giới hạn;
-- không đọc bộ nhớ tiến trình, không chèn code vào game;
-- không nghiệm thu chỉ dựa trên việc gọi được model qua HTTP, một biên nhận gửi lệnh, hay
-  một tỉ lệ OCR chung chung;
-- không tái dùng phê duyệt cũ hay replay cũ ngoài occurrence hiện tại.
+Không Docker, VM, Hyper-V hay GPU; không đọc bộ nhớ tiến trình, chèn code, tác tử desktop tự do,
+phát input từ model, tái sử dụng approval hoặc replay cũ. Mọi mục tiêu có toạ độ
+phải được grounding từ khung hiện tại. `DISPATCHED` không phải `VERIFIED`.
+Các nhánh mission khác chỉ mở khi có hợp đồng quan sát, chính sách, hành động
+và xác minh riêng; xem [mission matrix](GAME_STATE_MISSION_MATRIX.md).

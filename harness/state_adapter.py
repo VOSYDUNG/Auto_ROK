@@ -34,6 +34,8 @@ def to_tool_snapshot(
     classification: StateClassification,
     scene: SceneGraph,
     flow: TaskFlow,
+    *,
+    observation_timestamp: float | None = None,
 ) -> ToolSnapshot:
     """Build a frame-bound runtime surface from a compiled task flow.
 
@@ -61,4 +63,5 @@ def to_tool_snapshot(
         allowed_actions=allowed,
         target_ids=grounded,
         last_feedback={},
+        observed_at=observation_timestamp,
     )

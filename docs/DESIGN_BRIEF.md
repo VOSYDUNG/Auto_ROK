@@ -1,9 +1,20 @@
 # Design Brief — Auto_ROK
 
-Ngày: 2026-09-19 · Chịu sự điều chỉnh của [`docs/PROJECT_DECLARATION.md`](PROJECT_DECLARATION.md)
+Khảo sát kiến trúc: 2026-09-19 trên commit `102c6a1` · Chịu sự điều chỉnh của
+[`docs/PROJECT_DECLARATION.md`](PROJECT_DECLARATION.md)
 
 Tài liệu này ghi kết quả **research kiến trúc** trên code đang có, rồi rút ra thiết kế cho
 vòng vận hành mà LLM local làm chủ ngữ. Nó là cầu giữa `GOAL`/`PRD` và code.
+Các câu "đã có"/"đang chạy" bên dưới là phát hiện tại commit khảo sát, **không**
+phải xác nhận wiring hoặc readiness của HEAD hiện tại; mức đã chứng minh nằm ở
+[`runtime-status.yaml`](../runtime-status.yaml) và
+[`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md).
+
+Theo mục tiêu hiện hành, thiết kế được áp dụng trước cho FIRST DONE: một nhân
+vật đưa năm đạo đi farm theo cặp New Troop tự điền, hậu kiểm 0→5/5 dưới một quyền
+công việc ban đầu; không duyệt từng march. Theo dõi quân về, nạp lại, buff,
+24 giờ, nhiều nhân vật, order và các mission khác là pha sau theo
+[`GOAL`](GOAL.md).
 
 ---
 
@@ -79,11 +90,14 @@ Merge ngày 2026-09-19. Có `OperatorSnapshot`, `Provenance` bắt buộc, `Obse
 **Không file nào import nó.** Nhưng đó chính xác là schema cho dữ liệu khảo sát nhân vật
 (Tướng / City Hall / Chợ) mà người vận hành mô tả.
 
-### R6. Nợ đã biết, không phát sinh thêm
+### R6. Nợ ghi nhận tại thời điểm khảo sát
 
-Từ `docs/COVERAGE.md` §5, còn nguyên: chưa có `pyproject.toml`/`conftest.py`; CI chạy
-22/56 file test trên Linux; 16 module `harness/` không có trong đồ thị; hai bộ contract song
-song; bốn đường chạy mission song song; OCR 4.525 ms so với ngưỡng 400 ms.
+Tại commit khảo sát, `docs/COVERAGE.md` §5 ghi: chưa có
+`pyproject.toml`/`conftest.py`; CI từng chạy 22/56 file test trên Linux; 16
+module `harness/` không có trong đồ thị; hai bộ contract song song; bốn đường
+chạy mission song song; OCR 4.525 ms so với ngưỡng 400 ms. Đây là đầu vào
+research có ngày, không phải danh sách nợ hoặc số đo hiện hành; đối chiếu HEAD
+và nguồn trạng thái trước khi mở gói sửa.
 
 ---
 
@@ -92,6 +106,10 @@ song; bốn đường chạy mission song song; OCR 4.525 ms so với ngưỡng 
 ### D1. Hai tầng quyết định, hai nhịp, hai hợp đồng
 
 Đây là trục của toàn bộ thiết kế.
+Trong FIRST DONE một nhân vật, chỉ biên lựa chọn có ràng buộc trên lát cắt
+GATHER là điều kiện sản phẩm; tầng chiến lược nhiều nhân vật/order ở đây là
+hướng kiến trúc về sau, không phải capability đã được nối dây hoặc cổng vòng
+5 đạo.
 
 | | **Tầng chiến lược** (mới nối) | **Tầng chiến thuật** (đang chạy) |
 |---|---|---|

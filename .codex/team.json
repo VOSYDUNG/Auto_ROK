@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "project": "Auto_ROK",
+  "goal": "FIRST DONE: one startup-authorized GATHER job autonomously dispatches five farm marches for one visible ROK character using the pair auto-filled by each fresh New Troop screen, with verified queue transitions from 0/5 to 5/5.",
+  "profile": "inherit",
+  "root_document": "docs/ROOT.md",
+  "available_models": [],
+  "max_parallel_children": 2,
+  "roles": [
+    "nghien_cuu",
+    "tho_dung",
+    "kiem_luat",
+    "nguoi_thu"
+  ],
+  "sources": [
+    "docs/ROOT.md",
+    "docs/AGENT_OPERATIONS.md",
+    "docs/PROJECT_DECLARATION.md",
+    "docs/GOAL.md",
+    "docs/PRD.md",
+    "docs/SRS.md",
+    "docs/BUILD_PLAN.md",
+    "docs/DESIGN_BRIEF.md",
+    "docs/COMPLETION_AUDIT.md",
+    "runtime-status.yaml",
+    "config/engineering_graph.yaml"
+  ],
+  "constraints": [
+    "Root model is selected by the user in the current session; role model and effort are resolved dynamically per assignment, not pinned in repository policy.",
+    "FIRST DONE targets one character and one five-march round with fresh per-march queue verification and no per-march manual approval. Return/refill, buff continuity and 24-hour endurance are later milestones.",
+    "Team configuration never grants live input, mission ticks, model endpoint calls, model-server changes or account action; these require separate task-specific authority and evidence.",
+    "Use the graph completion ladder: planned behavior and offline tests never promote live, repeatable or stable claims.",
+    "ROOT alone maintains docs/ROOT.md; worker records stay under workspace/agents/<package>/<role>/. Every writer receives explicit files and disjoint graph ownership.",
+    "Read-only roles return reports without editing. No child delegation unless explicitly assigned and within both repo and runtime limits.",
+    "Coordinate by completion/blocker events, not polling or sleep-and-retry."
+  ],
+  "checks": [
+    "python scripts/validate_engineering_graph.py",
+    "python <bundled-nnc-skill>/scripts/team.py validate --repo <absolute-Auto_ROK-root>"
+  ],
+  "ownership": {},
+  "resolved_roles": {
+    "nghien_cuu": {
+      "config_file": ".codex/agents/nghien_cuu.toml",
+      "sandbox": "read-only"
+    },
+    "tho_dung": {
+      "config_file": ".codex/agents/tho_dung.toml",
+      "sandbox": "inherit"
+    },
+    "kiem_luat": {
+      "config_file": ".codex/agents/kiem_luat.toml",
+      "sandbox": "read-only"
+    },
+    "nguoi_thu": {
+      "config_file": ".codex/agents/nguoi_thu.toml",
+      "sandbox": "inherit"
+    }
+  },
+  "fallback": "Stop the unavailable role and report to root; root may continue in its current model. No automatic model/account/reset change.",
+  "generated": {
+    ".codex/agents/nghien_cuu.toml": "c20f244d5907c2adf86c5beeec62fd057d50f4039ad75aabd07dd9de698dc72f",
+    ".codex/agents/tho_dung.toml": "17fcd7067a3bca8c3b24a65a9bfbd4b5aea8356fac1eddeb388c163972fb1f8a",
+    ".codex/agents/kiem_luat.toml": "35b0db508fadf774a052dbe56241e0cc46b16baadd6d27cd2d74f8d9b9c8bc43",
+    ".codex/agents/nguoi_thu.toml": "0db9ef4cabe4637ae67d74b7d87464f438369e140193c540f03ba2bc220b7b64",
+    ".codex/config.toml": "0e693ed610ecb09580cc493f3e553083e42540233f2e4924dab4c8f8fa6cfcba"
+  }
+}

@@ -1,11 +1,12 @@
-# Độ phủ hiện tại — Auto_ROK
+# Bản chụp độ phủ 2026-09-19 — Auto_ROK
 
 Chụp ngày **2026-09-19**, cập nhật sau khi xoá CI và đường guest/VM.
 Chịu sự điều chỉnh của [`docs/PROJECT_DECLARATION.md`](PROJECT_DECLARATION.md).
 
-Tài liệu này là **bản chụp có ngày của số đo**, không phải bảng tuyên bố viết tay. Mọi con
-số dưới đây đều lấy từ việc chạy thật trên máy, không chép lại từ tài liệu cũ. Khi cần
-biết trạng thái *bây giờ*, chạy lệnh trong §7 chứ đừng tin bản chụp này.
+Tài liệu này là **bản chụp có ngày của số đo**, không phải trạng thái hiện hành.
+Khi cần mức capability đã chứng minh, đọc [`runtime-status.yaml`](../runtime-status.yaml);
+khi cần gate G1–G6 trên artifact, đọc [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md)
+và chạy audit. Các số dưới đây chỉ có nghĩa trong điều kiện và thời điểm đã ghi.
 
 ---
 

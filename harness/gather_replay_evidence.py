@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import tempfile
 import time
 from typing import Any, Mapping, Sequence
 
@@ -24,6 +25,12 @@ SCHEMA_VERSION = 1
 _REPLAY_FACT_KEYS = (
     "character_id",
     "character_id_source",
+    "image_sha256",
+    "window",
+    "new_troop_formation_ready",
+    "new_troop_formation_source",
+    "new_troop_formation_frame_id",
+    "new_troop_formation_image_sha256",
     "march_queue_used",
     "march_queue_capacity",
     "march_queue_source",
@@ -92,9 +99,11 @@ def build_gather_tick_evidence(
             "decision": step.decision.value,
             "reason": step.reason,
             "before_frame_id": step.snapshot.frame_id,
+            "before_observed_at": step.snapshot.observed_at,
             "before_state": step.snapshot.state,
             "before_facts": _snapshot_facts(step.snapshot),
             "after_frame_id": step.after_snapshot.frame_id if step.after_snapshot is not None else None,
+            "after_observed_at": step.after_snapshot.observed_at if step.after_snapshot is not None else None,
             "after_state": step.after_snapshot.state if step.after_snapshot is not None else None,
             "after_facts": _snapshot_facts(step.after_snapshot),
             "choice": None,
@@ -183,22 +192,20 @@ def save_gather_tick_evidence(root: str | Path, record: Mapping[str, Any]) -> Pa
     directory.mkdir(parents=True, exist_ok=True)
     stamp = time.time_ns()
     path = directory / f"revision-{revision:06d}-{stamp}.json"
-    # A timestamp collision must fail closed.  ``os.replace`` is intentionally
-    # never allowed to turn an append-only evidence directory into an overwrite
-    # surface, even if a clock or test double returns the same nanosecond.
-    if path.exists():
-        raise FileExistsError(f"gather evidence path already exists: {path}")
-    tmp = path.with_suffix(path.suffix + f".{os.getpid()}.tmp")
+    # Link the fully flushed temporary file into place atomically. A concurrent
+    # writer with the same timestamp may win first; the loser must never replace
+    # that evidence or leave a partial destination.
     payload = json.dumps(_json_safe(dict(record)), ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=directory)
+    tmp = Path(tmp_name)
     try:
-        with tmp.open("w", encoding="utf-8", newline="\n") as handle:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(tmp, path)
+        os.link(tmp, path)
     finally:
-        if tmp.exists():
-            tmp.unlink(missing_ok=True)
+        tmp.unlink(missing_ok=True)
     return path
 
 

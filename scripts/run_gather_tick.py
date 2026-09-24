@@ -17,6 +17,10 @@ sys.path.insert(0, str(ROOT))
 
 from harness.action_surface import TRAINED_NATIVE_SHORTCUTS  # noqa: E402
 from harness.gather_facts import GatherFactObservationProvider  # noqa: E402
+from harness.gather_job_authority import compiled_gather_catalog  # noqa: E402
+from harness.gather_job_store import JsonGatherJobStore, load_gather_job_authority  # noqa: E402
+from harness.gather_client_binding import GatherClientBindingObservationProvider  # noqa: E402
+from harness.gather_job_coordinator import GatherJobCoordinator, persist_gather_job_closeout  # noqa: E402
 from harness.host_input_isolation import (  # noqa: E402
     HostInputIsolationEvidence,
     HostInputIsolationEvidenceError,
@@ -45,8 +49,15 @@ from harness.resource_level_control import (  # noqa: E402
 from harness.r3_endurance_authorization import load_reserved_ticket  # noqa: E402
 from harness.troop_policy import TroopSelectionApproval  # noqa: E402
 from harness.windows_input import WindowsHumanInputActuator  # noqa: E402
-from harness.windows_interference_guard import WindowsForegroundInterferenceGuard  # noqa: E402
+from harness.windows_interference_guard import (  # noqa: E402
+    GatherJobInputGuard,
+    WindowsForegroundInterferenceGuard,
+)
 from harness.windows_live_observation import WindowsLiveObservationProvider  # noqa: E402
+
+
+GATHER_JOB_MAX_FRAME_AGE_SECONDS = 10.0
+GATHER_JOB_STORE_ROOT = ROOT / "workspace" / "checkpoints" / "gather-jobs"
 
 
 def _candidate_specs(path: str | None) -> tuple[OcrTargetSpec, ...]:
@@ -173,7 +184,7 @@ def _host_input_isolation_summary(path: str | None, context: MissionContext) -> 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--run-id", required=True)
+    parser.add_argument("--run-id", help="single-occurrence ID; derived from job and slot in GATHER job mode")
     parser.add_argument("--task-id", default="one-character")
     parser.add_argument("--character-id", required=True)
     parser.add_argument("--resource-type", required=True, choices=("FOOD", "WOOD", "STONE", "GOLD"))
@@ -217,6 +228,10 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="explicit one-shot operator approval for the current occurrence; prefer --troop-policy-approval for durable provenance",
     )
+    parser.add_argument(
+        "--gather-job",
+        help="operator-created startup GATHER job JSON under workspace; separate from legacy B003 approval",
+    )
     parser.add_argument("--arm-live", action="store_true")
     parser.add_argument(
         "--r3-repetition",
@@ -252,6 +267,13 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError(
                 "use either --troop-policy-approval or --approve-current-troop-selection, not both"
             )
+        if args.gather_job and (
+            args.troop_policy_approval or args.approve_current_troop_selection
+            or args.r3_repetition
+        ):
+            raise ValueError("GATHER_JOB_CANNOT_MIX_LEGACY_B003_OR_R3")
+        if args.gather_job and args.arm_live:
+            raise ValueError("GATHER_JOB_LIVE_ARM_BLOCKED_PENDING_BASELINE_IDENTITY_AND_FIVE_MARCH_PREFLIGHT")
         if args.r3_repetition and not args.arm_live:
             raise ValueError("R3_REPETITION_REQUIRES_LIVE_ARM")
         if args.r3_repetition and not args.r3_reservation_ledger:
@@ -269,7 +291,44 @@ def main(argv: list[str] | None = None) -> int:
             "GATHER_RESOURCE",
             {"resource_type": args.resource_type, "resource_level": args.resource_level},
         )
-        context = MissionContext("GATHER_RESOURCE", args.task_id, args.run_id)
+        if not args.gather_job and not args.run_id:
+            raise ValueError("--run-id is required without --gather-job")
+        context = MissionContext("GATHER_RESOURCE", args.task_id, args.run_id or "")
+        gather_job = None
+        gather_job_store = None
+        gather_catalog = None
+        job_coordinator = None
+        checkpoint_store = JsonMissionStore(args.checkpoint_root)
+        if args.gather_job:
+            workspace_root = (ROOT / "workspace").resolve()
+            job_path = Path(args.gather_job).resolve()
+            if not job_path.is_relative_to(workspace_root):
+                raise ValueError("GATHER job artifact must be under workspace")
+            gather_catalog = compiled_gather_catalog(compiled)
+            gather_job = load_gather_job_authority(
+                job_path,
+                canonical_actions=gather_catalog.actions,
+                expected_catalog_digest=gather_catalog.digest,
+            )
+            if gather_job.task_id != context.task_id or gather_job.character_id != args.character_id:
+                raise ValueError("GATHER job task or character does not match this tick")
+            gather_job_store = JsonGatherJobStore(GATHER_JOB_STORE_ROOT)
+            job_coordinator = GatherJobCoordinator(gather_job, gather_job_store, checkpoint_store)
+            job_plan = job_coordinator.plan()
+            if args.run_id and args.run_id != job_plan.run_id:
+                raise ValueError("GATHER job run_id must match the current deterministic slot")
+            if job_plan.closed:
+                closeout_path = persist_gather_job_closeout(gather_job, job_plan, args.evidence_root)
+                print(json.dumps({
+                    "status": "complete", "gather_job_id": gather_job.job_id,
+                    "gather_job_verified_marches": job_plan.progress.verified_marches,
+                    "gather_job_closed_at_five": True,
+                    "gather_job_closeout": job_plan.closeout,
+                    "gather_job_closeout_path": str(closeout_path),
+                    "gather_job_journaled_this_tick": False,
+                }, ensure_ascii=False))
+                return 0
+            context = MissionContext("GATHER_RESOURCE", args.task_id, job_plan.run_id)
         r3_reservation: dict[str, object] | None = None
         if args.r3_repetition:
             reservation_path = Path(args.r3_reservation_ledger).resolve()
@@ -286,10 +345,11 @@ def main(argv: list[str] | None = None) -> int:
         resource_level_profile = ResourceLevelProfile.load(args.resource_level_profile)
 
         approval: TroopSelectionApproval | None = None
-        if args.troop_policy_approval:
-            approval = TroopSelectionApproval.load(args.troop_policy_approval)
-        elif args.approve_current_troop_selection:
-            approval = TroopSelectionApproval.explicit_cli(context, args.character_id)
+        if gather_job is None:
+            if args.troop_policy_approval:
+                approval = TroopSelectionApproval.load(args.troop_policy_approval)
+            elif args.approve_current_troop_selection:
+                approval = TroopSelectionApproval.explicit_cli(context, args.character_id)
         approvals = approval.approvals_for(context, args.character_id) if approval is not None else {}
         approval_summary = (
             approval.to_summary(context, args.character_id)
@@ -333,27 +393,72 @@ def main(argv: list[str] | None = None) -> int:
             resource_type=args.resource_type,
         )
         observations = GatherFactObservationProvider(observations, character_id=args.character_id)
-        observations = PolicyEvidenceObservationProvider(observations, approvals)
+        if gather_job is None:
+            observations = PolicyEvidenceObservationProvider(observations, approvals)
+        else:
+            observations = GatherClientBindingObservationProvider(
+                observations, gather_job, gather_job_store,
+            )
+            observations = PolicyEvidenceObservationProvider(
+                observations,
+                gather_job=gather_job,
+                job_progress=lambda: gather_job_store.progress(gather_job),
+                catalog_digest=gather_catalog.digest,
+                canonical_actions=gather_catalog.actions,
+                max_frame_age_seconds=GATHER_JOB_MAX_FRAME_AGE_SECONDS,
+            )
 
         surface = GatherScreenMappedActionSurface(
             TRAINED_NATIVE_SHORTCUTS,
             min_target_confidence=args.min_target_confidence,
             allow_unscored_exact_targets=any(spec.allow_unscored_exact for spec in candidate_specs),
         )
+        input_guard = WindowsForegroundInterferenceGuard(
+            armed=args.arm_live, require_process_path=gather_job is not None,
+        )
+        if gather_job is not None:
+            input_guard = GatherJobInputGuard(
+                input_guard, gather_job, gather_job_store, gather_catalog,
+                max_frame_age_seconds=GATHER_JOB_MAX_FRAME_AGE_SECONDS,
+            )
         action_provider = HumanInterfaceActionProvider(
             surface,
             WindowsHumanInputActuator(),
-            WindowsForegroundInterferenceGuard(armed=args.arm_live),
+            input_guard,
         )
         tool = BoundedMissionTool(compiled, observations, action_provider)
         decision_provider = _local_llm_provider(args.local_llm_config)
         runner = MissionRunner(
             compiled,
             tool,
-            JsonMissionStore(args.checkpoint_root),
+            checkpoint_store,
             decision_provider=decision_provider,
         )
-        result = runner.tick(context)
+        job_tick = job_coordinator.tick(runner) if job_coordinator is not None else None
+        result = job_tick.result if job_tick is not None else runner.tick(context)
+        assert result is not None
+        job_verification_error = None
+        journaled_this_tick = False
+        if job_tick is not None:
+            journaled_this_tick = job_tick.journaled_this_tick
+            job_verification_error = job_tick.error
+            job_progress = job_tick.progress
+        post_job_plan = None
+        if job_coordinator is not None and job_verification_error is None:
+            try:
+                post_job_plan = job_coordinator.plan()
+            except Exception as exc:
+                job_verification_error = f"{type(exc).__name__}: {exc}"
+        closeout_path = None
+        if post_job_plan is not None and post_job_plan.closed and job_verification_error is None:
+            try:
+                closeout_path = persist_gather_job_closeout(gather_job, post_job_plan, args.evidence_root)
+            except Exception as exc:
+                job_verification_error = f"{type(exc).__name__}: {exc}"
+        job_closed_at_five = bool(
+            post_job_plan is not None and post_job_plan.closed
+            and job_verification_error is None and closeout_path is not None
+        )
 
         evidence_record = build_gather_tick_evidence(
             context=context,
@@ -367,6 +472,19 @@ def main(argv: list[str] | None = None) -> int:
         )
         local_llm = _local_llm_summary(decision_provider)
         evidence_record["runtime"]["local_llm"] = local_llm
+        if gather_job is not None:
+            evidence_record["runtime"]["gather_job"] = {
+                "job_id": gather_job.job_id,
+                "catalog_digest": gather_job.catalog_digest,
+                "reserved_marches": gather_job_store.progress(gather_job).dispatched_marches,
+                "verified_marches": job_progress.verified_marches,
+                "closed_at_five": job_closed_at_five,
+                "journaled_this_tick": journaled_this_tick,
+                "verification_error": job_verification_error,
+                "next_run_id": post_job_plan.run_id if post_job_plan is not None else None,
+                "closeout": post_job_plan.closeout if job_closed_at_five else None,
+                "closeout_path": str(closeout_path) if closeout_path is not None else None,
+            }
         evidence_path = save_gather_tick_evidence(args.evidence_root, evidence_record)
 
         payload = {
@@ -391,7 +509,17 @@ def main(argv: list[str] | None = None) -> int:
             "local_llm": local_llm,
             "r3_repetition": bool(args.r3_repetition),
             "r3_reservation": r3_reservation,
+            "gather_job_id": gather_job.job_id if gather_job is not None else None,
         }
+        if gather_job is not None:
+            payload["gather_job_verified_marches"] = job_progress.verified_marches
+            payload["gather_job_closed_at_five"] = job_closed_at_five
+            payload["gather_job_journaled_this_tick"] = journaled_this_tick
+            payload["gather_job_verification_error"] = job_verification_error
+            payload["gather_job_next_run_id"] = post_job_plan.run_id if post_job_plan is not None else None
+            payload["gather_job_resume_required"] = not job_closed_at_five
+            payload["gather_job_closeout"] = post_job_plan.closeout if job_closed_at_five else None
+            payload["gather_job_closeout_path"] = str(closeout_path) if closeout_path is not None else None
         if result.selection is not None:
             payload["selection"] = result.selection.decision.value
             payload["candidate_count"] = len(result.selection.candidates)
@@ -423,6 +551,8 @@ def main(argv: list[str] | None = None) -> int:
             )
         print(json.dumps(payload, ensure_ascii=False))
 
+        if job_verification_error is not None:
+            return 4
         if result.status in {CheckpointStatus.RUNNING, CheckpointStatus.COMPLETE}:
             return 0
         if result.status in {

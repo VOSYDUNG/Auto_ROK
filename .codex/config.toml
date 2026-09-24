@@ -1,0 +1,7 @@
+model_reasoning_summary = "concise"
+
+# BEGIN NNC AI OSER MANAGED TEAM
+[agents]
+enabled = true
+max_concurrent_threads_per_session = 2
+# END NNC AI OSER MANAGED TEAM

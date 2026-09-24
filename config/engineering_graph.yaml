@@ -1,6 +1,6 @@
 schema_version: 1
 graph_id: AUTO_ROK_GATHER_VERTICAL_SLICE
-updated_at: "2026-09-19"
+updated_at: "2026-09-24"
 
 principles:
   - deterministic_first
@@ -42,6 +42,7 @@ required_runtime_path:
   - post_action_verification
   - mission_store
   - mission_runner
+  - gather_job_coordinator
   - gather_cli
   - gather_runtime_evidence
 
@@ -486,12 +487,13 @@ nodes:
 
   - id: gather_fact_extractor
     kind: code
-    responsibility: Extracts bounded GATHER facts such as march queue usage, visible selected resource level and character identity.
+    responsibility: Extracts bounded GATHER queue, resource-level and configured-character facts plus same-frame New Troop readiness from hashed OCR/image evidence.
     authority: canonical
     status: implemented
     path: harness/gather_facts.py
     evidence:
       - tests/test_gather_facts.py
+      - tests/test_new_troop_formation_fact.py
       - workspace/runs/live-after-march-20260918-01/ocr.json
 
   - id: troop_selection_policy
@@ -502,6 +504,56 @@ nodes:
     path: harness/troop_policy.py
     evidence:
       - tests/test_troop_policy.py
+
+  - id: gather_job_authority
+    kind: policy
+    responsibility: Fingerprints the compiled GATHER catalog and validates the bounded startup job and current-frame March precondition for up to five reservations without choosing commanders or granting host input.
+    authority: canonical
+    status: implemented
+    path: harness/gather_job_authority.py
+    evidence:
+      - tests/test_gather_job_authority.py
+      - tests/test_policy_overlay.py
+
+  - id: gather_job_issuance
+    kind: composition
+    responsibility: Creates one non-overwriting offline startup job artifact from operator-supplied scope and the compiled GATHER action catalog plus a non-authoritative launch spec for the driver; it grants no live input authority.
+    authority: canonical
+    status: implemented
+    path: scripts/create_gather_job.py
+    evidence:
+      - tests/test_create_gather_job.py
+
+  - id: gather_job_store
+    kind: persistence
+    responsibility: Loads the exact GATHER job, binds its first captured client, and atomically records up to five distinct March reservations and their ordered VERIFIED queue transitions; an unverified reservation bars the next March.
+    authority: canonical
+    status: implemented
+    path: harness/gather_job_store.py
+    evidence:
+      - tests/test_gather_job_store.py
+      - tests/test_gather_job_verification.py
+      - tests/test_gather_job_cli_wiring.py
+
+  - id: gather_job_verification
+    kind: verification
+    responsibility: Adopts only a matching MissionEngine COMPLETE and VERIFIED March result with fresh same-client and same-character queue n to n+1 evidence into the durable job journal.
+    authority: canonical
+    status: implemented
+    path: harness/gather_job_verification.py
+    evidence:
+      - tests/test_gather_job_verification.py
+      - tests/test_gather_job_cli_wiring.py
+
+  - id: gather_client_binding
+    kind: adapter
+    responsibility: Validates first-job capture target and post-capture identity against the frame, persists HWND/PID/process path, and rejects later job observations from another client.
+    authority: canonical
+    status: implemented
+    path: harness/gather_client_binding.py
+    evidence:
+      - tests/test_gather_client_binding.py
+      - tests/test_gather_job_cli_wiring.py
 
   - id: troop_selection_policy_approval
     kind: evidence
@@ -527,7 +579,7 @@ nodes:
 
   - id: policy_overlay
     kind: code
-    responsibility: Injects only explicit operator-approved gameplay precondition evidence.
+    responsibility: Injects only B003 occurrence approval or a separately validated bounded GATHER job precondition into current-frame scene facts.
     authority: canonical
     status: implemented
     path: harness/policy_overlay.py
@@ -658,12 +710,22 @@ nodes:
 
   - id: interference_guard
     kind: safety
-    responsibility: Fails closed unless the expected ROK HWND/PID/foreground/geometry binding is safe for live input.
+    responsibility: Fails closed unless the expected ROK HWND/PID/foreground/geometry binding is safe for live input, and rechecks process path for job-mode input.
     authority: canonical
     status: implemented
     path: harness/windows_interference_guard.py
     evidence:
       - tests/test_windows_interference_guard.py
+
+  - id: gather_job_input_guard
+    kind: safety
+    responsibility: Rechecks the bound client, job, same-frame New Troop readiness, compiled action, character, fresh queue baseline and prior VERIFIED progress before input, then reserves one March attempt at the canonical boundary.
+    authority: canonical
+    status: implemented
+    path: harness/windows_interference_guard.py
+    evidence:
+      - tests/test_gather_job_input_guard.py
+      - tests/test_gather_job_cli_wiring.py
 
   - id: host_input_isolation_evidence
     kind: evidence
@@ -801,11 +863,20 @@ nodes:
       - scripts/run_recovery_matrix.py
       - workspace/evidence/recovery/recovery-matrix-20260918-01.json
       - workspace/evidence/recovery/recovery-matrix-20260919-02.json
-      - tests/test_mission_runner.py
+
+  - id: gather_job_coordinator
+    kind: orchestration
+    responsibility: Selects a deterministic five-march job occurrence from durable VERIFIED progress, resumes a matching checkpoint, requires fresh observation and invokes the canonical MissionRunner for at most one tick; an unverified reservation cannot open the next slot.
+    authority: canonical
+    status: implemented
+    path: harness/gather_job_coordinator.py
+    evidence:
+      - tests/test_gather_job_coordinator.py
+      - tests/test_gather_job_cli_wiring.py
 
   - id: gather_cli
     kind: composition
-    responsibility: Composes live observation, OCR semantics, trained visual evidence, typed level control, facts, occurrence-bound policy, guarded input, checkpoint store and append-only runtime evidence for one GATHER tick.
+    responsibility: Composes one GATHER tick with either historical B003 or the opt-in five-march job coordinator, guarded input, durable VERIFIED journal progress and per-tick evidence; job live arming remains blocked pending job-scoped preflight and fresh startup identity/queue facts.
     authority: canonical
     status: implemented
     path: scripts/run_gather_tick.py
@@ -814,10 +885,20 @@ nodes:
       - tests/test_gather_replay_evidence.py
       - workspace/evidence/gather/live-20260918-01-cpu-criterion/
       - scripts/run_gather_tick.py
+      - tests/test_gather_job_cli_wiring.py
+
+  - id: gather_job_driver
+    kind: adapter
+    responsibility: Calls the canonical GATHER job tick with bounded tick and idle budgets, carries one startup job across stable occurrence IDs, and emits an append-only attempt report; live arming remains disabled until job-scoped preflight.
+    authority: canonical
+    status: implemented
+    path: scripts/run_gather_job.py
+    evidence:
+      - tests/test_run_gather_job.py
 
   - id: gather_runtime_evidence
     kind: verification
-    responsibility: Records each canonical GATHER tick append-only and deterministically validates that real completion has live arming, trained profiles, occurrence-bound policy, fresh VERIFIED receipt and same-character march queue increase.
+    responsibility: Records each canonical GATHER tick append-only with frame, formation, client and observation-time provenance; the historical B003 replay validator checks its own occurrence approval while the FIRST DONE audit consumes five job-linked records separately.
     authority: canonical
     status: implemented
     path: harness/gather_replay_evidence.py
@@ -826,6 +907,15 @@ nodes:
       - scripts/validate_gather_replay.py
       - workspace/evidence/gather/gather-054e1be092ffb2cbc270
       - workspace/evidence/gather/gather-596d20bfddd42eb077af
+
+  - id: first_done_job_audit
+    kind: verification
+    responsibility: Compares one startup job, five ordered VERIFIED journal entries, durable checkpoint proofs, one bounded driver attempt and matching per-tick frame/formation/client evidence, emitting an append-only offline closeout verdict without claiming live completion.
+    authority: canonical
+    status: implemented
+    path: scripts/audit_first_done_job.py
+    evidence:
+      - tests/test_audit_first_done_job.py
 
   - id: live_replay_evidence
     kind: evidence
@@ -943,10 +1033,13 @@ edges:
   - {from: live_capture, to: rapidocr_fixed_roi_backend, relation: supplies_bound_frame}
   - {from: windows_ocr, to: rapidocr_fixed_roi_backend, relation: supplies_base_ocr_overlay}
   - {from: live_capture, to: observation_projection, relation: proves_frame}
+  - {from: live_capture, to: gather_client_binding, relation: supplies_capture_target_and_post_binding}
+  - {from: live_capture, to: gather_fact_extractor, relation: supplies_hashed_current_new_troop_pixels}
   - {from: live_capture, to: city_world_visual_detector, relation: supplies_current_frame}
   - {from: windows_ocr, to: observation_projection, relation: feeds}
   - {from: rapidocr_fixed_roi_backend, to: observation_projection, relation: optional_experiment_overlay}
   - {from: observation_projection, to: ocr_semantics, relation: feeds}
+  - {from: observation_projection, to: gather_client_binding, relation: supplies_frame_bound_window_and_image_path}
   - {from: observation_projection, to: city_world_visual_detector, relation: supplies_frame_provenance}
   - {from: ocr_semantics, to: state_classifier, relation: feeds}
   - {from: ocr_semantics, to: gather_fact_extractor, relation: feeds}
@@ -960,9 +1053,29 @@ edges:
   - {from: resource_level_control, to: semantic_action_surface, relation: resolves_typed_control}
   - {from: resource_level_control, to: mission_engine, relation: exposes_typed_postcondition_contract}
   - {from: gather_fact_extractor, to: troop_selection_policy, relation: supplies_character_scope}
+  - {from: gather_fact_extractor, to: gather_job_authority, relation: supplies_current_character_scope}
+  - {from: gather_fact_extractor, to: gather_job_input_guard, relation: supplies_same_frame_new_troop_readiness}
   - {from: gather_fact_extractor, to: mission_engine, relation: supplies_visible_postcondition_fact}
   - {from: troop_selection_policy_approval, to: troop_selection_policy, relation: explicitly_authorizes}
   - {from: troop_selection_policy, to: policy_overlay, relation: supplies_bounded_approval}
+  - {from: mission_contract, to: gather_job_authority, relation: declares_gather_scope}
+  - {from: mission_compiler, to: gather_job_authority, relation: supplies_compiled_catalog_identity}
+  - {from: gather_job_authority, to: policy_overlay, relation: supplies_bounded_job_precondition}
+  - {from: gather_job_authority, to: gather_job_store, relation: validates_operator_job_scope}
+  - {from: mission_compiler, to: gather_job_issuance, relation: supplies_compiled_gather_actions}
+  - {from: gather_job_authority, to: gather_job_issuance, relation: validates_startup_scope}
+  - {from: gather_job_issuance, to: gather_job_store, relation: supplies_operator_created_artifact}
+  - {from: gather_job_issuance, to: gather_job_driver, relation: supplies_launch_spec_bound_to_startup_artifact}
+  - {from: gather_job_authority, to: gather_job_coordinator, relation: defines_five_march_scope}
+  - {from: gather_job_authority, to: gather_client_binding, relation: scopes_startup_client_binding}
+  - {from: gather_job_authority, to: gather_job_input_guard, relation: defines_job_input_scope}
+  - {from: gather_client_binding, to: gather_job_store, relation: persists_first_captured_client}
+  - {from: gather_client_binding, to: policy_overlay, relation: gates_job_observation}
+  - {from: gather_job_store, to: policy_overlay, relation: supplies_durable_reservation_progress}
+  - {from: gather_job_store, to: gather_job_input_guard, relation: supplies_client_binding_and_reserves_march_attempt}
+  - {from: gather_job_store, to: gather_cli, relation: loaded_by}
+  - {from: gather_job_store, to: gather_job_coordinator, relation: supplies_durable_verified_progress}
+  - {from: gather_job_store, to: gather_runtime_evidence, relation: supplies_verified_job_progress}
   - {from: policy_overlay, to: state_adapter, relation: feeds}
   - {from: state_classifier, to: state_adapter, relation: feeds}
   - {from: state_adapter, to: deterministic_selector, relation: exposes_actions}
@@ -975,6 +1088,8 @@ edges:
   - {from: semantic_action_surface, to: screen_mapping, relation: resolves_through}
   - {from: resource_level_control, to: screen_mapping, relation: typed_screen_point}
   - {from: screen_mapping, to: interference_guard, relation: guarded_by}
+  - {from: state_adapter, to: gather_job_input_guard, relation: supplies_frame_timestamp_and_action_surface}
+  - {from: interference_guard, to: gather_job_input_guard, relation: must_pass_host_check_first}
   - {from: host_input_isolation_evidence, to: live_replay_evidence, relation: required_for}
   - {from: host_input_isolation_evidence, to: r3_preflight, relation: gates}
   - {from: troop_selection_policy_approval, to: r3_preflight, relation: checks}
@@ -986,13 +1101,27 @@ edges:
   - {from: r3_repetition_evidence, to: goal_readiness_audit, relation: gates_endurance}
   - {from: r3_preflight, to: gather_cli, relation: authorizes}
   - {from: interference_guard, to: windows_input, relation: authorizes}
+  - {from: gather_job_input_guard, to: windows_input, relation: authorizes_bounded_job_input}
   - {from: windows_input, to: post_action_verification, relation: requires_fresh_verify}
   - {from: post_action_verification, to: mission_engine, relation: verifies}
+  - {from: post_action_verification, to: gather_job_verification, relation: supplies_verified_queue_transition}
   - {from: mission_engine, to: mission_store, relation: checkpoints}
   - {from: mission_store, to: mission_runner, relation: resumes}
+  - {from: mission_store, to: gather_job_coordinator, relation: supplies_occurrence_checkpoint}
   - {from: mission_engine, to: mission_runner, relation: driven_by}
+  - {from: mission_runner, to: gather_job_verification, relation: supplies_completed_tick_and_receipt}
+  - {from: mission_runner, to: gather_job_coordinator, relation: executes_one_bounded_tick}
+  - {from: gather_job_verification, to: gather_job_store, relation: appends_verified_transition}
+  - {from: gather_job_verification, to: gather_job_coordinator, relation: confirms_slot_before_next_occurrence}
+  - {from: gather_job_coordinator, to: gather_cli, relation: composed_by_canonical_job_tick}
   - {from: mission_runner, to: gather_cli, relation: composed_by}
   - {from: gather_cli, to: gather_runtime_evidence, relation: emits}
+  - {from: gather_cli, to: gather_job_driver, relation: supplies_canonical_one_tick_result}
+  - {from: gather_job_driver, to: first_done_job_audit, relation: supplies_bounded_job_attempt_report}
+  - {from: gather_job_store, to: first_done_job_audit, relation: supplies_ordered_verified_journal}
+  - {from: mission_store, to: first_done_job_audit, relation: supplies_durable_engine_proof}
+  - {from: gather_runtime_evidence, to: first_done_job_audit, relation: supplies_frame_bound_tick_records}
+  - {from: first_done_job_audit, to: completion_audit, relation: supplies_offline_closeout_verdict}
   - {from: troop_selection_policy_approval, to: live_replay_evidence, relation: supplies_policy_provenance}
   - {from: gather_runtime_evidence, to: live_replay_evidence, relation: validates}
   - {from: alliance_claim_contract, to: mission_compiler, relation: compiles_through}

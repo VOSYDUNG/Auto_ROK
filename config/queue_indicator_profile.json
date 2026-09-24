@@ -2,7 +2,7 @@
   "schema_version": 1,
   "status": "trained",
   "measurement_class": "march_queue_indicator",
-  "note": "Bitmap font glyphs for the world-map march queue. Windows OCR reads this region as '115' for '1/5', so the runtime uses template matching. Digits 0, 2, 3 and 4 are not observed yet; the reader returns UNKNOWN_GLYPH for them rather than guessing.",
+  "note": "Bitmap font glyphs for the world-map march queue. Windows OCR reads this region as '115' for '1/5', so the runtime uses template matching. Archived full-frame reads verify 1/5 through 5/5; no supported 0/5 frame has been found. Untrained glyphs return UNKNOWN_GLYPH rather than a guess.",
   "roi": {
     "x": 1310,
     "y": 113,

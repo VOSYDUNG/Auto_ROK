@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import math
 from typing import Any, Mapping, Protocol, Sequence
 
 from harness.mission_engine import EngineDecision, EngineStepResult, MissionEngine
@@ -77,10 +78,15 @@ class MissionRunner:
             facts = snapshot.facts
             if (type(facts.get("march_queue_used")) is int and type(facts.get("march_queue_capacity")) is int
                     and facts.get("march_queue_source") in {"visible_ocr_queue_anchor", "visible_ocr_march_queue_region"}
-                    and isinstance(facts.get("character_id"), str)):
+                    and isinstance(facts.get("character_id"), str)
+                    and isinstance(snapshot.observed_at, (int, float))
+                    and not isinstance(snapshot.observed_at, bool)
+                    and math.isfinite(snapshot.observed_at)):
                 baseline = {"predicate_id": "march_queue_used_increased", "counter_fact": "march_queue_used",
                             "counter_value": facts["march_queue_used"], "capacity": facts["march_queue_capacity"],
-                            "source_frame_id": snapshot.frame_id, "source": facts["march_queue_source"],
+                            "source_frame_id": snapshot.frame_id,
+                            "source_timestamp": snapshot.observed_at,
+                            "source": facts["march_queue_source"],
                             "character_id": facts["character_id"]}
         if baseline is not None:
             enriched = dict(snapshot.facts)
@@ -108,6 +114,7 @@ class MissionRunner:
                 pending_result.reason,
                 completion_baseline=baseline,
                 pending_verification=pending,
+                verified_transition=_verified_transition_from_result(context, pending_result),
             )
             return MissionTickResult(
                 status,
@@ -179,6 +186,7 @@ class MissionRunner:
             result.reason,
             completion_baseline=baseline,
             pending_verification=pending,
+            verified_transition=_verified_transition_from_result(context, result),
         )
         return MissionTickResult(
             status,
@@ -231,6 +239,7 @@ class MissionRunner:
         *,
         completion_baseline: Mapping[str, object] | None = None,
         pending_verification: Mapping[str, object] | None = None,
+        verified_transition: Mapping[str, object] | None = None,
     ) -> MissionCheckpoint:
         baseline = completion_baseline if completion_baseline is not None else snapshot.facts.get("completion_baseline")
         if isinstance(baseline, Mapping):
@@ -252,6 +261,7 @@ class MissionRunner:
             verified_self_loops=engine.verified_self_loops,
             completion_baseline=baseline,
             pending_verification=dict(pending_verification) if isinstance(pending_verification, Mapping) else None,
+            verified_transition=dict(verified_transition) if isinstance(verified_transition, Mapping) else None,
         )
         return self.store.save(checkpoint, expected_revision=expected_revision)
 
@@ -325,6 +335,7 @@ class MissionRunner:
                 "frame_id": before.frame_id,
                 "state": before.state,
                 "facts": dict(before.facts),
+                "observed_at": before.observed_at,
             },
             "feedback": _feedback_to_pending(result.feedback),
         }
@@ -379,6 +390,7 @@ def _snapshot_from_pending(pending: Mapping[str, Any], context: MissionContext) 
         frame_id=frame_id,
         state=state,
         facts=dict(facts),
+        observed_at=raw.get("observed_at"),
     )
 
 
@@ -412,3 +424,63 @@ def _feedback_from_pending(pending: Mapping[str, Any]) -> ToolFeedback:
         reobserve_required=raw.get("reobserve_required") is True,
         message=raw.get("message"),
     )
+
+
+def _verified_transition_from_result(
+    context: MissionContext, result: EngineStepResult,
+) -> Mapping[str, Any] | None:
+    """Persist only an Engine COMPLETE whose feedback was promoted to VERIFIED."""
+    if (result.decision is not EngineDecision.COMPLETE or result.choice is None
+            or result.after_snapshot is None or result.feedback is None
+            or result.feedback.success is not True or result.feedback.code != "VERIFIED"):
+        return None
+
+    def snapshot_data(snapshot: ToolSnapshot) -> dict[str, Any]:
+        return {
+            "mission_id": snapshot.mission_id, "task_id": snapshot.task_id,
+            "frame_id": snapshot.frame_id, "state": snapshot.state,
+            "facts": dict(snapshot.facts), "observed_at": snapshot.observed_at,
+        }
+
+    return {
+        "schema_version": 1, "source": "mission_engine_complete_verified",
+        "mission_id": context.mission_id, "task_id": context.task_id,
+        "run_id": context.run_id,
+        "before_snapshot": snapshot_data(result.snapshot),
+        "after_snapshot": snapshot_data(result.after_snapshot),
+        "action": {
+            "action_id": result.choice.action_id,
+            "target_id": result.choice.target_id,
+            "arguments": dict(result.choice.arguments),
+        },
+        "feedback": _feedback_to_pending(result.feedback),
+    }
+
+
+def restore_verified_transition(
+    checkpoint: MissionCheckpoint, context: MissionContext,
+) -> EngineStepResult:
+    """Reconstruct exact durable proof; never promote a pending receipt."""
+    raw = checkpoint.verified_transition
+    if (checkpoint.status is not CheckpointStatus.COMPLETE
+            or checkpoint.last_decision != EngineDecision.COMPLETE.value
+            or not checkpoint.matches(context)
+            or not isinstance(raw, Mapping)
+            or frozenset(raw) != {
+                "schema_version", "source", "mission_id", "task_id", "run_id",
+                "before_snapshot", "after_snapshot", "action", "feedback",
+            }
+            or raw.get("schema_version") != 1
+            or raw.get("source") != "mission_engine_complete_verified"
+            or (raw.get("mission_id"), raw.get("task_id"), raw.get("run_id"))
+            != (context.mission_id, context.task_id, context.run_id)):
+        raise ValueError("checkpoint lacks exact Engine COMPLETE/VERIFIED proof")
+    before = _snapshot_from_pending({"before_snapshot": raw["before_snapshot"]}, context)
+    after = _snapshot_from_pending({"before_snapshot": raw["after_snapshot"]}, context)
+    choice = _choice_from_pending(raw)
+    feedback = _feedback_from_pending(raw)
+    if (feedback.success is not True or feedback.code != "VERIFIED"
+            or checkpoint.last_frame_id != after.frame_id
+            or before.observed_at is None or after.observed_at is None):
+        raise ValueError("checkpoint VERIFIED proof is incomplete")
+    return EngineStepResult(EngineDecision.COMPLETE, before, choice, feedback, after)

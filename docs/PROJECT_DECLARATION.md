@@ -1,10 +1,13 @@
 # Tuyên bố dự án Auto_ROK
 
-Ngày ban hành: 2026-09-19 · Trạng thái: **hiệu lực** · Thay thế mọi tuyên bố mâu thuẫn trước đó
+Trạng thái: **hiệu lực** · Định hướng được người vận hành chốt ngày 2026-09-23
 
-Đây là tài liệu cao nhất của dự án. Khi bất kỳ tài liệu, đoạn code hay bằng chứng nào
-mâu thuẫn với tài liệu này, tài liệu này thắng và cái kia phải được sửa hoặc đưa vào
-`docs/archive/`.
+Đây là nguồn thẩm quyền cho **mục đích và ranh giới** của dự án. Nếu thiết kế hoặc
+kế hoạch mâu thuẫn, sửa chúng theo mục đích này. Nếu bằng chứng thực tế mâu thuẫn
+với một giả định ở đây, giữ nguyên bằng chứng và mở lại giả định với người vận hành;
+không sửa số đo để tài liệu có vẻ đúng. Trạng thái triển khai thuộc
+[`runtime-status.yaml`](../runtime-status.yaml), điều phối hiện hành thuộc
+[`docs/ROOT.md`](ROOT.md).
 
 ---
 
@@ -12,6 +15,14 @@ mâu thuẫn với tài liệu này, tài liệu này thắng và cái kia phả
 
 **Auto_ROK là một mô hình ngôn ngữ chạy cục bộ, vận hành một client Rise of Kingdoms
 đang hiển thị trên đúng một máy Windows, thông qua một harness xác định.**
+
+**Kết quả cuối:** LLM local của người vận hành dùng harness để farm ROK hằng ngày.
+**FIRST DONE:** một nhân vật tự đưa năm đạo đi farm trong một công việc GATHER
+được ủy quyền lúc đầu, giữ cặp chỉ huy New Troop do game tự điền rồi bấm March và
+hậu kiểm hàng đợi 0→5/5; không duyệt từng lượt điều quân. Chưa cần chờ quân về,
+nạp lại, buff hay chạy 24 giờ. [GOAL](GOAL.md) định nghĩa mốc;
+[PRD](PRD.md) sở hữu hợp đồng sản phẩm. Đây là đích cần xây, không phải claim
+runtime đã đạt. Quyền công việc phải có phạm vi và chốt an toàn trước live.
 
 Câu trên có một chủ ngữ duy nhất: **LLM local**. Harness không phải sản phẩm — harness
 là nền móng để LLM đủ điều kiện quyết định. Mọi quyết định thiết kế phải trả lời được
@@ -25,7 +36,7 @@ một tên và một chủ ngữ như trên.
 
 | Bên | Tỉ trọng | Sở hữu |
 |---|---|---|
-| Harness | 80% | Thu hình, OCR, dựng trạng thái, lọc ứng viên, nối đất mục tiêu, cô lập input, actuation có chốt chặn, phê duyệt, checkpoint, xác minh hậu điều kiện, bằng chứng bất biến |
+| Harness | 80% | Thu hình, OCR, dựng trạng thái, lọc ứng viên, nối đất mục tiêu, cô lập input, actuation có chốt chặn, kiểm quyền phiên, checkpoint, xác minh hậu điều kiện, bằng chứng bất biến |
 | LLM local | 20% | Chọn đúng một `ActionChoice` đã được harness lọc sẵn, hoặc trả `NEEDS_DECISION`, hoặc báo *game đã thay đổi, cần huấn luyện lại* |
 
 LLM **không** được: nhìn toạ độ thô, đọc bộ nhớ tiến trình, giữ đồng hồ, quyết định lịch,
@@ -68,17 +79,15 @@ Vì bốn thứ:
 
 Trí tuệ nằm ở **kỹ thuật**, không nằm ở **năng lực tính toán**.
 
-### Hệ quả: nút thắt của dự án này không bao giờ là model
+### Hệ quả: kiểm tra tín hiệu và tri thức trước khi đổi model
 
-Một model 20B chạy CPU mạnh hơn ESP32 khoảng **một triệu lần**. Nếu ESP32 chạy được robot,
-thì phần tính toán ở đây **thừa thãi**, không thiếu.
-
-Nên mỗi khi có thứ gì không chạy, câu hỏi đúng luôn là một trong hai:
+Kích thước và tên model local là cấu hình chạy, không phải cấu trúc dự án. Khi
+một khả năng không chạy, trước hết kiểm tra hai câu hỏi:
 
 > **Tín hiệu nào đang bẩn?** hoặc **tri thức nào đang thiếu?**
 
-**Không bao giờ là "cần model to hơn".** Nếu câu trả lời hoá ra là cần model to hơn, thì
-luận đề của dự án sai và phải nói ra, chứ không lặng lẽ đổi model.
+Nếu bằng chứng cho thấy cần model khác, ghi đó là kết quả thử luận đề và quyết
+định công khai với người vận hành; không lặng lẽ đổi model hay quyền của nó.
 
 Và một cái bẫy ngược, vì ta đang chạy trên Windows chứ không phải vi điều khiển: **có sẵn
 thư viện không có nghĩa là nên dùng thư viện để thay cho kỹ thuật.** ESP32 không có thư viện
@@ -104,9 +113,12 @@ Ví dụ cụ thể, làm ngày 2026-09-20: chỉ số hàng đợi `1/5`. OCR t
 *"Chúng tôi làm AGI"* là câu không ai kiểm chứng được. Câu dưới đây thì có thể sai, nên nó
 mới đáng nói:
 
-> Với cùng một model khoảng 20B chạy CPU, harness đưa hiệu suất vận hành từ *không chạy nổi*
-> lên *trong khoảng X% của mốc người chơi giỏi*, trong khi model phải vào cuộc dưới N lần
-> trên 100 tick.
+> Với cùng một model local được chọn tại thời điểm đo, harness đưa hiệu suất vận
+> hành từ *không chạy nổi* lên *trong khoảng X% của mốc người chơi giỏi*, trong
+> khi model phải vào cuộc dưới N lần trên 100 tick.
+
+Model, phần cứng, X và N được ghi cùng phép đo; không ghim tên model vào tuyên
+bố dự án hay dùng phép đo H1 để thay điều kiện FIRST DONE.
 
 Đóng phạm vi vào ROK là lựa chọn có chủ đích. ROK là miền thử khó: bề mặt đồ hoạ không có
 accessibility tree · trạng thái đổi theo thời gian thực · hành động không hoàn tác được ·
@@ -194,9 +206,10 @@ hình biến mất một thời gian — thì phải báo. Khi đó LLM phát `r
 
 ## 5. Ranh giới
 
-**Trong phạm vi:** một máy Windows thật, một tài khoản đã đăng nhập, một client ROK đang
-hiển thị; thu hình và xử lý chỉ bằng CPU/RAM; chỉ tương tác qua đúng bề mặt nhìn-và-bấm
-mà người chơi có.
+**Trong phạm vi FIRST DONE:** một máy Windows thật, một tài khoản đã đăng nhập,
+một nhân vật và một client ROK đang hiển thị; thu hình và xử lý chỉ bằng CPU/RAM;
+chỉ tương tác qua đúng bề mặt nhìn-và-bấm mà người chơi có. Các khả năng đổi
+nhân vật/tài khoản ở pha sau không mở thêm quyền đăng nhập hay máy thứ hai.
 
 **Ngoài phạm vi:**
 - Docker, máy ảo, Hyper-V, mọi đường chạy phụ thuộc GPU;
@@ -237,28 +250,32 @@ vì máy đi thuê vẫn là máy ảo.
 Ba quy tắc dưới đây sinh ra từ bản audit ngày 2026-09-19, để chặn đúng ba cách dự án đã
 tự làm mình mơ hồ.
 
-### 6.1 Một hệ đánh số nghiệm thu duy nhất: **G1–G6**
+### 6.1 Một hệ mã cho audit lịch sử: **G1–G6**
 
 Trước đó tồn tại song song năm hệ: gate 1–8 (GOAL), R1a/R1b/R2/R3/R4 (PRD), M0–M5
-(ARCHITECTURE), P0–P6 (PRD), G1–G6 (script audit). Từ nay chỉ dùng **G1–G6**, định nghĩa
-trong `docs/GOAL.md` và thực thi bằng `scripts/audit_goal_readiness.py`. Mọi hệ khác là
-lịch sử.
+(ARCHITECTURE), P0–P6 (PRD), G1–G6 (script audit). G1–G6 được định nghĩa
+trong `docs/GOAL.md` và tính bằng `scripts/audit_goal_readiness.py`; mã yêu cầu
+SRS chỉ phục vụ truy vết, không mở thêm một hệ gate. FIRST DONE có điều kiện
+quyền công việc và năm hậu kiểm trong `docs/PRD.md`, không được suy là đạt
+vì audit G1–G6 PASS trên occurrence cũ. G6 là endurance sau mốc này.
 
-### 6.2 Một nguồn sự thật duy nhất cho trạng thái
+### 6.2 Mỗi loại trạng thái có một chủ sở hữu
 
-Trạng thái dự án **được tính**, không được viết tay. Nguồn duy nhất là kết quả của
-`scripts/audit_goal_readiness.py`, đọc từ bằng chứng thật trong `workspace/evidence/`.
+`runtime-status.yaml` sở hữu mức chứng minh của từng capability theo bậc trong
+`AGENTS.md`. `scripts/audit_goal_readiness.py` tính G1–G6 từ artifact và phục vụ
+bản đối chiếu trong `docs/COMPLETION_AUDIT.md`. Một gate PASS cho occurrence cũ
+không tự nâng capability lên `REPEATABLE` hay `STABLE`.
 
-`config/engineering_graph.yaml` chỉ còn giữ **cấu trúc kỹ thuật** — ai sở hữu trách nhiệm
-gì, cạnh nối ra sao, blocker nào đang mở. Nó **không** còn là nơi tuyên bố mức độ hoàn
-thành. `docs/COVERAGE.md` là bản chụp có ngày của kết quả tính toán, không phải bảng
-viết tay song song.
+`config/engineering_graph.yaml` chỉ giữ **cấu trúc kỹ thuật** — trách nhiệm,
+cạnh nối và blocker; `implemented` ở đây không phải mức chứng minh runtime.
+`docs/COVERAGE.md` là bản chụp lịch sử có ngày, không phải bảng trạng thái hiện
+hành. `docs/ROOT.md` chỉ điều phối và trỏ đến các nguồn đó.
 
-### 6.3 Một entrypoint duy nhất
+### 6.3 Một đường thực thi GATHER có thẩm quyền
 
-`scripts/run_gather_tick.py` là entrypoint thật và duy nhất cho một tick GATHER. Ba tài
-liệu từng tuyên bố `scripts/run_autorok.py` là canonical, trong khi file đó chỉ là 20
-dòng re-export, không có trong đồ thị kỹ thuật và không được CI gọi bao giờ.
+`scripts/run_gather_tick.py` chứa tick GATHER; `scripts/run_autorok.py` chỉ
+chuyển tiếp vào đó. Mọi claim đã nối dây phải kiểm đường thực thi này và người
+tiêu thụ đầu ra, không suy từ import hoặc test riêng của một module.
 
 ---
 
@@ -280,9 +297,11 @@ Tên file luôn tiếng Anh để công cụ không vỡ.
 Dự án chấp nhận mang theo các mục `UNVERIFIED`, với một điều kiện: chúng phải được ghi
 rõ là chưa xác minh, không được im lặng biến thành giả định.
 
-Các mục chưa xác minh hiện tại được liệt kê trong `docs/COVERAGE.md`. Chúng sẽ được
-huấn luyện dần bằng kiểm nghiệm thực địa theo thời gian. Một mục `UNVERIFIED` **không**
-chặn việc xây dựng, nhưng **có** chặn việc tuyên bố đã nghiệm thu.
+Các mục chưa xác minh hiện hành được quản lý tại `runtime-status.yaml` và
+`docs/COMPLETION_AUDIT.md`; `docs/COVERAGE.md` là bản chụp ngày 2026-09-19.
+Chúng sẽ được huấn luyện dần bằng kiểm nghiệm thực địa theo thời gian. Một mục
+`UNVERIFIED` **không** chặn việc xây dựng offline, nhưng **có** chặn việc tuyên bố
+đã nghiệm thu hoặc mở live ngoài quyền đã cấp.
 
 ---
 
@@ -290,14 +309,18 @@ chặn việc xây dựng, nhưng **có** chặn việc tuyên bố đã nghiệ
 
 | Tài liệu | Vai trò |
 |---|---|
-| `docs/PROJECT_DECLARATION.md` | tài liệu này — cao nhất |
-| `docs/GOAL.md` | mục tiêu và định nghĩa hoàn thành G1–G6 |
-| `docs/PRD.md` | yêu cầu sản phẩm F01–F17, N01–N06, và phạm vi §3 |
-| `docs/SRS.md` | 71 yêu cầu kiểm chứng được, ngưỡng định lượng, bảng truy vết |
-| `docs/DESIGN_BRIEF.md` | research kiến trúc và thiết kế hai tầng quyết định |
-| `docs/LLM_GAMEPLAY_SPEC.md` | LLM local chơi game thế nào, gồm onboarding 6 pha |
-| `docs/BUILD_PLAN.md` | kế hoạch xây dựng P0–P5 và bảng điểm |
-| `docs/COVERAGE.md` | độ phủ hiện tại, tính từ bằng chứng |
+| `docs/PROJECT_DECLARATION.md` | mục đích và ranh giới |
+| `docs/GOAL.md` | mục tiêu hiện hành, FIRST DONE và định nghĩa G1–G6 |
+| `docs/PRD.md` | yêu cầu và nghiệm thu sản phẩm F01–F17, N01–N06 |
+| `docs/SRS.md` | hợp đồng kỹ thuật kiểm chứng được và truy vết yêu cầu |
+| `docs/DESIGN_BRIEF.md` | nghiên cứu và lý do chọn kiến trúc |
+| `docs/LLM_GAMEPLAY_SPEC.md` | hợp đồng gameplay của LLM local |
+| `docs/SESSION_AUTHORITY.md` | hợp đồng quyền phiên GATHER đề xuất, chưa cấp quyền live |
+| `docs/BUILD_PLAN.md` | thứ tự xây dựng và gói công việc hiện hành |
+| `docs/COMPLETION_AUDIT.md` | đối chiếu bằng chứng với điều kiện G1–G6 |
+| `runtime-status.yaml` | mức chứng minh đã kiểm của từng capability |
+| `docs/ROOT.md` | điều phối hiện hành và bước tiếp theo |
+| `docs/COVERAGE.md` | bản chụp lịch sử ngày 2026-09-19 |
 | `knowledge/*.yaml` | kiến thức gameplay đã quan sát, có nguồn và ngày |
 | `config/engineering_graph.yaml` | cấu trúc kỹ thuật và blocker đang mở |
 

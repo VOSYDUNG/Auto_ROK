@@ -1,11 +1,15 @@
 # Đặc tả gameplay — LLM local
 
-Ngày: 2026-09-19 · Chịu sự điều chỉnh của [`docs/PROJECT_DECLARATION.md`](PROJECT_DECLARATION.md)
+Cập nhật: 2026-09-23 · Chịu sự điều chỉnh của [`docs/PROJECT_DECLARATION.md`](PROJECT_DECLARATION.md)
 · Kiến trúc: [`docs/DESIGN_BRIEF.md`](DESIGN_BRIEF.md)
 
 Đây là đặc tả **LLM local chơi game như thế nào** — từ lúc khởi động nguội cho tới vòng vận
-hành thường trực. Nó là tài liệu trung tâm, vì dự án xoay quanh LLM local chứ không quanh
-harness.
+hành thường trực sau FIRST DONE. Đây là hợp đồng chuyên môn cho biên quyết định của model;
+nó không định nghĩa lại mục tiêu, nghiệm thu hay quyền input của harness.
+Model cụ thể được chọn bằng cấu hình runtime; tài liệu này không ghim tên,
+kích thước hay bảo đảm một model đã đạt khả năng. FIRST DONE và quyền phiên theo
+[`GOAL`](GOAL.md)/[`PRD`](PRD.md); mức chứng minh theo
+[`runtime-status`](../runtime-status.yaml).
 
 ---
 
@@ -17,8 +21,9 @@ Model biên giới phải nhồi cả thế giới vào trọng số vì không 
 biết trước. Nên phần "biết" được đẩy ra ngoài — vào harness (cơ chế) và `knowledge/` (tri
 thức game) — và để lại cho model đúng phần **suy luận trên tri thức đang có**.
 
-Đó là lý do một model 20B chạy CPU là đủ, và là lý do gọi nó là **micro AGI**: hẹp, nhưng
-đầy đủ năng lực trong phạm vi của nó.
+Luận đề cần đo là một model local phù hợp có thể làm tốt phần lựa chọn hẹp nhờ
+tri thức và harness. Kích thước model không tự chứng minh năng lực; holdout và
+vận hành có hậu kiểm mới là bằng chứng.
 
 ### Nó được phép làm
 
@@ -122,8 +127,9 @@ Theo thứ tự:
 1. Có order người vận hành giao còn hạn? → `ORDER_WORK`
 2. Không có? → `DEFAULT_FARM` với tỉ lệ 1:1:1:2
 
-**Không bao giờ có trạng thái "không có mục tiêu".** Người vận hành đổi quyết định của nó,
-không làm nó dừng.
+Tầng lập kế hoạch luôn có một mục tiêu dự phòng, nhưng mục tiêu đó không tự cho
+phép phát input. Người vận hành có thể đổi mục tiêu hoặc dừng/thu hồi quyền phiên;
+thiếu quan sát hay quyền hợp lệ thì hành động vẫn phải `HOLD`.
 
 ### Pha 5 — Kiểm tra buff trước khi lập lịch
 
@@ -251,7 +257,10 @@ Bậc 3 là **luật khan mỏ** của người vận hành — đã hiện th�
 Quy tắc bất biến hai cấp:
 
 - **Cấp hành động — fail-closed.** Không nối đất được, không phê duyệt được → **không bấm**.
-- **Cấp vòng lặp — không dừng.** Hành động bị chặn → tụt bậc, không đứng hình.
+- **Cấp vòng lặp — còn quan sát/ghi nhận.** Hành động bị chặn → ghi lý do và
+  có thể về `OBSERVE_ONLY`; không tự phát input ở bậc khác khi quyền công việc hoặc
+  safety gate hiện hành không còn hợp lệ. Các bậc mission khác chỉ áp dụng
+  sau FIRST DONE với quyền riêng.
 
 Đây đúng là thứ `Mouse_key.py` thiếu: nó không xác minh được hành động và không tụt bậc
 được, nên mọi ngoại lệ đều đóng băng cả lifecycle.
@@ -270,8 +279,10 @@ không nuốt im.
 Harness tính: 2 slot được mỏ ưu tiên, 1 slot không. `plan_slots()` trả 2 `NORMAL` + 1
 `SCARCITY`, `is_degraded()` = đúng.
 
-LLM **không được hỏi** — không có mơ hồ nào. Harness cứ thế gửi quân. Tín hiệu suy giảm được
-ghi; nếu lặp lại nhiều chu kỳ thì mới báo LLM như bằng chứng về vương quốc.
+LLM **không được hỏi** — không có mơ hồ nào. Đây là ví dụ policy sau khi sensor,
+quyền phiên và chốt input đều đã hợp lệ; hiện tại không được suy điều kiện đó từ
+3 slot giả định rồi gửi quân. Tín hiệu suy giảm được ghi; nếu lặp lại nhiều chu
+kỳ thì mới báo LLM như bằng chứng về vương quốc.
 
 *Đây là ví dụ về tầng 80% làm việc của nó.*
 
@@ -291,8 +302,10 @@ kể so với 2h10.
 
 Harness mở Items → `BOOSTS`, chọn item, nhưng khung hình tươi không có control `USE`.
 
-Fail-closed ở cấp hành động: **không bấm gì**. Không dừng ở cấp vòng lặp: tụt về
-`DAILY_CITIZEN`.
+Fail-closed ở cấp hành động: **không bấm gì**. Duy trì buff là mốc farm hằng
+ngày sau FIRST DONE; nếu quyền hoặc bằng chứng buff thiếu thì vòng duy trì đó
+chuyển `BLOCKED`, có thể quan sát tiếp nhưng không tự chạy `DAILY_CITIZEN`.
+Bậc đó cần quyền riêng.
 
 LLM phát `retraining_required` nêu rõ control nào vắng và khung hình nào chứng minh, kèm đề
 xuất một `ObservedFact` mô tả bố cục mới — **chờ người vận hành duyệt**.

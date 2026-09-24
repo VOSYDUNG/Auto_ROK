@@ -1,8 +1,19 @@
-# Auto_ROK Agentic Harness V1
+# Auto_ROK — historical harness architecture reference
+
+This document records the earlier harness architecture and implementation
+outline. It is not a second product definition or a current readiness report.
+[PROJECT_DECLARATION](PROJECT_DECLARATION.md) owns intent,
+[GOAL](GOAL.md)/[PRD](PRD.md) own FIRST DONE, [BUILD_PLAN](BUILD_PLAN.md) owns
+the current sequence, and [runtime-status](../runtime-status.yaml) owns
+verified capability levels. Model identity is runtime configuration, not an
+architecture constant. The JSON below is an illustrative contract; the
+canonical code and tests determine the implemented wire format.
 
 ## Purpose
 
-Auto_ROK is an Agentic OS that operates Rise of Kingdoms only through the same visible/input surface available to a human player.
+Auto_ROK uses a deterministic harness and a bounded local LLM to operate Rise
+of Kingdoms only through the same visible/input surface available to a human
+player.
 
 The game is an external visual UI environment. The harness:
 
@@ -14,7 +25,7 @@ The game is an external visual UI environment. The harness:
 
 It does not read game process memory, call private game APIs, inspect engine objects or manipulate network traffic.
 
-The local GPT-OSS model is a bounded semantic decision service. It is not the visual detector, coordinate finder or long-horizon gameplay planner.
+The local local LLM model is a bounded semantic decision service. It is not the visual detector, coordinate finder or long-horizon gameplay planner.
 
 ## Human-interface boundary
 
@@ -81,7 +92,7 @@ The system is reactive and concurrent. Perception, mission control, action eligi
 
 ```text
                          ┌────────────────────┐
-                         │      GPT-OSS       │
+                         │      local LLM       │
                          │ bounded selector   │
                          └─────────▲──────────┘
                                    │ only when a real
@@ -156,7 +167,7 @@ Filters actions from trained procedures according to the current belief, mission
 
 - zero eligible actions: wait/recover/reobserve;
 - one eligible action: execute deterministically;
-- multiple meaningful actions: GPT-OSS may select among them.
+- multiple meaningful actions: local LLM may select among them.
 
 ### Anticipatory motor loop
 
@@ -243,7 +254,7 @@ A prior is invalidated when its screen/layout profile no longer matches or repea
 
 ## Semantic Action Surface
 
-GPT-OSS should normally see semantic actions, not coordinates.
+local LLM should normally see semantic actions, not coordinates.
 
 Resolution can use:
 
@@ -379,7 +390,7 @@ operator instruction
 > derived preference
 ```
 
-## GPT-OSS contract
+## local LLM contract
 
 Input may include:
 
@@ -406,7 +417,7 @@ Output:
 
 The runtime rejects actions outside `allowed_actions`.
 
-GPT-OSS should not need raw coordinates, hidden state, frame-by-frame spatial reasoning for trained targets or rediscovery of known procedures.
+local LLM should not need raw coordinates, hidden state, frame-by-frame spatial reasoning for trained targets or rediscovery of known procedures.
 
 ## Runtime invariants
 
@@ -419,7 +430,7 @@ GPT-OSS should not need raw coordinates, hidden state, frame-by-frame spatial re
 7. Cursor movement may anticipate a target before it fully appears.
 8. Stable low-risk transitions may use optimistic actuation when explicitly trained.
 9. Success requires visible postcondition verification.
-10. GPT-OSS selects only among eligible semantic actions.
+10. local LLM selects only among eligible semantic actions.
 11. Zero/one-action states need no LLM inference.
 12. Unknown rules are training gaps, not invitations to guess.
 
@@ -435,7 +446,11 @@ Reusable V0 assets:
 
 V0 fixed coordinates are no longer classified simply as brittle legacy data. Where the UI is stable, they can seed normalized motor priors that are verified and calibrated against the current screen profile.
 
-## V1 milestones
+## Historical implementation outline
+
+The M0–M5 labels below describe the original architecture roadmap; they are
+not current acceptance gates. See [BUILD_PLAN](BUILD_PLAN.md) for active
+packages and [GOAL](GOAL.md) for FIRST DONE.
 
 ### M0 — Knowledge + Human I/O boundary
 - mission/task vocabulary;
@@ -467,7 +482,7 @@ V0 fixed coordinates are no longer classified simply as brittle legacy data. Whe
 - explicit future commitments from visible information;
 - no stale game-state memory dependency.
 
-### M5 — Local GPT-OSS
+### M5 — Local local LLM
 - constrained action selection;
 - model invoked only for meaningful choices;
 - latency telemetry;

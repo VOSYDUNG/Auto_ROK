@@ -46,7 +46,7 @@ class FakeTool:
         )
 
 
-def snapshot(frame, state, *, actions=(), targets=(), facts=None):
+def snapshot(frame, state, *, actions=(), targets=(), facts=None, observed_at=None):
     return ToolSnapshot(
         "GATHER_RESOURCE",
         "one-character",
@@ -55,6 +55,7 @@ def snapshot(frame, state, *, actions=(), targets=(), facts=None):
         facts=facts or {},
         allowed_actions=actions,
         target_ids=targets,
+        observed_at=observed_at,
     )
 
 
@@ -158,6 +159,7 @@ def test_runner_persists_gather_completion_baseline_from_queue_observation(tmp_p
                 "march_queue_source": "visible_ocr_queue_anchor",
                 "character_id": "char-a",
             },
+            observed_at=100.0,
         ),
         snapshot("f2", "NEW_TROOP_SETUP"),
     ))
@@ -173,6 +175,7 @@ def test_runner_persists_gather_completion_baseline_from_queue_observation(tmp_p
         "counter_value": 0,
         "capacity": 5,
         "source_frame_id": "f1",
+        "source_timestamp": 100.0,
         "source": "visible_ocr_queue_anchor",
         "character_id": "char-a",
     }
@@ -190,6 +193,7 @@ def test_runner_resumes_delayed_completion_without_second_dispatch(tmp_path):
             "counter_value": 0,
             "capacity": 5,
             "source_frame_id": "queue-frame",
+            "source_timestamp": 100.0,
             "source": "visible_ocr_queue_anchor",
             "character_id": "char-a",
         },
@@ -217,13 +221,14 @@ def test_runner_resumes_delayed_completion_without_second_dispatch(tmp_path):
             )
 
     first_tool = DelayedTool((
-        snapshot("before", "NEW_TROOP_SETUP", actions=(last,), targets=("TROOP_MARCH",), facts=before_facts),
+        snapshot("before", "NEW_TROOP_SETUP", actions=(last,), targets=("TROOP_MARCH",), facts=before_facts, observed_at=101.0),
         snapshot("settling", "UNKNOWN_STATE"),
     ))
     first = MissionRunner(compiled(), first_tool, store).tick(context)
     assert first.status is CheckpointStatus.REOBSERVE
     assert [item.action_id for item in first_tool.executions] == ["MARCH_WITH_CURRENT_SELECTION"]
     assert first.checkpoint.pending_verification is not None
+    assert first.checkpoint.pending_verification["before_snapshot"]["observed_at"] == 101.0
 
     second_tool = DelayedTool((
         snapshot(
@@ -235,9 +240,12 @@ def test_runner_resumes_delayed_completion_without_second_dispatch(tmp_path):
                 "march_queue_source": "visible_ocr_march_queue_region",
                 "character_id": "char-a",
             },
+            observed_at=102.0,
         ),
     ))
     second = MissionRunner(compiled(), second_tool, store).tick(context)
     assert second.status is CheckpointStatus.COMPLETE
     assert second.checkpoint.pending_verification is None
     assert second_tool.executions == []
+    assert second.engine_result.snapshot.observed_at == 101.0
+    assert second.checkpoint.verified_transition["before_snapshot"]["observed_at"] == 101.0

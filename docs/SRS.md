@@ -1,16 +1,22 @@
 # SRS — Auto_ROK
 
-Ngày: 2026-09-19 · Phiên bản 1 · Chịu sự điều chỉnh của [`docs/PROJECT_DECLARATION.md`](PROJECT_DECLARATION.md)
+Cập nhật: 2026-09-23 · Hợp đồng kỹ thuật hiện hành · Chịu sự điều chỉnh của
+[`docs/PROJECT_DECLARATION.md`](PROJECT_DECLARATION.md) và [`docs/GOAL.md`](GOAL.md)
 
-Đây là tài liệu cuối trước khi xây. Nhiệm vụ của nó: biến mọi yêu cầu trong `PRD` thành
-**mệnh đề kiểm chứng được**, và chỉ ra chính xác cái nào đã có test, cái nào chưa.
+SRS biến các yêu cầu kỹ thuật trong `PRD` thành **mệnh đề kiểm chứng được**. Đây là
+hợp đồng yêu cầu, không phải báo cáo readiness; bằng chứng hiện tại nằm ở
+[`runtime-status.yaml`](../runtime-status.yaml) và [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md).
 
 Quy ước:
 
 - Mỗi yêu cầu có **mã**, **mệnh đề**, **tiêu chí chấp nhận** (thứ một test có thể kiểm), và
   **nguồn** (mã PRD).
-- `ĐÃ KIỂM` = có test đang chạy. `CHƯA KIỂM` = yêu cầu hợp lệ nhưng chưa có test.
-  `CHƯA XÂY` = chưa có code.
+- `ĐÃ KIỂM` = có test hoặc artifact kiểm tra đúng mệnh đề trong phạm vi đã ghi.
+  Nhãn này không chứng minh đường chạy live.
+- `CHƯA KIỂM` = yêu cầu hợp lệ nhưng chưa có kiểm tra đủ phạm vi.
+  `CHƯA XÂY` = chưa có code hoặc wiring cần thiết.
+- `CÁCH ĐÃ CÓ`, `XONG`, `ĐẠT` chỉ mô tả kết quả kỹ thuật/historical được dẫn nguồn;
+  không được đọc như `WIRED`, `LIVE_PROVEN_ONCE`, `REPEATABLE` hay `STABLE`.
 - Ngưỡng ghi `TBD-OP` là chỗ **người vận hành phải cho số**; không đoán.
 
 ---
@@ -28,11 +34,20 @@ thế được cho dung lượng model.
 **Ràng buộc nền.** Chỉ CPU/RAM · không ảo hoá dưới mọi hình thức · chỉ tương tác qua bề mặt
 nhìn-và-bấm của người chơi · không đọc bộ nhớ, không chèn code.
 
+**FIRST DONE.** Một nhân vật được harness đưa năm đạo đi farm trong một công việc
+GATHER đã ủy quyền lúc bắt đầu. New Troop tự điền cặp theo gợi ý của game;
+harness giữ nguyên cặp trên khung hiện tại và hậu kiểm queue 0→5/5.
+Không duyệt từng march, không cần chờ quân về hoặc chạy 24 giờ. Đây là mục tiêu
+nghiệm thu, chưa phải claim runtime. Local LLM chỉ nhận ứng viên đã lọc ở điểm
+bất định thật, không có quyền phát input, chọn tọa độ, ghi knowledge hay thay
+gợi ý của game; benchmark model là đường kiểm chứng riêng.
+
 ---
 
 ## 2. Tiêu chí thành công định lượng
 
-`PRD` §3.1 để trống X và N. Đây là chỗ điền, kèm lập luận.
+`PRD` §3.1 để trống X và N. Các ngưỡng dưới đây là đề xuất kỹ thuật cho tới khi người
+vận hành chốt; chúng không tự biến thành điều kiện live.
 
 ### 2.1 Vì sao không so sánh bằng một con số duy nhất
 
@@ -56,8 +71,8 @@ khi vẫn kém hơn về chất lượng từng quyết định**. Gộp hai tr�
 |---|---|---|---|
 | **SC-01** | Chu kỳ lô của agent so với mốc người vận hành | ≤ **1,15×** mốc ghi nhận (2h00–2h30 farm mạnh · 3h30–4h00 farm yếu) | đây là **X**: agent chậm hơn người không quá 15% mỗi lô |
 | **SC-02** | Lần LLM vào cuộc ở tầng chiến thuật | ≤ **5** / 100 tick | đây là **N**. Tỉ lệ 80/20 nói về *trách nhiệm*, không phải tần suất gọi; harness sâu thì model hiếm khi cần hỏi |
-| **SC-03** | % thời gian hàng đợi đội hình đầy **và** buff ≠ 0 | ≥ **85%** trong 24h | trần người thực tế thấp hơn do phải ngủ; đây là chỗ agent được phép thắng |
-| **SC-04** | Giờ chạy tự chủ liên tục không người chạm | thang: **1h → 4h → 15h** | north star; 15h khớp cổng endurance ở `GOAL` |
+| **SC-03** | % thời gian hàng đợi đội hình đầy trong các phiên productivity sau FIRST DONE | ≥ **85%** trong 24h | chỉ số sản lượng đề xuất cho mốc farm hằng ngày, không phải điều kiện vòng 5 đạo |
+| **SC-04** | Giờ chạy tự chủ liên tục không người chạm | thang: **1h → 4h → 15h → 24h** | 24h là mốc endurance sau FIRST DONE |
 | **SC-05** | Lần tự phát hiện game đổi | ≥ **1** trước khi tuyên bố đóng phạm vi | nếu luôn bằng 0 thì năng lực này chưa được chứng minh, chỉ được khai báo |
 | **SC-06** | Tổng sản lượng ngày so với người vận hành | **TBD-OP** | cần người vận hành cho số thật họ đạt được mỗi ngày |
 
@@ -125,6 +140,24 @@ không có dữ liệu để đề xuất.
 | MIS-015 | Mỗi lượt vào nhân vật có **trần thời gian**; hết trần thì rời đi | Việc chưa xong xếp hàng cho lượt sau, không cố làm nốt | F14 | **CHƯA XÂY** |
 | MIS-016 | Lộ trình ngày **tính từ trạng thái**, không phải lịch cố định | Cùng giờ hai ngày khác nhau có thể cho lộ trình khác nhau | F10 | **CHƯA XÂY** |
 
+#### Hợp đồng FIRST DONE cho một nhân vật
+
+Các điều khoản này bổ sung đường nghiệm thu mục tiêu hiện hành; chúng không thay thế
+các mã MIS cũ và không nâng trạng thái của runtime.
+
+| Mã | Mệnh đề | Tiêu chí chấp nhận | Nguồn |
+|---|---|---|---|
+| MIS-FD-001 | Một công việc GATHER chỉ điều năm đạo cho một nhân vật, từ queue 0/5 | Bằng chứng khởi đầu ghi đúng nhân vật và 0/5; mỗi event giữ cùng `job_id`/`character_id`; tối đa năm dispatch | GOAL, PRD §3.4 |
+| MIS-FD-002 | Mỗi lượt giữ nguyên đội hình New Troop được game tự điền | New Troop mở mới có đội hình và nút March hợp lệ; harness không bấm đổi chỉ huy, thiếu/stale/mâu thuẫn trả `HOLD`. Không cần đọc tên cặp hay nhãn xếp hạng riêng | PRD §3.4, F03 |
+| MIS-FD-003 | Mỗi march có hậu kiểm hàng đợi mới | Năm chuyển tiếp queue 0→1→2→3→4→5 được buộc vào cùng nhân vật/job; receipt không đủ để ghi `VERIFIED` | F07, F08 |
+| MIS-FD-004 | Kết thúc vòng tại 5/5, ước lượng thời gian là metadata | Báo cáo append-only chỉ đạt khi năm postcondition xác minh; thời gian đào/về có nguồn và độ bất định nếu ghi, không yêu cầu quân về hay 24 giờ | PRD §3.4, F08 |
+| MIS-FD-005 | Một ủy quyền khởi đầu bao phủ các march trong scope GATHER | Không hỏi operator từng march; sai nhân vật/hạn/scope/revoke/sequence thì không input; item, tài sản và tài khoản nằm ngoài scope | F06 |
+| MIS-FD-006 | Canonical runner dùng fact cặp gợi ý và guard quyền công việc | Wiring test chứng minh fact/guard chặn đường input khi thiếu; không tái dùng B003 historical, model không tạo cặp hoặc quyền | F03, F06, F07 |
+
+Mức đã chứng minh của các điều khoản FIRST DONE chỉ đọc tại
+[`runtime-status.yaml`](../runtime-status.yaml); bảng yêu cầu không gắn một
+nhãn tiến độ thứ hai có thể lệch khỏi bằng chứng.
+
 ### 3.5 Phân bổ và suy giảm — LAD
 
 | Mã | Mệnh đề | Tiêu chí chấp nhận | Nguồn | Trạng thái |
@@ -170,12 +203,12 @@ không có dữ liệu để đề xuất.
 
 | Mã | Mệnh đề | Tiêu chí chấp nhận | Nguồn | Trạng thái |
 |---|---|---|---|---|
-| ACT-001 | Chỉ phát input khi cửa sổ đúng, foreground ổn định, khung tươi, có phê duyệt | Thiếu một điều kiện thì không phát | F06 | ĐÃ KIỂM · `test_windows_interference_guard` |
+| ACT-001 | Chỉ phát input khi cửa sổ đúng, foreground ổn định, khung tươi và quyền hợp lệ | Thiếu một điều kiện thì không phát; quyền công việc FIRST DONE thuộc `MIS-FD-005` | F06 | ĐÃ KIỂM · `test_windows_interference_guard` *(guard theo occurrence cũ)* |
 | ACT-002 | Độ trễ phát input < 5 ms | Đo trên máy thật | N03 | ĐÃ KIỂM — đo < 1 ms |
 | ACT-003 | Không input ngoài ý muốn | Trace ghi `input_emitted=false` ở mọi pha quan sát | N05 | ĐÃ KIỂM · `test_host_input_isolation` |
 | ACT-004 | Xác minh bằng **khung hình tươi sau hành động** | Biên nhận gửi lệnh không bao giờ đủ | F07 | ĐÃ KIỂM · `test_gather_replay_evidence` |
 | ACT-005 | Hậu điều kiện GATHER là `Queue used` tăng đúng 1 | Tăng 0 hoặc ≥2 đều là thất bại | F07 | ĐÃ KIỂM |
-| ACT-006 | Phê duyệt gắn occurrence, không chuyển nhượng | Occurrence mới cần phê duyệt mới | G4 | ĐÃ KIỂM · `test_troop_policy` |
+| ACT-006 | Phê duyệt actuation gắn occurrence, không chuyển nhượng | Occurrence mới cần phê duyệt mới | G4 | ĐÃ KIỂM · `test_troop_policy` |
 
 ### 3.9 Bằng chứng — EVI
 
@@ -183,7 +216,7 @@ không có dữ liệu để đề xuất.
 |---|---|---|---|---|
 | EVI-001 | Bản ghi append-only; trùng đường dẫn thì fail-closed | Không ghi đè bản ghi cũ | F08 | ĐÃ KIỂM |
 | EVI-002 | Mọi bản ghi gắn danh tính mission/task/run/character | Thiếu trường nào thì không hợp lệ | F08 | ĐÃ KIỂM |
-| EVI-003 | Trạng thái dự án **được tính**, không viết tay | `audit_goal_readiness.py` là nguồn duy nhất | §6.2 Tuyên bố | ĐÃ KIỂM · `test_goal_readiness_audit` |
+| EVI-003 | Trạng thái **cổng G1–G6** được tính từ artifact, không viết tay | `audit_goal_readiness.py` tính gate; mức capability đã chứng minh do `runtime-status.yaml` sở hữu | §6.2 Tuyên bố | ĐÃ KIỂM · `test_goal_readiness_audit` *(chỉ gate)* |
 | EVI-004 | G6 cần uỷ quyền tường minh của người vận hành | Thiếu file uỷ quyền thì `blocked` | G6 | ĐÃ KIỂM · `test_r3_endurance_authorization` |
 
 ### 3.10 An toàn và ranh giới — SAF
@@ -226,7 +259,7 @@ không có dữ liệu để đề xuất.
 | CAP thu hình | 6 | 6 | — | — | — |
 | OCR | 8 | 8 | — | — | — |
 | STA trạng thái | 7 | 7 | — | — | — |
-| MIS order/đội hình | 16 | 12 | — | 4 | — |
+| MIS order/đội hình + FIRST DONE | 22 | 12 | — | 10 | — |
 | LAD suy giảm | 11 | 11 | — | — | — |
 | LLM biên quyết định | 10 | 9 | 1 | — | — |
 | ONB onboarding | 5 | 4 | — | 1 | — |
@@ -234,26 +267,27 @@ không có dữ liệu để đề xuất.
 | EVI bằng chứng | 4 | 4 | — | — | — |
 | SAF an toàn | 6 | 4 | — | 2 | — |
 | DEL giao hàng | 15 | 8 | — | 4 | 3 |
-| **Tổng** | **94** | **79** | **1** | **11** | **3** |
+| **Tổng** | **100** | **79** | **1** | **17** | **3** |
 
-**Đọc bảng này:** 79/94 yêu cầu đã có test đang chạy. 11 mục chưa xây chia làm hai loại:
+**Đọc bảng này:** 79/100 yêu cầu có test hoặc artifact kiểm tra trong phạm vi đã ghi;
+17 mục còn `CHƯA XÂY` và 1 mục còn `CHƯA KIỂM`. Sáu mã `MIS-FD-*` là các hợp đồng
+FIRST DONE mới, chưa có bằng chứng runtime, nên được tính vào phần chưa xây.
 
 | Cần client | Làm được không cần game |
 |---|---|
-| `MIS-013…016` lịch biểu động — **phải đo trước** | `SAF-005` tiêu gem cần người vận hành duyệt |
+| `MIS-013…016` lịch biểu động — **phải đo trước**; `MIS-FD-001…006` cần wiring và fresh live evidence để nghiệm thu vòng 5 đạo | `MIS-FD-005` hợp đồng quyền công việc và test biên; `SAF-005` tiêu gem cần người vận hành duyệt |
 | `DEL-012…015` đường giao hàng | `SAF-004` nối đất hộp xác nhận theo nhãn chữ |
 | `ONB-004` khảo sát Tướng · City Hall · Chợ | |
 
-Phần lớn khối lượng còn lại **cần mở game**, và `MIS-015` thì chính người vận hành đã
-chốt là đo trước mới quyết. Hai mục `SAF` còn lại không cần game nhưng đều là **cổng phê
-duyệt của người vận hành**, nên chúng thuộc về M7/M8 chứ không phải làm thêm ở đây.
+Các hợp đồng/sensor có thể xây và kiểm bằng fixture offline; chỉ nghiệm thu live
+cần game và quyền riêng. `MIS-015` phải đo trước khi chốt lịch. `SAF-004` là
+nối đất hộp xác nhận theo nhãn chữ; `SAF-005` giữ quyền người vận hành đối với
+gem. Chúng không tự được miễn vì thuộc mốc khác.
 
-**Sửa bảng ngày 2026-09-20:** bảng này trước ghi tổng 95 và cộng không ra. Đếm lại theo
-đúng các dòng yêu cầu: tổng là **94**; nhóm DEL có **8** đã kiểm (không phải 6) và **3**
-khoá (không phải 5). Bảng đếm sai thì không dùng để quyết định được, nên sửa trước khi
-thêm số mới.
-
-Nhóm ACT, EVI, CAP, STA phủ kín — đó là phần harness đã trưởng thành.
+Các nhãn kiểm tra chỉ phản ánh phạm vi test/artifact được dẫn; không phải trạng thái live
+của một phiên 24 giờ. CAP, STA, EVI và ACT có các hợp đồng nền đã được kiểm tra, nhưng
+đường FIRST DONE vẫn phụ thuộc các mã `MIS-FD-*`, runtime capability ladder và audit
+scope. Khi thêm hoặc bỏ mã yêu cầu, phải cập nhật bảng này cùng lượt.
 
 ---
 
@@ -263,9 +297,11 @@ Nhóm ACT, EVI, CAP, STA phủ kín — đó là phần harness đã trưởng t
 |---|---|
 | Yêu cầu logic thuần | test tự động, chạy bằng `python scripts/check_local.py` |
 | Yêu cầu hiệu năng | đo trên máy người vận hành, ghi vào `workspace/evidence/` |
-| Yêu cầu cần client | pass quan sát an toàn, không phát input |
-| Yêu cầu có rủi ro tài sản | người vận hành phê duyệt từng occurrence |
-| Trạng thái tổng | `python scripts/audit_goal_readiness.py` — nguồn duy nhất |
+| Yêu cầu quan sát cần client | pass quan sát an toàn, không phát input |
+| Yêu cầu hành động live | chỉ kiểm sau package offline và authorization riêng; cần hậu điều kiện từ khung tươi |
+| Yêu cầu có rủi ro tài sản | ngoài phạm vi FIRST DONE; cần quyết định riêng. Quyền công việc GATHER hợp lệ bao phủ năm march qua guard, không yêu cầu duyệt từng march |
+| Trạng thái capability | đối chiếu `runtime-status.yaml` theo ladder `UNIMPLEMENTED` → `STABLE` |
+| Cổng nghiệm thu mục tiêu | `python scripts/audit_goal_readiness.py` và `COMPLETION_AUDIT.md`, cùng với fresh runtime evidence; audit không tự thay thế bằng chứng live |
 
 Không dùng dịch vụ CI. Mọi kiểm tra chạy trên máy người vận hành.
 
@@ -279,50 +315,26 @@ Không dùng dịch vụ CI. Mọi kiểm tra chạy trên máy người vận h
 | SC-06 | sản lượng ngày thực tế người vận hành đạt được |
 | MIS-015 | trần thời gian mỗi lượt vào nhân vật — **sau khi đo**, không chốt trước |
 
-Đã có đáp án ngày 2026-09-20: ~~DEL-005 thuế~~ (8%) · ~~MIS-013 cách đọc tồn kho~~ ·
-~~DEL-006 ngữ nghĩa sức chứa~~ · ~~§7 phép tính 1.522~~.
+Các số đo giao hàng đã có nằm ở §7; chúng không giải quyết các ngưỡng vận hành
+trong bảng trên.
 
 ---
 
-## 7. Phép tính đơn hàng — đã đóng
+## 7. Hợp đồng số học giao hàng — nhánh sau FIRST DONE
 
-Nghi vấn "1.522 chuyến" nêu ngày 2026-09-19 đã được ảnh Resource Assistance giải quyết.
+Phép đo Resource Assistance ngày 2026-09-20 tại Chợ cấp 25 cho thấy sức chứa
+**10.000.000 net/chuyến**, thuế **8%** tính bằng số nguyên. Để giao 14B net cần
+**1.400 chuyến** và tối thiểu **15.217.391.304 gross** trong kho. Số chuyến
+chia theo sức chứa net, không gross-up cả order rồi mới chia; sai cách đó ra
+1.522 chuyến. `tests/test_mission_transport.py` khóa phép tính và ca sai này.
 
-**Sai ở đâu:** tôi gross-up rồi mới chia cho sức chứa. Nhưng sức chứa **đã là số thực
-nhận**, nên chia thẳng:
+Vận chuyển dùng **chung 5 slot march với farm**; mỗi slot dành cho vận chuyển
+là một slot tạm không farm. Không có hàng đợi vận chuyển thứ hai. Thời gian
+đi 31 phút là **một chiều ở cự ly xa được quan sát**; cự ly gần trong ví dụ
+được giới hạn 10 giây/chiều. Với 175 chuyến/nhân vật và 2 slot vận chuyển,
+phép tính là khoảng 29 phút ở cự ly gần so với khoảng 90 giờ ở cự ly xa.
+Đó là hai kịch bản điều kiện, không phải cam kết tốc độ giao live.
 
-```
-net cần giao : 14.000.000.000
-sức chứa     : 10.000.000 net/chuyến
-số chuyến    : 1.400          (không phải 1.522)
-tồn kho cần  : 15.217.391.304 gross
-```
-
-**Và 1.400 chuyến không hề vô lý.** Với thời gian đi 31 phút quan sát được, giả định khứ hồi
-và 8 nhân vật chạy song song:
-
-| Số xe / nhân vật | Toàn đội mỗi ngày | Xong 14B sau |
-|---|---|---|
-| 1 | 1,86B | **7,5 ngày** |
-| 2 | 3,72B | 3,8 ngày |
-| 3 | 5,57B | 2,5 ngày |
-
-### Cập nhật 2026-09-20 — bảng trên đã lỗi thời
-
-Hai câu trả lời của người vận hành làm bảng trên sai: **số xe chính là 5 slot farm** (không
-có hàng đợi riêng), và **31 phút là một chiều, ở cự ly xa cố ý**. Gần thì tối đa 10s/chiều.
-
-| Khoảng cách | 175 chuyến/nhân vật, 2/5 slot |
-|---|---|
-| **Gần (10s/chiều)** | **≈29 phút** |
-| Xa (31 phút/chiều) | ≈90 giờ |
-
-Chênh **~180 lần**. Nên hành động có đòn bẩy cao nhất trong cả việc giao hàng là **tele lại
-gần**, không phải tối ưu cách xếp hàng hay thứ tự chuyến.
-
-Và vì slot dùng chung, mỗi chuyến vận chuyển là một slot **không farm**. Bù lại: một slot
-dành cho vận chuyển gần trong đúng một chu kỳ farm (2h15) chuyển được ~405 chuyến ≈ **4,0B**
-— đổi một chu kỳ farm lấy 4 tỉ tài nguyên là đổi rất lợi.
-
-Cả ba luật số học đã ghim bằng test trong `tests/test_mission_transport.py`, dùng đúng các
-con số đọc từ client.
+Mới có phép đo cho Chợ cấp 25 và hợp đồng số học offline. Bảng sức chứa các
+cấp khác, đường giao, đọc lại số thực nhận và hậu kiểm live còn thiếu; F17 vẫn
+khoá.

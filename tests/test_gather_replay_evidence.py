@@ -1,5 +1,8 @@
+import os
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from harness.gather_replay_evidence import (
     build_gather_tick_evidence,
@@ -24,9 +27,16 @@ def valid_record():
         "NEW_TROOP_SETUP",
         facts={
             "character_id": "char-a",
+            "image_sha256": "a" * 64,
+            "window": {"hwnd": 101, "pid": 202, "process_path": "C:/Game/MASS.exe"},
+            "new_troop_formation_ready": True,
+            "new_troop_formation_source": "same_frame_ocr_and_pixels",
+            "new_troop_formation_frame_id": "frame-before",
+            "new_troop_formation_image_sha256": "a" * 64,
             "completion_baseline": {"predicate_id": "march_queue_used_increased", "counter_fact": "march_queue_used", "counter_value": 0, "capacity": 5, "source_frame_id": "queue-frame", "source": "visible_ocr_queue_anchor", "character_id": "char-a"},
             "precondition_evidence_source": "explicit_operator_configuration",
         },
+        observed_at=100.0,
     )
     after = ToolSnapshot(
         "GATHER_RESOURCE",
@@ -35,10 +45,13 @@ def valid_record():
         "WORLD_MAP_VIEW",
         facts={
             "character_id": "char-a",
+            "image_sha256": "b" * 64,
+            "window": {"hwnd": 101, "pid": 202, "process_path": "C:/Game/MASS.exe"},
             "march_queue_used": 1,
             "march_queue_capacity": 5,
             "march_queue_source": "visible_ocr_march_queue_region",
         },
+        observed_at=101.0,
     )
     choice = ActionChoice("MARCH_WITH_CURRENT_SELECTION", "TROOP_MARCH")
     feedback = ToolFeedback(
@@ -116,6 +129,17 @@ def test_valid_completion_replay_requires_verified_fresh_queue_increase():
     assert report["errors"] == []
 
 
+def test_job_auditor_can_trace_formation_and_client_to_the_march_frame():
+    record = valid_record()
+    before = record["engine"]["before_facts"]
+    after = record["engine"]["after_facts"]
+    assert before["new_troop_formation_ready"] is True
+    assert before["new_troop_formation_frame_id"] == record["engine"]["before_frame_id"]
+    assert before["new_troop_formation_image_sha256"] == before["image_sha256"]
+    assert before["window"] == after["window"]
+    assert record["engine"]["before_observed_at"] < record["engine"]["after_observed_at"]
+
+
 def test_dispatch_is_not_accepted_as_live_completion():
     record = valid_record()
     record["engine"]["feedback"]["code"] = "DISPATCHED"
@@ -185,3 +209,22 @@ def test_tick_evidence_timestamp_collision_cannot_overwrite(tmp_path: Path):
         else:
             raise AssertionError("timestamp collision overwrote append-only evidence")
     assert first.exists()
+
+
+def test_competing_writer_winning_after_temp_flush_cannot_be_overwritten(tmp_path: Path):
+    record = valid_record()
+    real_link = os.link
+    destinations = []
+
+    def competing_link(source, destination):
+        destinations.append(Path(destination))
+        Path(destination).write_bytes(b"prior writer")
+        return real_link(source, destination)
+
+    with patch("harness.gather_replay_evidence.os.link", side_effect=competing_link), \
+         patch("harness.gather_replay_evidence.time.time_ns", return_value=456):
+        with pytest.raises(FileExistsError):
+            save_gather_tick_evidence(tmp_path, record)
+    assert len(destinations) == 1
+    assert destinations[0].read_bytes() == b"prior writer"
+    assert list(destinations[0].parent.glob("*.tmp")) == []

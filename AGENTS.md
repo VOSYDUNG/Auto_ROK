@@ -1,5 +1,13 @@
 # Auto_ROK agent build contract
 
+Current coordination entry: `docs/ROOT.md`. Keep ROOT context to this current brief
+and the necessary key-source slices; worker operating records belong under
+`workspace/agents/<package>/<role>/`. Rewrite current documents coherently in place.
+Coordinate agents by completion/blocker events. Do not poll status, loop over list/read
+calls, or use sleep-and-retry to wait. Dispatch ready packages, do independent work,
+and let the delivered result trigger the next step; use a single event wait/yield only
+when no independent work remains. Preserve the user's selected ROOT model.
+
 This repository uses **Graph Engineering** as the default build protocol for every coding/research agent.
 
 Authoritative engineering graph: `config/engineering_graph.yaml`.
@@ -122,3 +130,12 @@ intended.
 ## Current vertical slice
 
 The active product path is `GATHER_RESOURCE` on one character. Other missions remain separate graph branches and must not be treated as covered merely because shared harness infrastructure exists.
+
+
+<!-- BEGIN NNC AI OSER MANAGED TEAM -->
+## Repository Codex team
+Read .codex/team.json and docs/ROOT.md before work. Preserve and follow existing project instructions. Use the ROOT brief as the single current coordination entry; open linked evidence only as needed.
+Delegation to subagents is explicitly authorized for useful independent bounded subtasks. Select the repository roles in .codex/agents/*.toml; use no more children than the smaller of max_parallel_children in team.json and the runtime's available slots. Root may work directly; the role catalogue is not a requirement to run all roles.
+When the tool has a custom-agent selector, select the role. Otherwise read its TOML, pass developer_instructions in a self-contained assignment and pass its model and model_reasoning_effort as model/reasoning_effort with fork_turns=none when supported. Omit model/effort for inherit. Never claim role auto-loading when passing a prompt manually. If a pinned model is unavailable, stop that assignment and report to root; root may continue using its current model.
+Each assignment must include goal, method, sources/commit, files owned, exclusions, acceptance checks, model/effort/context/autonomy and side-effect limits. Writers must have disjoint ownership. Read-only roles must not edit files, even if the live tool permits writes. Subagents do not commit/push/publish or edit orchestration state. Root integrates and rewrites docs/ROOT.md as one clean current document with verification links and the next action; no v1/v2/final report files. Worker records live under workspace/agents/<package>/<role>/.
+<!-- END NNC AI OSER MANAGED TEAM -->

@@ -1,8 +1,12 @@
 # Auto_ROK game-state / mission matrix
 
-Updated 2026-09-19 (Asia/Ho_Chi_Minh).
+Evidence snapshot: 2026-09-19 (Asia/Ho_Chi_Minh). Current FIRST DONE and its
+authority are in [GOAL](GOAL.md), [PRD](PRD.md) and
+[SESSION_AUTHORITY](SESSION_AUTHORITY.md). Occurrence-bound B003 evidence and
+R3 counts below are historical; they do not impose per-march approval on the
+startup-authorized five-march job.
 
-This is the bounded knowledge map for the current product. It records what
+This is the bounded knowledge map for the trained state/mission paths. It records what
 the harness is allowed to claim from observed frames and trained mission
 contracts; it is not a claim that every Rise of Kingdoms screen or mission has
 already been automated. A branch stays out of acceptance until its own
@@ -30,7 +34,7 @@ permission to guess.
 | `RESOURCE_SEARCH_PANEL` | `Barbarians`/`Level:` anchor, bounded category/level ROIs, OCR decisions | `SELECT_RESOURCE_TYPE`, optional `SET_RESOURCE_LEVEL`, `SEARCH_RESOURCE_NODE` | panel remains open, then `RESOURCE_POINT_DETAIL` | Corpus-ready: the canonical Windows OCR path remains a 22/60 diagnostic baseline, while the independently locked RapidOCR overlay reaches 56/60 OCR-only (0.9333 recall, 1.0 precision). Runtime promotion remains a separate proof. |
 | `RESOURCE_POINT_DETAIL` | Fresh target/scene binding for the selected node and resource level | `GATHER_RESOURCE_NODE` | `TROOP_DISPATCH_DRAWER` | Training contract exists; a fresh target must be grounded before input. |
 | `TROOP_DISPATCH_DRAWER` | Visible drawer and current occurrence identity | `CREATE_NEW_TROOP` | `NEW_TROOP_SETUP` | Covered in the safe recon and fresh `gather-goal-20260919-04`; dispatch receipt is not success. |
-| `NEW_TROOP_SETUP` | Current visible commander/troop selection plus occurrence-bound approval | `MARCH_WITH_CURRENT_SELECTION` | `MARCH_IN_PROGRESS` or `WORLD_MAP_VIEW` | Fresh bounded E2E passed for `gather-goal-20260919-04`; the `Units` OCR holdout is repaired by a frame-bound crop. Unknown composition or owner/gatherer policy remains a hold. |
+| `NEW_TROOP_SETUP` | Fresh frame-bound game-filled formation, March target and applicable job scope; the 2026-09-19 occurrence instead used B003 approval | `MARCH_WITH_CURRENT_SELECTION` | `MARCH_IN_PROGRESS` or `WORLD_MAP_VIEW` | Historical bounded E2E passed for `gather-goal-20260919-04`. FIRST DONE's formation fact is wired offline; a fresh autonomous job remains unproven. Harness leaves the game-filled pair unchanged and holds if formation is absent or ambiguous. |
 | `MARCH_IN_PROGRESS` | Fresh queue ROI (`visible_ocr_march_queue_region`) and same character identity | none; verify only | `COMPLETE` only when queue used count increases relative to the pre-dispatch baseline | One live Queue +1 proof passed. A receipt, route line or stale frame alone is not completion. |
 | `UNKNOWN_STATE` | No trusted state projection | none | fresh observe or operator decision | Always fail closed; never select a coordinate or action. |
 | `NEEDS_DECISION` | More than one already-grounded candidate or unresolved policy | local model may choose one existing candidate, otherwise abstain | candidate re-enters normal policy/guard path | Local LLM is a bounded chooser only; it cannot create state, target, policy or input. |
@@ -102,7 +106,7 @@ current HWND frame
   -> observation projection / target provenance
   -> state and fact classification
   -> deterministic candidate filtering
-  -> policy / occurrence approval
+  -> policy / bounded job authority (historical B003 uses occurrence approval)
   -> guarded semantic action (if armed)
   -> fresh frame and typed verification
   -> checkpoint + immutable evidence
@@ -115,7 +119,7 @@ boxes expire on frame, geometry, state or target changes.
 
 | Mission or branch | Trained entry / state family | Completion contract | Current coverage | Required next evidence |
 |---|---|---|---|---|
-| `GATHER_RESOURCE` | `CITY_VIEW` or `WORLD_MAP_VIEW` through search, node detail and troop setup | `march_queue_used` increases relative to the fresh pre-dispatch baseline | Current bounded E2E passed; R3 registered set remains 2/10 | Eight additional live occurrences after explicit endurance authorization, with at least seven successes, then the registered scenario set. |
+| `GATHER_RESOURCE` | `CITY_VIEW` or `WORLD_MAP_VIEW` through search, node detail and troop setup | `march_queue_used` increases relative to the fresh pre-dispatch baseline | One historical bounded E2E passed; FIRST DONE five-march job is not live proven | Current next proof is one startup-authorized job with five fresh +1 queue postchecks from 0/5 to 5/5. The historical R3 repetition set remains separate. |
 | `SWITCH_CHARACTER` | `ACCOUNT_CHARACTER_LIST` → `CHARACTER_LOGIN_CONFIRM` → main game shell | Fresh main-game state after asynchronous load | Not covered end-to-end | Capture and label both cards/login confirmation and prove occurrence-bound approval plus post-load verification. |
 | `CLAIM_ALLIANCE_TERRITORY_RSS` | `MAIN_GAME_VIEW` → `ALLIANCE_HOME` → `ALLIANCE_TERRITORY` | Exact post-claim signature | Training only | Supply a fresh after-claim frame and train a completion detector; no claim from the before frame. |
 | `BARBARIAN_FORT_RALLY` | No accepted product contract | Not defined | Training only | Define states, target grounding, policy and a fresh completion fact before implementation. |
@@ -130,24 +134,24 @@ boxes expire on frame, geometry, state or target changes.
 | Capture, HWND/PID/geometry, image hash and freshness | `live_capture`, `observation_projection` | Only symbolic provenance fields |
 | Fixed client ROIs, CPU signature, OCR and target grounding | `windows_ocr`, `ocr_semantics`, visual detector and profiles | No raw desktop or free-form coordinates |
 | State classification and outgoing candidate set | `state_classifier`, `state_adapter`, `deterministic_selector` | Current state, facts and existing candidate IDs only |
-| Mission policy, troop approval, occurrence binding | mission contract, policy overlay and approval artifacts | No policy creation or override |
+| Mission policy, bounded job authority and historical troop approval | mission contract, policy overlay, job ledger or B003 artifact for its own path | No policy creation or override |
 | Input isolation and guarded actuation | interference guard, screen mapping and Windows input adapter | No mouse/keyboard/tool surface |
 | Post-action verification, checkpoint, recovery and evidence | engine, runner, store and runtime evidence | Never reports success; harness verifies it |
 
-## Acceptance snapshot
+## Historical 2026-09-19 acceptance snapshot
 
 | Gate | Current result | Evidence interpretation |
 |---|---|---|
 | G1 direct-host isolation | Pass for current occurrence | Target binding, foreground/integrity checks, stale-frame and zero-unintended-input trace are present. |
 | G2 CPU/OCR/state R1a | Pass for locked corpus; runtime promotion pending | Independent visual review locks 12 frame/hash-bound search panels; RapidOCR overlay reaches 1.0 precision / 0.9333 OCR-only recall and 30/30 observation projections. The optional runtime backend still needs a fresh visible live remeasurement. |
 | G3 local-LLM holdout | Measured, promotion pending | 12/12 bounded choices and zero input; reviewer acceptance is still required. |
-| G4 B003 occurrence approval | Pass for current occurrence | Approval is bound to mission, run, character and visible selection; it cannot be reused. |
+| G4 B003 occurrence approval | Pass for named historical occurrence | Approval is bound to mission, run, character and visible selection; it cannot be reused and is not FIRST DONE job authority. |
 | G5 live GATHER postcondition | Pass for current occurrence | Queue used +1 was read from a fresh queue ROI after `gather-goal-20260919-04`; no duplicate input was emitted during delayed verification. |
 | G6 endurance | Blocked | R3 has 2/10 registered and 2/9 required successes; explicit authorization for the remaining live repetitions is outstanding. |
 
 ## Evidence discipline and next edge
 
-The next valid edge is the optional runtime backend remeasurement:
+For the 2026-09-19 sensor branch, the next valid edge was optional runtime backend remeasurement:
 `observation_corpus_holdout → rapidocr_fixed_roi_backend → observation_projection`.
 Until that edge is accepted, the Windows OCR path remains the default and the
 RapidOCR overlay cannot silently change runtime grounding. No live input is

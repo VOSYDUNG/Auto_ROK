@@ -1,9 +1,22 @@
 # Auto_ROK completion audit
 
-Updated 2026-09-19 (Asia/Ho_Chi_Minh). This is a requirement-by-requirement
-audit of the active Goal. It is evidence-led: `PASS` means the named artifact
+Updated 2026-09-24 (Asia/Ho_Chi_Minh). This audit maps the historical G1–G6
+gates to their bounded evidence and identifies what FIRST DONE still requires.
+It is evidence-led: `PASS` means the named artifact
 proves the exact claim, `PARTIAL` means a promotion or scope edge remains, and
 `BLOCKED` means the evidence is insufficient for the next irreversible step.
+The G1–G5 pass entries below describe September 18–19 artifacts and their
+bounded occurrences. They do not establish readiness of the currently open
+game window. The offline audit computed on September 22 at HEAD `7855c616`
+still reports G6 blocked. The current FIRST DONE five-march objective remains
+`UNIMPLEMENTED` in `runtime-status.yaml`; daily continuity is a later milestone.
+
+FIRST DONE now means one character autonomously dispatching five farm marches
+under one startup job authorization, preserving the commander pair auto-filled
+by each fresh New Troop screen, and verifying queue 0→5/5. Return/refill, buff continuity and
+24-hour operation are later milestones. This is a product
+acceptance target in [GOAL](GOAL.md) and [PRD](PRD.md), not a claim established
+by the historical gate artifacts below.
 
 ## Scope invariants
 
@@ -27,19 +40,40 @@ proves the exact claim, `PARTIAL` means a promotion or scope edge remains, and
 | Fixed CPU ROI and coordinate/performance map | PASS | `config/cpu_rois.yaml`, `docs/CPU_ROI.md`, `config/resource_level_profile.json`, `tests/test_resource_level_control.py` | Trained geometry is valid only for the 1366×768 profile and is never permission to click. |
 | Capture, OCR and state projection on CPU/RAM | PASS / PARTIAL | `workspace/evidence/corpus/ocr-quality-rapidocr-overlay-20260919-independent.json`, `workspace/evidence/corpus/cpu-observation-corpus-rapidocr-overlay-20260919-independent.json`, `workspace/evidence/cpu/live-followup-20260918-04.json` | Windows OCR remains canonical; optional RapidOCR runtime promotion still needs a fresh live remeasurement. |
 | Candidate/action surface and deterministic policy | PASS | `config/mission_flows.yaml`, `harness/state_adapter.py`, `harness/mission_engine.py`, `tests/test_gather_runtime_contracts.py`, `tests/test_typed_action_contracts.py` | Unknown policy remains `NEEDS_DECISION`; no branch is inferred. |
-| Occurrence-bound B003 approval | PASS for current occurrence | `workspace/evidence/gather/approvals/gather-goal-20260919-04.json`, `workspace/evidence/gather/R3_PREFLIGHT-gather-goal-20260919-04-final.json` | Every new occurrence requires a new approval. |
-| Direct-host input isolation | PASS for current occurrence | `workspace/evidence/host/gather-goal-20260919-04-20260919T031742734674Z-00.json` | Only the bounded foreground action window is covered; no unattended desktop claim. |
+| Occurrence-bound B003 approval | PASS for 2026-09-19 occurrence | `workspace/evidence/gather/approvals/gather-goal-20260919-04.json`, `workspace/evidence/gather/R3_PREFLIGHT-gather-goal-20260919-04-final.json` | Historical benchmark/R3 path only; it is not a per-march approval requirement for FIRST DONE. |
+| Direct-host input isolation | PASS for 2026-09-19 occurrence | `workspace/evidence/host/gather-goal-20260919-04-20260919T031742734674Z-00.json` | Only the bounded foreground action window is covered; no unattended desktop claim. The current audit includes the trace and lists its derived assessment sidecar only if that file exists. |
 | Checkpoint, cancel, resume and tamper blocking | PASS offline | `workspace/evidence/recovery/recovery-matrix-20260919-02.json`, `tests/test_mission_runner.py`, `tests/test_mission_ledger.py` | Matrix is contract-only and intentionally emits no live input. |
 | Immutable/append-only runtime evidence | PASS | `harness/gather_replay_evidence.py`, `tests/test_gather_replay_evidence.py`, `scripts/validate_gather_replay.py` | Evidence is append-only; timestamp collisions fail closed. |
-| One live GATHER postcondition | PASS for current bounded occurrence | `workspace/evidence/gather/gather-596d20bfddd42eb077af/revision-000013-1789787875616850100.json`, `workspace/evidence/audit/goal-readiness-latest.json` | After-state may be `UNKNOWN_STATE`; fresh queue provenance (`1/5 → 2/5`) is the accepted completion fact. |
+| One live GATHER postcondition | PASS for 2026-09-19 bounded occurrence | `workspace/evidence/gather/gather-596d20bfddd42eb077af/revision-000013-1789787875616850100.json`, `workspace/evidence/audit/goal-readiness-latest.json` | After-state may be `UNKNOWN_STATE`; queue provenance (`1/5 → 2/5`) is the accepted historical completion fact. |
 | Local-LLM holdout and 80/20 boundary | PASS measured / PARTIAL promotion | `workspace/evidence/local_llm/needs-decision-gpt-oss-holdout-20260918.json`, `tests/test_local_llm_selector.py`, `config/local-llm.json` | 12/12 bounded choices and zero input; production promotion remains disabled pending review. |
 | R3 repetition threshold | BLOCKED | `config/r3_registered_runs.json`, `workspace/evidence/gather/r3-repetition-latest.json` | 2/10 registered and 2/9 minimum successes; 8 additional live occurrences are required. |
 | Explicit authorization for additional live runs | BLOCKED / execution gate built | `harness/r3_endurance_authorization.py`, `scripts/run_elevated_gather.py`, `tests/test_r3_endurance_authorization.py`, `scripts/audit_goal_readiness.py` | `workspace/evidence/gather/R3_ENDURANCE_AUTHORIZATION.json` is intentionally absent until the operator authorizes it; no live R3 run has been started by this build. |
-| Endurance / longer-run promotion | DEFERRED | `docs/ROADMAP_STATUS.md`, G6 in `workspace/evidence/audit/goal-readiness-latest.json` | Must not start before R3 and explicit authorization. |
+| Endurance / longer-run promotion | DEFERRED | `runtime-status.yaml`, G6 in `workspace/evidence/audit/goal-readiness-latest.json` | Must not start before R3 and explicit authorization. |
+
+## FIRST DONE evidence gap
+
+This map links the new product contract to the evidence owner without copying
+capability statuses into a second current-state table. The precise level and
+limitations of measured capabilities remain in [runtime-status](../runtime-status.yaml).
+
+| Required edge | Evidence owner and required demonstration |
+|---|---|
+| Fresh New Troop → game-populated formation → March | [F1-C formation](../workspace/agents/f1c-formation-fact/tho_dung/HANDOFF.md) is wired offline from current-frame OCR/pixels and four positive archive frames; no real empty formation negative or live job yet. Harness must not send commander-selection input. Commander names and the game’s internal ranking are not separate acceptance gates. |
+| Startup job authorization → guarded automatic marches | PRD F06, SRS `MIS-FD-005`, and [SESSION_AUTHORITY](SESSION_AUTHORITY.md) define one local GATHER job, no approval per march. The offline `create_gather_job.py` command issues one non-overwriting artifact from the compiled catalog plus a separate non-authoritative launch spec; F1-B/C wired the guard and bound client offline. Historical G4/B003 only covers its named occurrence. |
+| Fresh queue observation → five verified transitions → 5/5 | [F2-A journal](../workspace/agents/f2a-verification-journal/tho_dung/HANDOFF.md) resolved the three [review](../workspace/agents/f2a-verification-journal/kiem_luat/HANDOFF.md) findings and is WIRED offline; ROOT's full suite passed. No supported archived 0/5 queue frame exists; the older 5/5 occurrence includes manual intervention. A new autonomous job must show 0→1→2→3→4→5 for the same character. |
+| One startup job → five autonomous occurrences | [F2-B coordinator](../workspace/agents/f2b-five-march/tho_dung/HANDOFF.md) is WIRED offline as a caller-driven one-tick implementation with journal-validated closeout. [F2-C driver](../workspace/agents/f2c-job-driver/root/HANDOFF.md) is WIRED offline after [independent re-review](../workspace/agents/f2c-driver-review/kiem_luat/HANDOFF.md): 20 focused tests cover canonical CLI/MissionRunner/coordinator/journal, launch-spec failure, false terminal report and safe already-closed recovery. The current host-isolation trace is bound to one run ID; no per-march operator reconfirmation is intended. |
+| Same job → immutable close report | [F3 audit](../workspace/agents/f3-first-done-audit/root/HANDOFF.md) is accepted as IMPLEMENTED offline after independent review and 10 focused tests. It compares five journal transitions with full checkpoint proof, ordered driver output and per-tick frame/formation/client evidence. It emits only `OFFLINE_REPLAY_PASS`/`BLOCKED`; the canonical driver does not invoke it yet and the auditor currently requires all five slots in one attempt, so a resumed chain still needs integration. No fresh live close report exists. Estimated mining/return time is optional sourced metadata, not a completion gate. |
+| Daily continuity after FIRST DONE | `troops_panel_sensor`, `return_detection`, `automatic_refill`, `buff_sensor` and `buff_top_up` remain separate later capabilities. The [inventory](../workspace/agents/p1-continuity-evidence/nghien_cuu/HANDOFF.md) found no positive Returning/Home or buff-timer evidence. |
+| Local LLM benchmark | PRD F05 and SRS local-LLM contract; holdout is historical evidence of bounded selection. B003 review/training and model participation measurement do not grant farm input or add per-march approval. |
+
+No first-done row is promoted by a planned requirement, a passing isolated test,
+or a historical live receipt. An unknown state, missing item or expired session
+authority blocks the affected action and must appear in the final evidence.
 
 ## Current gate snapshot
 
-The latest read-only audit reports:
+The September 23 offline recomputation on the working tree based on HEAD
+`7855c616` reports these gate statuses from persisted artifacts:
 
 ```text
 G1_HOST_INPUT_ISOLATION       PASS
@@ -53,26 +87,33 @@ G6_ENDURANCE                  BLOCKED (R3 2/10; authorization missing)
 Commands that do not touch ROK or emit input:
 
 ```powershell
-python scripts/audit_goal_readiness.py --output workspace/evidence/audit/goal-readiness-latest.json
+python -B -c "from scripts.audit_goal_readiness import audit; import json; print(json.dumps(audit(), ensure_ascii=False))"
 python scripts/validate_engineering_graph.py
 python scripts/validate_gather_replay.py workspace/evidence/gather/gather-e9f395858e63a2dcb7d0
 ```
 
 ## Required next transition
 
-The next transition is operator-authorized R3 repetition, not an inferred
-endurance run. The execution gate is now wired: when the authorization flag is
-supplied, the elevated helper validates the active manifest and appends one
-unique reservation ticket after host preflight, before live dispatch. The
-authorization artifact must be scoped to
-`GATHER_RESOURCE` / `one-character` / `char-direct-01`, use scope
-`r3_live_gather_repetition`, set `approved: true`, contain an ISO-8601
-`approved_at`, and set `max_additional_runs` to at least 8. Each live run must
-still receive its own approval, direct-host trace, fresh Queue verification and
-immutable evidence record. Until that artifact and the remaining evidence exist,
-the Goal must remain active and G6 must remain blocked.
+The offline G1–G6 audit correction was accepted after independent review and
+focused tests; all 10 referenced historical artifacts exist and G6 remains
+blocked. G6 is the later endurance track, not the five-march criterion.
+[ROOT](ROOT.md) links current verification. The next FIRST DONE dependency is
+F3 audit integration across resumed driver attempts, followed by job-scoped
+preflight in [BUILD_PLAN](BUILD_PLAN.md). The [F3 audit](../workspace/agents/f3-first-done-audit/root/HANDOFF.md)
+is accepted offline; its live evidence gap remains. These offline results do
+not authorize a live run.
 
-## Graph handoff
+The existing R3 execution gate remains a separate historical contract:
+`harness/r3_endurance_authorization.py` and `scripts/run_elevated_gather.py`
+require fresh scoped authorization, preflight, per-occurrence approval, host
+trace, queue verification and immutable evidence for those legacy repetition
+runs. That approval mechanism is separate from the one-job FIRST DONE path.
+G6 stays blocked; the FIRST DONE autonomous five-march claim is also unproven.
+
+## Historical graph handoff (2026-09-19)
+
+The record below documents the September 19 source change. The September 22
+GATHER-EVIDENCE package changed no graph node or edge.
 
 ```text
 status: PARTIAL (field reconnaissance in progress; operational R3 remains gated)

@@ -37,6 +37,9 @@ class ToolSnapshot:
     allowed_actions: Sequence[AllowedAction] = field(default_factory=tuple)
     target_ids: Sequence[str] = field(default_factory=tuple)
     last_feedback: Mapping[str, Any] = field(default_factory=dict)
+    # Capture timestamp, carried separately from OCR/scene facts so a final
+    # pre-input guard can recheck frame age against the actual observation.
+    observed_at: float | None = None
 
 
 @dataclass(frozen=True)

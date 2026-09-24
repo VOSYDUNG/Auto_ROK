@@ -47,6 +47,8 @@ class MissionCheckpoint:
     # This is deliberately durable so a caller-driven next tick can verify it
     # without selecting or emitting the action a second time.
     pending_verification: Mapping[str, Any] | None = None
+    # Exact Engine COMPLETE + VERIFIED proof, written atomically with COMPLETE.
+    verified_transition: Mapping[str, Any] | None = None
 
     def matches(self, context: MissionContext) -> bool:
         return (
@@ -153,6 +155,9 @@ class JsonMissionStore:
             pending_raw = payload.get("pending_verification")
             if pending_raw is not None and not isinstance(pending_raw, Mapping):
                 raise RuntimeError("pending_verification must be an object or null")
+            verified_raw = payload.get("verified_transition")
+            if verified_raw is not None and not isinstance(verified_raw, Mapping):
+                raise RuntimeError("verified_transition must be an object or null")
             baseline_raw = payload.get("completion_baseline")
             if baseline_raw is not None and not isinstance(baseline_raw, Mapping):
                 raise RuntimeError("completion_baseline must be an object or null")
@@ -172,6 +177,7 @@ class JsonMissionStore:
                 updated_at=payload.get("updated_at"),
                 completion_baseline=dict(baseline_raw) if isinstance(baseline_raw, Mapping) else None,
                 pending_verification=dict(pending_raw) if isinstance(pending_raw, Mapping) else None,
+                verified_transition=dict(verified_raw) if isinstance(verified_raw, Mapping) else None,
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise RuntimeError("malformed mission checkpoint payload") from exc

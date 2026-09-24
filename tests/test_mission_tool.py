@@ -113,6 +113,7 @@ def test_bounded_tool_compiles_visible_observation_into_current_action_surface()
     )
     snapshot = tool.observe(CONTEXT)
     assert snapshot.frame_id == "f1"
+    assert snapshot.observed_at == 1.0
     assert snapshot.state == "CITY_VIEW"
     assert [item.action_id for item in snapshot.allowed_actions] == ["TOGGLE_CITY_MAP"]
 

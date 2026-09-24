@@ -226,7 +226,9 @@ def audit() -> dict[str, Any]:
         if host_trace_path is not None
         else None
     )
-    host_assessment = _read(host_assessment_path) if host_assessment_path else None
+    host_evidence = [str(host_trace_path)] if host_trace_path is not None else []
+    if host_assessment_path is not None and host_assessment_path.is_file():
+        host_evidence.append(str(host_assessment_path))
     host_reasons: list[str] = []
     if host_trace is None:
         host_reasons.append("no ready direct-host trace is available")
@@ -243,8 +245,8 @@ def audit() -> dict[str, Any]:
         "G1_HOST_INPUT_ISOLATION",
         "pass" if not host_reasons else "blocked",
         host_reasons,
-        [str(item) for item in (host_trace_path, host_assessment_path) if item is not None],
-        input_emitted=False if host_trace else None,
+        host_evidence,
+        input_emitted=host_trace.get("input_emitted") if host_trace else None,
     )
 
     cpu_path, cpu = _latest_cpu_benchmark()
@@ -401,7 +403,14 @@ def audit() -> dict[str, Any]:
     )
     r3_path, r3 = _latest_r3_repetition_report()
     r3_ready = isinstance(r3, Mapping) and r3.get("status") == "pass"
-    endurance_reasons: list[str] = []
+    prerequisite_gates = (host_gate, corpus_gate, llm_gate, b003_gate, live_gate)
+    blocked_prerequisites = [
+        gate["gate"] for gate in prerequisite_gates if gate["status"] != "pass"
+    ]
+    prerequisites_complete = not blocked_prerequisites
+    endurance_reasons = [
+        f"prerequisite gate {gate_id} is blocked" for gate_id in blocked_prerequisites
+    ]
     if not r3_ready:
         if r3 is None:
             endurance_reasons.append("R3 repetition validation report is missing")
@@ -422,13 +431,10 @@ def audit() -> dict[str, Any]:
         endurance_evidence.append(str(authorization_path))
     endurance_gate = _gate(
         "G6_ENDURANCE",
-        "pass" if r3_ready and not endurance_reasons else "blocked",
+        "pass" if prerequisites_complete and r3_ready and not endurance_reasons else "blocked",
         endurance_reasons,
         endurance_evidence,
-        prerequisites_complete=all(
-            gate["status"] == "pass"
-            for gate in (host_gate, corpus_gate, llm_gate, b003_gate, live_gate)
-        ),
+        prerequisites_complete=prerequisites_complete,
         r3_counts=r3_counts,
         endurance_authorization={
             "path": str(authorization_path),

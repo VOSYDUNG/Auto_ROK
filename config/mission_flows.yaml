@@ -137,9 +137,8 @@ flows:
     trained_observation_examples:
       - "Resource search panel exposes Barbarians, Cropland, Logging Camp, Stone Deposit, Gold Deposit and a level control."
       - "A selected Level 6 Logging Camp detail frame exposes Reserves=1,260,000, Gatherer=None, Owner=None and GATHER."
-      - "Training sequence shows Queue 0/5 before dispatch and 1/5 after March."
+      - "Archived frames include independent march-queue readings 1/5 through 5/5; no provenance-supported 0/5 queue baseline was found."
     unresolved_policy:
-      - "How commanders/troop composition should be selected for gathering."
       - "Whether Owner/Gatherer values impose a hard selection constraint."
 
 selector_contract:
