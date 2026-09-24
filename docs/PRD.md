@@ -93,7 +93,9 @@ FIRST DONE là **một vòng năm đạo đã xuất phát** của cùng một n
 client. Nhận mốc này chỉ khi đồng thời:
 
 1. Người vận hành cấu hình và ủy quyền một công việc GATHER có giới hạn cho
-   đúng nhân vật. Harness tự đi năm đạo trong phạm vi đó, không hỏi duyệt từng
+   đúng nhân vật đang mở; xác nhận một lần lúc cấp job được ràng với frame,
+   client và thời điểm khởi đầu. Giá trị `character_id` từ cấu hình đơn lẻ
+   không thay bằng chứng đó. Harness tự đi năm đạo trong phạm vi đó, không hỏi duyệt từng
    march. Quyền công việc không mở tài khoản, mật khẩu, xóa tài khoản, chuyển
    tài sản, gem hay item tiêu hao; các hành động rủi ro/ngoài GATHER cần quyết
    định riêng. Mỗi dispatch được kiểm scope, đúng cửa sổ và quan sát tươi.

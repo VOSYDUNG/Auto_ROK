@@ -115,7 +115,7 @@ def test_first_done_cannot_claim_live_while_a_gate_is_false(status):
 def test_first_done_gates_match_the_current_prd_scope(status):
     expected_first_done = {
         "one_startup_authorized_job_without_per_march_approval",
-        "one_visible_client_and_ui_confirmed_character",
+        "one_visible_client_and_startup_attested_character",
         "fresh_game_filled_new_troop_pair_preserved_on_each_march",
         "five_fresh_verified_queue_increments_0_to_5_of_5",
         "immutable_job_close_report",
@@ -143,7 +143,7 @@ def test_first_done_cannot_inherit_operator_assisted_live_proof(status):
         "bounded_gather_job",
         "client_binding",
         "new_troop_formation_fact",
-        "startup_ui_character_identity",
+        "startup_character_attestation",
         "fresh_0_of_5_queue_baseline",
         "five_transition_job_coordinator",
     ):

@@ -32,7 +32,7 @@ objective:
     - startup_job_issuance
     - client_binding
     - new_troop_formation_fact
-    - startup_ui_character_identity
+    - startup_character_attestation
     - fresh_0_of_5_queue_baseline
     - five_transition_job_coordinator
     - five_march_job_driver
@@ -90,7 +90,7 @@ capabilities:
       - workspace/agents/f1c-evidence/root/HANDOFF.md
     limitations:
       - binds capture HWND/PID/process path in the offline canonical fixture
-      - does not establish the character identity displayed by the game
+      - does not itself prove the operator's startup character attestation
 
   new_troop_formation_fact:
     status: WIRED
@@ -102,9 +102,13 @@ capabilities:
       - four archived positive frames and synthetic negative cases; no fresh live job
       - no real empty or disabled New Troop negative frame in the surveyed archive
 
-  startup_ui_character_identity:
+  startup_character_attestation:
     status: UNIMPLEMENTED
-    note: character_id remains an operator assertion, not a UI-derived startup fact
+    note: >
+      The operator may confirm the open character once for FIRST DONE, but no
+      artifact yet binds that confirmation to the job, first frame/hash,
+      client HWND/PID/process path and time. Configured character_id alone
+      is insufficient; UI OCR is not required for this milestone.
 
   fresh_0_of_5_queue_baseline:
     status: UNIMPLEMENTED
@@ -209,7 +213,7 @@ capabilities:
 acceptance:
   one_startup_authorized_job_without_per_march_approval:
     passed: false
-  one_visible_client_and_ui_confirmed_character:
+  one_visible_client_and_startup_attested_character:
     passed: false
   fresh_game_filled_new_troop_pair_preserved_on_each_march:
     passed: false
@@ -244,14 +248,14 @@ later_milestones:
 
 known_blockers:
   - no provenance-safe fresh 0/5 march-queue baseline for a new job
-  - startup character identity is not read from the game UI
+  - one-time startup character attestation is not yet bound to a job/frame/client/time artifact
   - F3 audit is accepted offline but is not invoked by the canonical driver or able to audit resumed attempt chains
   - no autonomous live job occurrence
   - job live arming remains blocked; this status file grants no input authority
 
 next_live_falsification:
   hypothesis: >
-    Once separately authorized, one GATHER job for a UI-confirmed character
+    Once separately authorized, one GATHER job for a startup-attested character
     starts at a fresh queue 0/5 and completes five independent +1 postchecks.
   expected_observation: >
     Append-only evidence binds job/client/character, each New Troop formation

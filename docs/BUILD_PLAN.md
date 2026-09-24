@@ -61,11 +61,12 @@ actuator giả đã tiêu thụ fact và guard; toàn bộ pytest, graph, NNC va
 PASS. Revoke hoặc frame/job hết hạn trong lúc đọc ledger đều chặn trước input.
 Đó là `WIRED` offline, chưa chứng minh live. Không gửi input đổi chỉ huy.
 
-**F1-C còn thiếu trước live:** `character_id` vẫn là khai báo của người vận
-hành, chưa có nguồn UI ở lúc bắt đầu; ảnh âm New Troop thật chưa có. Reader
+**F1-C còn thiếu trước live:** `character_id` mới là cấu hình, chưa có artifact
+xác nhận một lần của operator ràng job/frame/client/thời điểm; ảnh âm New Troop
+thật chưa có. Reader
 queue đã đọc đúng các snapshot 1/5–5/5 nhưng chưa có 0/5 được hỗ trợ từ ROI
 march queue. Chuỗi OCR `0/5` trong quest panel là mồi nhử, không phải baseline.
-Nghiệm thu phần còn lại cần một mốc nhân vật/queue 0/5 từ frame có provenance,
+Nghiệm thu phần còn lại cần xác nhận nhân vật khởi đầu và queue 0/5 từ frame có provenance,
 không cần duyệt từng march. Quyền khởi đầu không cần Windows Hello trong ranh
 giới same-user local; nếu threat model đổi thì mở issuer riêng.
 

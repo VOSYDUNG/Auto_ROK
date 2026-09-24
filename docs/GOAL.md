@@ -19,6 +19,10 @@ Trên một client ROK hiển thị và đã đăng nhập, ở một máy Windo
 đưa **năm đạo của cùng một nhân vật** đi farm trong một công việc GATHER được
 người vận hành cấu hình/ủy quyền lúc bắt đầu. New Troop **tự điền cặp chỉ huy
 theo gợi ý của game**; harness giữ nguyên cặp đó, bấm March rồi hậu kiểm.
+Người vận hành xác nhận nhân vật đang mở **một lần** khi cấp job; bằng chứng
+khởi đầu ràng xác nhận đó với frame, client và thời điểm. Không bắt buộc OCR
+tên nhân vật từ UI cho FIRST DONE, và cấu hình `character_id` đơn lẻ chưa phải
+bằng chứng xác nhận này.
 Nếu cặp trên màn hiện tại trống/không đọc được hoặc bị đổi ngoài luồng thì
 dừng lượt, không tự xếp hạng thay game. Không duyệt thủ công từng march.
 

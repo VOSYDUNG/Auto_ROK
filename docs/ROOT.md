@@ -10,7 +10,9 @@ Kết quả cuối là **LLM local dùng harness xác định để farm ROK m�
 FIRST DONE đã được người vận hành chốt là **một vòng năm đạo của một nhân vật
 đã đi farm, có hậu kiểm queue 0→5/5**. New Troop tự điền cặp gợi ý của game;
 harness giữ nguyên cặp và bấm March. Người vận hành ủy quyền một công việc GATHER lúc đầu;
-không duyệt từng march. Hậu kiểm dừng tại 5/5, còn thời gian đào/về chỉ cần
+đồng thời xác nhận nhân vật đang mở một lần; không duyệt từng march. Xác nhận
+khởi đầu phải gắn với job/frame/client/thời điểm, không đòi OCR tên nhân vật.
+Hậu kiểm dừng tại 5/5, còn thời gian đào/về chỉ cần
 ước lượng có nguồn nếu ghi. Return/refill, buff và 24 giờ thuộc mốc farm
 hằng ngày sau FIRST DONE. [GOAL](GOAL.md) sở hữu định nghĩa mốc,
 [PRD](PRD.md) sở hữu nghiệm thu, [SESSION_AUTHORITY](SESSION_AUTHORITY.md)
@@ -105,8 +107,9 @@ hình/nút March. Bốn ảnh archive dương và ca âm tổng hợp PASS; chư
 game thật để đo layout chưa thấy. CLI synthetic dùng MissionRunner thật và
 actuator giả đã tiêu thụ hai nhánh mới, mức **WIRED offline**. ROOT đã chạy
 toàn bộ pytest, engineering graph, NNC team validator và `git diff --check`
-đều PASS sau tích hợp. `character_id` vẫn là khai báo operator, chưa có
-nhận dạng UI lúc bắt đầu; `--gather-job --arm-live` tiếp tục bị chặn. FIRST
+đều PASS sau tích hợp. `character_id` hiện chỉ là giá trị cấu hình; chưa có
+artifact xác nhận một lần của operator gắn với frame/client lúc bắt đầu.
+`--gather-job --arm-live` tiếp tục bị chặn. FIRST
 DONE chưa live-proven hay đạt 5/5 tự chủ.
 
 ROOT đã thực hiện **một capture thụ động** game đang mở:
@@ -140,7 +143,8 @@ chỉ báo đóng job khi plan hợp lệ cùng closeout đã ghi. ROOT đã đ�
 chạy toàn bộ pytest, graph, NNC và liên kết docs: PASS. Đây là **WIRED offline**
 cho CLI một tick, không chứng minh game thật. [Nghiên cứu seam](../workspace/agents/f2-five-march/nghien_cuu/HANDOFF.md)
 giải thích vì sao runner vẫn xử lý từng occurrence; [character scope](../workspace/agents/f2-character-scope/nghien_cuu/HANDOFF.md)
-xác nhận UI identity còn thiếu.
+cho thấy cấu hình đơn lẻ không phải bằng chứng danh tính. Người vận hành đã
+chọn xác nhận một lần khi cấp job thay cho bắt buộc OCR tên UI ở FIRST DONE.
 
 Graph có node `gather_job_coordinator`; CLI gọi **một tick** mỗi lần.
 [F2-C driver](../workspace/agents/f2c-job-driver/tho_dung/HANDOFF.md) nay nối
@@ -181,8 +185,9 @@ quyền. Đây chỉ là đường cấp artifact, chưa chạy job hay mở quy
   mỗi lượt có receipt và frame hậu kiểm mới cùng job/client/nhân vật; restart,
   revoke, duplicate, stale, skip và kết quả không chắc đều fail closed. Test
   cấu trúc chứng minh CLI dùng journal, graph PASS, không phát input thật.
-- `known_blockers`: archive chưa có mốc 0/5 hợp lệ; `character_id` chưa đọc từ
-  UI; host isolation còn gắn từng run ID.
+- `known_blockers`: archive chưa có mốc 0/5 hợp lệ và profile queue chưa có
+  glyph 0; xác nhận nhân vật một lần chưa được gắn vào artifact job/frame/client;
+  host isolation còn gắn từng run ID.
   Audit chưa được driver gọi tự động hoặc nhận chuỗi attempt sau resume.
   Các khoảng trống này chặn live nhưng
   không chặn replay offline.
@@ -191,8 +196,8 @@ quyền. Đây chỉ là đường cấp artifact, chưa chạy job hay mở quy
 
 Tiếp theo ROOT nối F3 audit với chuỗi attempt có thể resume, rồi đóng hợp đồng
 preflight cấp job theo [nghiên cứu F4](../workspace/agents/f4-job-live-preflight/nghien_cuu/HANDOFF.md);
-chỉ sau đó mới xét một lần thu baseline/nhân vật có provenance.
+sau đó cần một frame queue 0/5 có provenance và xác nhận nhân vật khởi đầu.
 `runtime-status.yaml` vẫn để mục tiêu
 `UNIMPLEMENTED`; không lấy synthetic 0→5 làm live proof. Game hiện có thể tắt.
 Gói F2 dùng artifact/replay offline; chỉ cần mở lại khi phải thu một frame
-baseline/nhân vật có provenance cho preflight live.
+baseline 0/5 có provenance cho preflight live.

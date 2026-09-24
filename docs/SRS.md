@@ -147,7 +147,7 @@ các mã MIS cũ và không nâng trạng thái của runtime.
 
 | Mã | Mệnh đề | Tiêu chí chấp nhận | Nguồn |
 |---|---|---|---|
-| MIS-FD-001 | Một công việc GATHER chỉ điều năm đạo cho một nhân vật, từ queue 0/5 | Bằng chứng khởi đầu ghi đúng nhân vật và 0/5; mỗi event giữ cùng `job_id`/`character_id`; tối đa năm dispatch | GOAL, PRD §3.4 |
+| MIS-FD-001 | Một công việc GATHER chỉ điều năm đạo cho một nhân vật, từ queue 0/5 | Xác nhận nhân vật một lần của operator được ràng job/frame/client/thời điểm cùng quan sát queue 0/5; mỗi event giữ cùng `job_id`/`character_id`; tối đa năm dispatch, không đòi OCR tên UI | GOAL, PRD §3.4 |
 | MIS-FD-002 | Mỗi lượt giữ nguyên đội hình New Troop được game tự điền | New Troop mở mới có đội hình và nút March hợp lệ; harness không bấm đổi chỉ huy, thiếu/stale/mâu thuẫn trả `HOLD`. Không cần đọc tên cặp hay nhãn xếp hạng riêng | PRD §3.4, F03 |
 | MIS-FD-003 | Mỗi march có hậu kiểm hàng đợi mới | Năm chuyển tiếp queue 0→1→2→3→4→5 được buộc vào cùng nhân vật/job; receipt không đủ để ghi `VERIFIED` | F07, F08 |
 | MIS-FD-004 | Kết thúc vòng tại 5/5, ước lượng thời gian là metadata | Báo cáo append-only chỉ đạt khi năm postcondition xác minh; thời gian đào/về có nguồn và độ bất định nếu ghi, không yêu cầu quân về hay 24 giờ | PRD §3.4, F08 |

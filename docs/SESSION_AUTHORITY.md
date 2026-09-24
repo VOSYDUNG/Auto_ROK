@@ -43,18 +43,20 @@ không cùng ranh giới tin cậy, phải thiết kế xác thực issuer riên
 
 Client/window được ràng trên capture đầu và kiểm lại tại từng quan sát, trước
 input; test synthetic cho thấy đổi HWND/PID/path, revoke và hết hạn đều bị
-từ chối. Để mở live, còn thiếu chứng cứ nhận dạng nhân vật từ UI lúc bắt đầu,
-hàng đợi khởi đầu **0/5** và chuỗi hậu kiểm F2. `character_id` hiện do CLI cấu
-hình và được gắn nguồn `configured_single_character_scope`, **không phải**
-nhận dạng từ pixel/OCR. Guard so sánh scope, nhưng không thể dùng hai giá trị
-cùng nguồn cấu hình để tuyên bố đã xác minh nhân vật. Hàng đợi 0/5 cần được
+từ chối. Người vận hành xác nhận nhân vật đang mở **một lần khi cấp job**;
+preflight phải lưu job/nhân vật/frame/hash/client/thời điểm của xác nhận đó.
+FIRST DONE không đòi OCR tên nhân vật từ UI. `character_id` hiện do CLI cấu
+hình với nguồn `configured_single_character_scope`; riêng giá trị cấu hình
+chưa phải bằng chứng xác nhận khởi đầu. Để mở live, còn thiếu artifact xác
+nhận này, hàng đợi khởi đầu **0/5** và chuỗi hậu kiểm live mới. Hàng đợi 0/5 cần được
 quan sát trước lượt đầu để chứng minh cả năm đạo của vòng này do harness điều.
 
 Trace cô lập input của đường live cũ gắn với một `run_id`; job FIRST DONE có
 năm `run_id` xác định từ cùng một quyền khởi đầu. Preflight live của job phải
 chứng minh host/client không bị can thiệp trong phạm vi job và được kiểm lại
 trước input, nhưng không biến thành năm lần người vận hành duyệt March. Cho
-đến khi đường này và driver cả job được nối, `--gather-job --arm-live` vẫn bị
+đến khi preflight cấp job có nguồn thực và các blocker live được giải quyết,
+`--gather-job --arm-live` vẫn bị
 chặn.
 
 Một dispatcher chỉ dùng action thuộc catalog GATHER đã biên dịch. Chuỗi lạ
