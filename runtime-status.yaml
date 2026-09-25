@@ -16,10 +16,10 @@
 schema_version: 1
 
 head_basis:
-  sha: 314fb2c37c6db3c536b183010a55473d77ee7123
+  sha: c8613c0c95a5ef061288c3ca03ddb6e3146f12c4
   branch: master
   recorded_at: "2026-09-25"
-  context: F1/F2 and F3-B audited attempt chain wired offline; F4-A1 attestation implemented offline; no autonomous live job proof
+  context: F1/F2, F3-B audited attempt chain and F4-A2 startup-attestation consumption wired offline; no autonomous live job proof
 
 objective:
   id: FIRST_DONE_GATHER_FIVE_MARCHES
@@ -103,15 +103,19 @@ capabilities:
       - no real empty or disabled New Troop negative frame in the surveyed archive
 
   startup_character_attestation:
-    status: IMPLEMENTED
+    status: WIRED
     live_proof_after_commit: false
     evidence:
       - harness/gather_job_startup_attestation.py
       - scripts/attest_gather_job.py
       - tests/test_gather_job_startup_attestation.py
       - workspace/agents/f4a-startup-attestation/root/VALIDATION.md
+      - tests/test_run_gather_job.py
+      - tests/test_gather_job_cli_wiring.py
+      - workspace/agents/f4a-attestation-wiring/root/VALIDATION.md
     limitations:
-      - offline synthetic contract only; the canonical driver/tick does not yet consume the artifact
+      - canonical driver and direct job tick consume and revalidate the canonical record; evidence is offline synthetic only
+      - one digest is pinned across resumed attempts; local external edits are not claimed tamper-proof
       - no real 0/5 march-queue frame or trained zero glyph in the current profile
       - one operator assertion is bound to job/frame/client/time, not independently OCR-proven UI identity
       - both gather-job live-arm switches remain blocked
@@ -258,7 +262,7 @@ later_milestones:
 
 known_blockers:
   - no provenance-safe fresh 0/5 march-queue baseline for a new job
-  - one-time startup character attestation has an offline artifact but no canonical driver/tick consumer or real 0/5 frame
+  - startup attestation is wired offline but no real 0/5 frame has supported its issuance
   - host input-isolation trace is still run-scoped and self-reported, not job-scoped independent telemetry
   - no autonomous live job occurrence
   - job live arming remains blocked; this status file grants no input authority

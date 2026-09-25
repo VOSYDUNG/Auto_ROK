@@ -64,7 +64,8 @@ PASS. Revoke hoặc frame/job hết hạn trong lúc đọc ledger đều chặn
 **F1-C còn thiếu trước live:** `character_id` của CLI vẫn chỉ là cấu hình.
 [F4-A1 attestation](../workspace/agents/f4a-startup-attestation/root/VALIDATION.md)
 đã triển khai artifact xác nhận một lần ràng job/frame/client/thời điểm ở mức
-offline; driver/tick chưa tiêu thụ và chưa có artifact trên frame thật. Ảnh âm
+offline; [F4-A2](../workspace/agents/f4a-attestation-wiring/root/VALIDATION.md)
+đã nối driver/tick tiêu thụ offline, chưa có artifact trên frame thật. Ảnh âm
 New Troop thật chưa có. Reader
 queue đã đọc đúng các snapshot 1/5–5/5 nhưng chưa có 0/5 được hỗ trợ từ ROI
 march queue. Chuỗi OCR `0/5` trong quest panel là mồi nhử, không phải baseline.
@@ -125,8 +126,8 @@ không phải lệnh chạy game ngay.
 **Upstream:** F3-B đã nhận, F4-A1 artifact offline, queue 0/5 có provenance.
 **Downstream:** một occurrence live riêng được ủy quyền sau này.
 
-**Thứ tự:** F4-A2 nối một attestation bất biến vào cả driver và tick trực
-tiếp; F4-B tự thu trace mới cho đúng `run_id` trước từng tick, vẫn dưới một
+**Thứ tự:** F4-A2 đã nối một attestation bất biến vào cả driver và tick trực
+tiếp ở mức `WIRED` offline; F4-B tự thu trace mới cho đúng `run_id` trước từng tick, vẫn dưới một
 ủy quyền ban đầu. Sau đó cần frame queue 0/5 thật và glyph đã kiểm chứng;
 không lấy dữ liệu quest panel hoặc fixture tổng hợp làm baseline. Recorder
 host hiện tự khai zero input ngoài luồng, nên cần kiểm thêm nguồn telemetry

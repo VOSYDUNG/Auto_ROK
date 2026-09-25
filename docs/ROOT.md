@@ -53,7 +53,7 @@ Các link `workspace/` dưới đây là hồ sơ local bị Git ignore; clone k
 artifact tương ứng trước khi kiểm lại hash hoặc kết quả. Tài liệu Git chỉ giữ
 claim và đường truy nguyên, không chép ảnh game thô.
 `runtime-status.yaml` đã đối chiếu mã và bằng chứng offline đến 2026-09-25;
-`head_basis` tại đó là commit F3-B, còn SHA trên là mốc trước các gói
+`head_basis` tại đó là commit F4-A2, còn SHA trên là mốc trước các gói
 FIRST DONE. Đây là tình trạng bằng chứng, không phải quan sát game hôm nay.
 Lần 5/5 cũ là
 `LIVE_PROVEN_ONCE` trong phạm vi có can thiệp, không phải
@@ -109,9 +109,9 @@ hình/nút March. Bốn ảnh archive dương và ca âm tổng hợp PASS; chư
 game thật để đo layout chưa thấy. CLI synthetic dùng MissionRunner thật và
 actuator giả đã tiêu thụ hai nhánh mới, mức **WIRED offline**. ROOT đã chạy
 toàn bộ pytest, engineering graph, NNC team validator và `git diff --check`
-đều PASS sau tích hợp. Đường F1-C vẫn chỉ dùng `character_id` cấu hình;
-artifact xác nhận một lần của F4-A1 đã được triển khai offline nhưng chưa
-được driver/tick tiêu thụ.
+đều PASS sau tích hợp. Đường F1-C dùng `character_id` từ job cấu hình; F4-A2
+đã nối artifact xác nhận một lần của F4-A1 vào driver/tick offline, nhưng chưa
+có frame queue 0/5 thật.
 `--gather-job --arm-live` tiếp tục bị chặn. FIRST
 DONE chưa live-proven hay đạt 5/5 tự chủ.
 
@@ -142,7 +142,7 @@ lưu trong workspace, handoff theo graph, không polling/sleep-retry.
 nguồn hiện hành. GOAL, PRD, runtime-status và COMPLETION_AUDIT vẫn giữ thẩm
 quyền riêng, không lặp một claim nghiệm thu ở hai nơi.
 
-## Gói hiện hành: F4-A2 nối xác nhận khởi đầu, vẫn offline
+## Gói hiện hành: F4-B preflight trace theo từng tick, vẫn offline
 
 [F2-A journal](../workspace/agents/f2a-verification-journal/tho_dung/HANDOFF.md),
 [F2-B coordinator](../workspace/agents/f2b-five-march/tho_dung/HANDOFF.md) và
@@ -166,32 +166,35 @@ Report/verdict do harness tạo bằng exclusive-create; không tuyên bố ch�
 được một tiến trình local khác sửa file sau đó.
 
 [F4-A1 attestation](../workspace/agents/f4a-startup-attestation/root/VALIDATION.md)
-đã `IMPLEMENTED` offline: một assertion của operator gắn với job, ảnh native,
-client, thời điểm và QueueIndicatorReader đọc 0/5. Driver/tick chưa dùng artifact,
-fixture synthetic chưa tạo mốc 0/5 thật. `runtime-status.yaml` sở hữu mức
-capability hiện hành và vẫn giữ FIRST DONE `UNIMPLEMENTED`.
+ghi một assertion của operator gắn với job, ảnh native, client, thời điểm và
+QueueIndicatorReader đọc 0/5. [F4-A2 ROOT validation](../workspace/agents/f4a-attestation-wiring/root/VALIDATION.md)
+đã nối consumer vào driver, attempt chain và CLI tick trực tiếp tại commit
+`c8613c0`: path theo job
+ID là duy nhất, profile queue lấy từ repo, digest được ghim qua resume và kiểm
+lại trước mỗi tick. Review độc lập tìm nhánh terminal recovery từng audit
+trước attestation; ROOT đã sửa để kiểm trước recovery và đối chiếu digest với
+attempt cuối. Test offline bao phủ thiếu/sửa nguồn, sai hash, hết hạn, revoke
+và đường trực tiếp. Đây là `WIRED` offline, không phải attestation từ game
+thật. `runtime-status.yaml` sở hữu mức capability hiện hành và vẫn giữ FIRST
+DONE `UNIMPLEMENTED`.
 
-- `owned_nodes`: consumer của `startup_character_attestation`, preflight
-  `gather_job_driver` và đường `gather_cli` chạy trực tiếp.
-- `upstream_dependencies`: F3-B attempt chain đã nhận, F4-A1 artifact/validator,
-  job store revoke và client binding.
-- `downstream_consumers`: năm tick dưới một job; preflight host F4-B sau đó.
-- `acceptance_evidence`: cùng một đường artifact và digest cho năm `run_id`
-  kể cả resume; driver kiểm trước khi tạo attempt và trước mỗi tick, CLI trực
-  tiếp không đi vòng. Thiếu/sửa/sai job/client/nhân vật/hết hạn/revoke đều
-  dừng trước tick; không hỏi operator từng march. Test structural chứng minh
-  consumer thật, hai công tắc `--arm-live` vẫn chặn.
-- `known_blockers`: profile queue thật thiếu glyph `0`, archive không có frame
-  march-queue 0/5 được hỗ trợ; host trace hiện chỉ gắn một `run_id` và số
-  input ngoài luồng bằng 0 là tự khai của recorder.
-- `graph_delta_expected`: thay edge attestation→driver đang ghi `planned`
-  bằng edge consumer thật, thêm attestation→gather_cli; giữ input guard cũ.
+- `owned_nodes`: `host_input_isolation_evidence` producer/consumer và
+  preflight của `gather_job_driver`/`gather_cli`.
+- `upstream_dependencies`: F3-B attempt chain, F4-A2 attestation đã nối,
+  `GatherJobCoordinator.plan` và recorder trace thụ động hiện có.
+- `downstream_consumers`: guard input hiện hành, lần kiểm live riêng sau này.
+- `acceptance_evidence`: mỗi tick lấy trace mới cho đúng `run_id` và client
+  đã attested; thiếu/cũ/sai run/client/focus hoặc recorder lỗi thì dừng trước
+  runner. Không hỏi lại operator từng march; hai `--arm-live` vẫn chặn.
+- `known_blockers`: profile thật chưa có glyph `0`, archive không có frame
+  march-queue 0/5 hợp lệ; recorder tự khai `unexpected_input_events=0`, không
+  phải telemetry độc lập chứng minh zero input bên ngoài.
+- `graph_delta_expected`: producer trace → preflight driver/tick theo run ID
+  → guard input hiện hành; không mở kênh input mới.
 
-[Brief F4-A2](../workspace/agents/f4a-attestation-wiring/root/BRIEF.md) và
-[nghiên cứu seam](../workspace/agents/f4a-attestation-wiring/nghien_cuu/HANDOFF.md)
-đủ đầu vào để giao code offline. Sau đó [F4-B](../workspace/agents/f4b-host-trace/root/BRIEF.md)
-tự thu trace mới cho đúng `run_id` trước mỗi tick, không thêm approval thủ công.
-Một capture queue 0/5 có provenance và glyph đã kiểm chứng còn cần để cấp
-attestation thật; chỉ mở game lại khi thực hiện gói live riêng cho việc đó.
-Hiện game có thể tắt. Không chạy game, gửi input hoặc gọi endpoint model trong
-gói offline này.
+[Brief F4-B](../workspace/agents/f4b-host-trace/root/BRIEF.md) và
+[nghiên cứu seam](../workspace/agents/f4b-host-trace/nghien_cuu/HANDOFF.md)
+đặt phạm vi offline tiếp theo. Một capture queue 0/5 có provenance và glyph
+đã kiểm chứng còn cần để cấp attestation thật; chỉ mở game lại khi thực hiện
+gói live riêng cho việc đó. Hiện game có thể tắt. Không chạy game, gửi input
+hoặc gọi endpoint model trong gói offline này.

@@ -110,8 +110,10 @@ fact New Troop từ frame hiện tại và `gather_job_input_guard` → input bo
 kiểm offline. Driver nhiều tick đã nối qua CLI; F3-B kiểm chuỗi attempt
 trước tick và tự gọi auditor đóng vòng ở mức `WIRED` offline
 ([kiểm chứng](../workspace/agents/f3b-resumable-closeout/root/VALIDATION.md)).
-Artifact xác nhận ban đầu F4-A1 đã có nhưng driver/tick chưa tiêu thụ, và
-preflight host cho cả job còn thiếu. Những bước này tiêu thụ `gather_runtime_evidence`;
+Artifact xác nhận ban đầu F4-A1 nay được driver và tick trực tiếp tiêu thụ,
+kiểm trước attempt/tick và ghim cùng digest khi resume ở mức offline F4-A2
+([kiểm chứng](../workspace/agents/f4a-attestation-wiring/root/VALIDATION.md)).
+Preflight host cho cả job còn thiếu. Những bước này tiêu thụ `gather_runtime_evidence`;
 không tạo đường input song song với canonical
 `gather_cli`/`mission_engine`.
 
