@@ -107,8 +107,9 @@ hình/nút March. Bốn ảnh archive dương và ca âm tổng hợp PASS; chư
 game thật để đo layout chưa thấy. CLI synthetic dùng MissionRunner thật và
 actuator giả đã tiêu thụ hai nhánh mới, mức **WIRED offline**. ROOT đã chạy
 toàn bộ pytest, engineering graph, NNC team validator và `git diff --check`
-đều PASS sau tích hợp. `character_id` hiện chỉ là giá trị cấu hình; chưa có
-artifact xác nhận một lần của operator gắn với frame/client lúc bắt đầu.
+đều PASS sau tích hợp. Đường F1-C vẫn chỉ dùng `character_id` cấu hình;
+artifact xác nhận một lần của F4-A1 đã được triển khai offline nhưng chưa
+được driver/tick tiêu thụ.
 `--gather-job --arm-live` tiếp tục bị chặn. FIRST
 DONE chưa live-proven hay đạt 5/5 tự chủ.
 
@@ -175,7 +176,10 @@ proof qua verifier canonical, report qua thứ tự/tick count, revoke và ngu�
 `OFFLINE_REPLAY_PASS` hoặc `BLOCKED`, không nâng live.
 Auditor chưa được driver gọi tự động và hiện chỉ nhận đủ năm slot trong một
 attempt; [gói F3-B closeout sau resume](../workspace/agents/f3b-resumable-closeout/root/BRIEF.md)
-là bước tích hợp kế tiếp.
+là bước tích hợp hiện hành. [Review bản đang xây](../workspace/agents/f3b-resumable-closeout/kiem_luat/HANDOFF.md)
+chặn nghiệm thu cho đến khi driver kiểm chuỗi trước tick, gắn lượt phục hồi
+vào đúng attempt, loại đường audit không có chuỗi và phục hồi được crash sau
+terminal report trước verdict. ROOT chưa chấm F3-B là `WIRED`.
 [F4-A1 startup attestation](../workspace/agents/f4a-startup-attestation/root/VALIDATION.md)
 đã qua review và 26 test offline ở mức `IMPLEMENTED`: artifact một lần theo
 job gắn xác nhận của operator với job, capture native và queue đọc 0/5. Chưa có
@@ -190,29 +194,23 @@ closeout hay live proof.
 catalog GATHER biên dịch, không ghi đè; launch spec tách riêng không cấp thêm
 quyền. Đây chỉ là đường cấp artifact, chưa chạy job hay mở quyền input.
 
-- `owned_nodes`: journal xác minh của `gather_job_store`,
-  `post_action_verification`, điều phối `mission_runner`/`gather_cli` và
-  `gather_runtime_evidence`.
-- `upstream_dependencies`: reservation/guard F1-B, client + New Troop fact
-  F1-C, queue provenance, MissionEngine verifier một occurrence hiện có.
-- `downstream_consumers`: audit FIRST DONE và một live occurrence riêng sau này.
-- `acceptance_evidence`: replay 0→1→2→3→4→5/5 trên năm `run_id` khác nhau,
-  mỗi lượt có receipt và frame hậu kiểm mới cùng job/client/nhân vật; restart,
-  revoke, duplicate, stale, skip và kết quả không chắc đều fail closed. Test
-  cấu trúc chứng minh CLI dùng journal, graph PASS, không phát input thật.
-- `known_blockers`: archive chưa có mốc 0/5 hợp lệ và profile queue chưa có
-  glyph 0; xác nhận nhân vật một lần chưa được gắn vào artifact job/frame/client;
-  host isolation còn gắn từng run ID.
-  Audit chưa được driver gọi tự động hoặc nhận chuỗi attempt sau resume.
-  Các khoảng trống này chặn live nhưng
-  không chặn replay offline.
-- `graph_delta_expected`: queue baseline → MissionEngine VERIFIED → journal
-  năm transition → quyền mở lượt kế → closeout 5/5. Không tạo motor song song.
+- `owned_nodes`: `gather_job_driver`, `first_done_job_audit` cho F3-B.
+- `upstream_dependencies`: F2-C driver, F2-A journal, F2-B slot IDs và F3
+  verifier; không tạo bộ xác minh thứ hai.
+- `downstream_consumers`: verdict đóng job một lần và preflight F4.
+- `acceptance_evidence`: chuỗi attempt append-only đi qua CLI canonical,
+  phục hồi sau crash không March lại slot đã VERIFIED, audit tự động nhận đúng
+  năm transition 0→5/5; các ca thiếu/sửa/lặp/đảo/sai job/thất bại chặn trước
+  tick kế và verdict cuối. Focused/full tests, graph và review độc lập phải PASS.
+- `known_blockers`: bốn lỗi review F3-B nêu trên; archive không có queue
+  0/5 có provenance, profile thiếu glyph 0, F4-A1 chưa được tiêu thụ và trace
+  host vẫn gắn từng `run_id`.
+- `graph_delta_expected`: driver → auditor là đường gọi thật trên chuỗi
+  attempt → một verdict; giữ riêng `DISPATCHED` và `VERIFIED`.
 
-Tiếp theo ROOT nối F3 audit với chuỗi attempt có thể resume, rồi đóng hợp đồng
-preflight cấp job theo [nghiên cứu F4](../workspace/agents/f4-job-live-preflight/nghien_cuu/HANDOFF.md);
-sau đó cần một frame queue 0/5 có provenance và xác nhận nhân vật khởi đầu.
-`runtime-status.yaml` vẫn để mục tiêu
-`UNIMPLEMENTED`; không lấy synthetic 0→5 làm live proof. Game hiện có thể tắt.
-Gói F2 dùng artifact/replay offline; chỉ cần mở lại khi phải thu một frame
-baseline 0/5 có provenance cho preflight live.
+Sau F3-B, ROOT giao [F4-A2](../workspace/agents/f4a-attestation-wiring/root/BRIEF.md)
+nối một attestation vào driver/tick, rồi [F4-B](../workspace/agents/f4b-host-trace/root/BRIEF.md)
+tự thu trace cho mỗi tick. Một frame queue 0/5 có provenance và glyph được
+kiểm chứng vẫn cần cho attestation thật. `runtime-status.yaml` giữ FIRST DONE
+`UNIMPLEMENTED`; replay offline không phải bằng chứng live. Game hiện có thể
+tắt và chỉ cần mở lại khi thu baseline 0/5 theo một phạm vi live riêng.

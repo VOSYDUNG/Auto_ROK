@@ -254,7 +254,7 @@ later_milestones:
 
 known_blockers:
   - no provenance-safe fresh 0/5 march-queue baseline for a new job
-  - one-time startup character attestation is not yet bound to a job/frame/client/time artifact
+  - one-time startup character attestation has an offline artifact but no canonical driver/tick consumer or real 0/5 frame
   - F3 audit is accepted offline but is not invoked by the canonical driver or able to audit resumed attempt chains
   - no autonomous live job occurrence
   - job live arming remains blocked; this status file grants no input authority
