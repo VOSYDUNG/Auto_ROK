@@ -524,6 +524,16 @@ nodes:
     evidence:
       - tests/test_create_gather_job.py
 
+  - id: startup_character_attestation
+    kind: verification
+    responsibility: Records and revalidates one operator assertion of the open character against the exact startup job, native first-frame client and sourced march-queue 0/5 at a deterministic per-job path; the artifact grants no input authority and is not yet consumed by the canonical driver.
+    authority: canonical
+    status: implemented
+    path: harness/gather_job_startup_attestation.py
+    evidence:
+      - scripts/attest_gather_job.py
+      - tests/test_gather_job_startup_attestation.py
+
   - id: gather_job_store
     kind: persistence
     responsibility: Loads the exact GATHER job, binds its first captured client, and atomically records up to five distinct March reservations and their ordered VERIFIED queue transitions; an unverified reservation bars the next March.
@@ -1066,6 +1076,11 @@ edges:
   - {from: gather_job_authority, to: gather_job_issuance, relation: validates_startup_scope}
   - {from: gather_job_issuance, to: gather_job_store, relation: supplies_operator_created_artifact}
   - {from: gather_job_issuance, to: gather_job_driver, relation: supplies_launch_spec_bound_to_startup_artifact}
+  - {from: gather_job_issuance, to: startup_character_attestation, relation: supplies_exact_job_artifact}
+  - {from: live_capture, to: startup_character_attestation, relation: supplies_native_first_frame_and_client}
+  - {from: march_queue_indicator, to: startup_character_attestation, relation: supplies_sourced_start_queue_reading}
+  - {from: gather_job_store, to: startup_character_attestation, relation: supplies_revocation_and_client_binding}
+  - {from: startup_character_attestation, to: gather_job_driver, relation: planned_preflight_artifact_not_yet_wired}
   - {from: gather_job_authority, to: gather_job_coordinator, relation: defines_five_march_scope}
   - {from: gather_job_authority, to: gather_client_binding, relation: scopes_startup_client_binding}
   - {from: gather_job_authority, to: gather_job_input_guard, relation: defines_job_input_scope}

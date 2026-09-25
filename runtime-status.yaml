@@ -103,12 +103,18 @@ capabilities:
       - no real empty or disabled New Troop negative frame in the surveyed archive
 
   startup_character_attestation:
-    status: UNIMPLEMENTED
-    note: >
-      The operator may confirm the open character once for FIRST DONE, but no
-      artifact yet binds that confirmation to the job, first frame/hash,
-      client HWND/PID/process path and time. Configured character_id alone
-      is insufficient; UI OCR is not required for this milestone.
+    status: IMPLEMENTED
+    live_proof_after_commit: false
+    evidence:
+      - harness/gather_job_startup_attestation.py
+      - scripts/attest_gather_job.py
+      - tests/test_gather_job_startup_attestation.py
+      - workspace/agents/f4a-startup-attestation/root/VALIDATION.md
+    limitations:
+      - offline synthetic contract only; the canonical driver/tick does not yet consume the artifact
+      - no real 0/5 march-queue frame or trained zero glyph in the current profile
+      - one operator assertion is bound to job/frame/client/time, not independently OCR-proven UI identity
+      - both gather-job live-arm switches remain blocked
 
   fresh_0_of_5_queue_baseline:
     status: UNIMPLEMENTED

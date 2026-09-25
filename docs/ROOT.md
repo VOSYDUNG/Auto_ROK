@@ -176,6 +176,12 @@ proof qua verifier canonical, report qua thứ tự/tick count, revoke và ngu�
 Auditor chưa được driver gọi tự động và hiện chỉ nhận đủ năm slot trong một
 attempt; [gói F3-B closeout sau resume](../workspace/agents/f3b-resumable-closeout/root/BRIEF.md)
 là bước tích hợp kế tiếp.
+[F4-A1 startup attestation](../workspace/agents/f4a-startup-attestation/root/VALIDATION.md)
+đã qua review và 26 test offline ở mức `IMPLEMENTED`: artifact một lần theo
+job gắn xác nhận của operator với job, capture native và queue đọc 0/5. Chưa có
+consumer trong driver/tick, nên chưa là `WIRED`; fixture tổng hợp không thay
+profile thật hay tạo baseline live. ROOT sẽ nối [F4-A2](../workspace/agents/f4a-attestation-wiring/root/BRIEF.md)
+sau khi F3-B bàn giao quyền sửa driver.
 Projection per-tick đã lưu readiness, frame/hash, client và thời điểm quan sát;
 chín test `test_gather_replay_evidence.py` PASS, kể cả ca hai writer tranh
 file cùng tên không thể ghi đè. Projection này chưa phải
