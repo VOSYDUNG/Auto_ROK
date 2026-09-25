@@ -107,9 +107,11 @@ Không chép màn hình thô vào tài liệu Git; artifact nặng ở `workspac
 Graph hiện nối catalog/job → loader/store/client binding → `policy_overlay`,
 fact New Troop từ frame hiện tại và `gather_job_input_guard` → input boundary.
 Đường recovery journal và bộ điều phối verified queue sequence 0→5/5 đã được
-kiểm offline. Driver nhiều tick đã nối qua CLI và qua review độc lập;
-auditor đóng vòng đã được kiểm offline song chưa được driver gọi tự động.
-Preflight cấp job còn thiếu. Những bước này tiêu thụ `gather_runtime_evidence`;
+kiểm offline. Driver nhiều tick đã nối qua CLI; F3-B kiểm chuỗi attempt
+trước tick và tự gọi auditor đóng vòng ở mức `WIRED` offline
+([kiểm chứng](../workspace/agents/f3b-resumable-closeout/root/VALIDATION.md)).
+Artifact xác nhận ban đầu F4-A1 đã có nhưng driver/tick chưa tiêu thụ, và
+preflight host cho cả job còn thiếu. Những bước này tiêu thụ `gather_runtime_evidence`;
 không tạo đường input song song với canonical
 `gather_cli`/`mission_engine`.
 

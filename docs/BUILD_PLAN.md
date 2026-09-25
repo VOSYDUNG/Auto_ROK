@@ -103,9 +103,12 @@ chứng minh CLI thật dùng fact/guard. Graph PASS. Không kết luận live t
 **Upstream:** F0–F2. **Downstream:** quyết định release.
 
 **Việc:** audit chỉ nhận năm hậu kiểm mới và quyền công việc khớp, phân biệt
-manual intervention với autonomous run, report ước lượng có nguồn. Sau focused
-tests, ROOT mới lập một occurrence live có scope cụ thể; không dùng approval
-B003/R3 cũ và không suy quyền từ tài liệu. Live validation giữ preflight
+manual intervention với autonomous run, report ước lượng có nguồn. F3-A/B đã
+nối auditor với chuỗi attempt của driver ở mức `WIRED` offline
+([kiểm chứng](../workspace/agents/f3b-resumable-closeout/root/VALIDATION.md));
+chỉ sau F4 preflight và bằng chứng thật, ROOT mới lập một occurrence live có
+scope cụ thể. Không dùng approval B003/R3 cũ và không suy quyền từ tài liệu.
+Live validation giữ preflight
 foreground/current frame/input isolation và stop condition. Một vòng đạt
 FIRST DONE ở mức `LIVE_PROVEN_ONCE`; repetition cần occurrences mới, stable
 cần cửa sổ vận hành riêng.
@@ -113,6 +116,22 @@ cần cửa sổ vận hành riêng.
 **Nghiệm thu:** offline validator phát hiện stale/mismatch/receipt-only và
 thiếu 1 trong 5 postconditions; live chỉ được nâng theo artifact thật. Đây
 không phải lệnh chạy game ngay.
+
+## F4 — Preflight một lần cho năm lượt
+
+**Owned nodes:** consumer của `startup_character_attestation`, job-scoped
+`host_input_isolation_evidence` và đường preflight driver/tick hiện có.
+
+**Upstream:** F3-B đã nhận, F4-A1 artifact offline, queue 0/5 có provenance.
+**Downstream:** một occurrence live riêng được ủy quyền sau này.
+
+**Thứ tự:** F4-A2 nối một attestation bất biến vào cả driver và tick trực
+tiếp; F4-B tự thu trace mới cho đúng `run_id` trước từng tick, vẫn dưới một
+ủy quyền ban đầu. Sau đó cần frame queue 0/5 thật và glyph đã kiểm chứng;
+không lấy dữ liệu quest panel hoặc fixture tổng hợp làm baseline. Recorder
+host hiện tự khai zero input ngoài luồng, nên cần kiểm thêm nguồn telemetry
+trước khi dựa vào nó để chứng minh không có can thiệp. Hai công tắc
+`--arm-live` giữ chặn trong các gói offline.
 
 ## Sau FIRST DONE — farm hằng ngày
 

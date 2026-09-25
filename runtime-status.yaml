@@ -16,10 +16,10 @@
 schema_version: 1
 
 head_basis:
-  sha: 7855c6165846ac53ed88d18a2701237fbf4bc539
+  sha: 314fb2c37c6db3c536b183010a55473d77ee7123
   branch: master
-  recorded_at: "2026-09-24"
-  context: FIRST DONE offline foundation validated against this source basis; F1/F2-A/F2-B/F2-C wired offline, F3 audit implemented offline
+  recorded_at: "2026-09-25"
+  context: F1/F2 and F3-B audited attempt chain wired offline; F4-A1 attestation implemented offline; no autonomous live job proof
 
 objective:
   id: FIRST_DONE_GATHER_FIVE_MARCHES
@@ -142,19 +142,23 @@ capabilities:
       - scripts/run_gather_job.py
       - workspace/agents/f2c-driver-review/kiem_luat/HANDOFF.md
     limitations:
-      - reviewed synthetic five-run cross-CLI replay and already-closed recovery pass; no game observation or input
+      - synthetic five-run cross-CLI replay, audited attempt resume and terminal-report recovery pass; no game observation or input
       - live arm deliberately rejects until job-scoped preflight exists
 
   first_done_job_audit:
-    status: IMPLEMENTED
+    status: WIRED
     live_proof_after_commit: false
     evidence:
       - tests/test_audit_first_done_job.py
+      - tests/test_run_gather_job.py
       - scripts/audit_first_done_job.py
+      - scripts/run_gather_job.py
     limitations:
-      - independently reviewed synthetic real-runner replay produces only OFFLINE_REPLAY_PASS
-      - the canonical driver does not invoke this auditor; no native live closeout evidence
-      - audit currently requires all five VERIFIED slots in one driver attempt and cannot yet accept a resumed attempt chain
+      - the canonical driver invokes attempt-chain preflight before another tick and writes an offline verdict after five VERIFIED slots, including resumed attempts
+      - a terminal report left before verdict creation is audited on restart without another tick; only synthetic replay establishes this behavior
+      - historical replay without an attempt chain is explicitly non-authoritative and cannot pass the default closeout path
+      - reports and verdicts use exclusive creation; this does not detect edits to a verdict by another local process
+      - no native live autonomous closeout evidence
 
   queue_indicator_provider:
     status: WIRED
@@ -255,7 +259,7 @@ later_milestones:
 known_blockers:
   - no provenance-safe fresh 0/5 march-queue baseline for a new job
   - one-time startup character attestation has an offline artifact but no canonical driver/tick consumer or real 0/5 frame
-  - F3 audit is accepted offline but is not invoked by the canonical driver or able to audit resumed attempt chains
+  - host input-isolation trace is still run-scoped and self-reported, not job-scoped independent telemetry
   - no autonomous live job occurrence
   - job live arming remains blocked; this status file grants no input authority
 

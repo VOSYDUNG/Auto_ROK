@@ -52,8 +52,10 @@ Cơ sở mã trước các gói FIRST DONE:
 Các link `workspace/` dưới đây là hồ sơ local bị Git ignore; clone khác cần
 artifact tương ứng trước khi kiểm lại hash hoặc kết quả. Tài liệu Git chỉ giữ
 claim và đường truy nguyên, không chép ảnh game thô.
-`runtime-status.yaml` đã đối chiếu mã và bằng chứng ngày 2026-09-24; đây
-là tình trạng bằng chứng, không phải quan sát game hôm nay. Lần 5/5 cũ là
+`runtime-status.yaml` đã đối chiếu mã và bằng chứng offline đến 2026-09-25;
+`head_basis` tại đó là commit F3-B, còn SHA trên là mốc trước các gói
+FIRST DONE. Đây là tình trạng bằng chứng, không phải quan sát game hôm nay.
+Lần 5/5 cũ là
 `LIVE_PROVEN_ONCE` trong phạm vi có can thiệp, không phải
 vòng năm đạo tự chủ. Audit G1–G5 chỉ PASS trên artifact 18–19/09; G6
 endurance còn BLOCKED, nhưng G6 không phải điều kiện FIRST DONE mới.
@@ -140,77 +142,56 @@ lưu trong workspace, handoff theo graph, không polling/sleep-retry.
 nguồn hiện hành. GOAL, PRD, runtime-status và COMPLETION_AUDIT vẫn giữ thẩm
 quyền riêng, không lặp một claim nghiệm thu ở hai nơi.
 
-## Gói hiện hành: F3-B closeout sau resume, vẫn offline
+## Gói hiện hành: F4-A2 nối xác nhận khởi đầu, vẫn offline
 
-[F2-A journal](../workspace/agents/f2a-verification-journal/tho_dung/HANDOFF.md)
-đã sửa đủ ba lỗi mà [review độc lập](../workspace/agents/f2a-verification-journal/kiem_luat/HANDOFF.md)
-nêu: giữ timestamp trước dispatch qua restart, lưu proof COMPLETE/VERIFIED để
-phục hồi journal idempotent sau crash và kiểm tuổi baseline ngay trước input.
-Journal còn cấm dùng lại frame và yêu cầu thời điểm quan sát tăng giữa hai lượt.
-[F2-B coordinator](../workspace/agents/f2b-five-march/tho_dung/HANDOFF.md)
-chọn năm `run_id` cố định từ journal VERIFIED, kiểm checkpoint từng lượt và
-chỉ báo đóng job khi plan hợp lệ cùng closeout đã ghi. ROOT đã đối chiếu mã,
-chạy toàn bộ pytest, graph, NNC và liên kết docs: PASS. Đây là **WIRED offline**
-cho CLI một tick, không chứng minh game thật. [Nghiên cứu seam](../workspace/agents/f2-five-march/nghien_cuu/HANDOFF.md)
-giải thích vì sao runner vẫn xử lý từng occurrence; [character scope](../workspace/agents/f2-character-scope/nghien_cuu/HANDOFF.md)
-cho thấy cấu hình đơn lẻ không phải bằng chứng danh tính. Người vận hành đã
-chọn xác nhận một lần khi cấp job thay cho bắt buộc OCR tên UI ở FIRST DONE.
+[F2-A journal](../workspace/agents/f2a-verification-journal/tho_dung/HANDOFF.md),
+[F2-B coordinator](../workspace/agents/f2b-five-march/tho_dung/HANDOFF.md) và
+[F2-C driver](../workspace/agents/f2c-job-driver/tho_dung/HANDOFF.md) đã nối
+năm `run_id` ổn định qua CLI một tick, guard input và journal VERIFIED. Mức đã
+chứng minh là `WIRED` offline: synthetic MissionRunner/CLI đi 0→5/5, không có
+một công việc live tự chủ. Trace host cũ gắn từng occurrence, không đủ cho cả job.
 
-Graph có node `gather_job_coordinator`; CLI gọi **một tick** mỗi lần.
-[F2-C driver](../workspace/agents/f2c-job-driver/tho_dung/HANDOFF.md) nay nối
-bounded ticks qua CLI canonical, dừng khi không chắc và ghi report append-only.
-Issuer tạo launch spec riêng để một lần cấu hình đủ tham số tài nguyên; driver
-kiểm SHA-256 của artifact quyền, danh tính và digest catalog trước tick. Test
-synthetic đi từ driver qua CLI, MissionRunner và journal thật cho năm `run_id`
-và 0→5/5. [Review độc lập](../workspace/agents/f2c-driver-review/kiem_luat/HANDOFF.md)
-đã chấp nhận hai bản sửa: không còn artifact quyền mồ côi khi launch spec lỗi,
-và tick báo lỗi không thể đóng job. Trường hợp restart sau lượt thứ năm được
-kiểm qua journal/checkpoint/closeout bền, không March lần sáu. Hai mươi test
-F2-C tập trung, toàn bộ pytest, graph, NNC đi kèm, 156 liên kết và diff check
-đều PASS; mức **WIRED offline**. Trace cô lập input hiện gắn với
-`run_id` của một occurrence, trong khi job có năm `run_id`; đây là preflight
-cần nối theo job, không phải lý do hỏi duyệt từng march. [F3 audit](../workspace/agents/f3-first-done-audit/root/HANDOFF.md)
-đã được ROOT nhận ở mức `IMPLEMENTED` offline sau review độc lập: nó đối chiếu
-proof qua verifier canonical, report qua thứ tự/tick count, revoke và nguồn
-đội hình. Mười test audit tập trung và full suite PASS; verdict chỉ là
-`OFFLINE_REPLAY_PASS` hoặc `BLOCKED`, không nâng live.
-Auditor chưa được driver gọi tự động và hiện chỉ nhận đủ năm slot trong một
-attempt; [gói F3-B closeout sau resume](../workspace/agents/f3b-resumable-closeout/root/BRIEF.md)
-là bước tích hợp hiện hành. [Review bản đang xây](../workspace/agents/f3b-resumable-closeout/kiem_luat/HANDOFF.md)
-chặn nghiệm thu cho đến khi driver kiểm chuỗi trước tick, gắn lượt phục hồi
-vào đúng attempt, loại đường audit không có chuỗi và phục hồi được crash sau
-terminal report trước verdict. ROOT chưa chấm F3-B là `WIRED`.
-[F4-A1 startup attestation](../workspace/agents/f4a-startup-attestation/root/VALIDATION.md)
-đã qua review và 26 test offline ở mức `IMPLEMENTED`: artifact một lần theo
-job gắn xác nhận của operator với job, capture native và queue đọc 0/5. Chưa có
-consumer trong driver/tick, nên chưa là `WIRED`; fixture tổng hợp không thay
-profile thật hay tạo baseline live. ROOT sẽ nối [F4-A2](../workspace/agents/f4a-attestation-wiring/root/BRIEF.md)
-sau khi F3-B bàn giao quyền sửa driver.
-Projection per-tick đã lưu readiness, frame/hash, client và thời điểm quan sát;
-chín test `test_gather_replay_evidence.py` PASS, kể cả ca hai writer tranh
-file cùng tên không thể ghi đè. Projection này chưa phải
-closeout hay live proof.
-`scripts/create_gather_job.py` tạo artifact quyền khởi đầu từ scope operator và
-catalog GATHER biên dịch, không ghi đè; launch spec tách riêng không cấp thêm
-quyền. Đây chỉ là đường cấp artifact, chưa chạy job hay mở quyền input.
+[F3-B closeout](../workspace/agents/f3b-resumable-closeout/root/VALIDATION.md)
+đã được ROOT nhận ở mức `WIRED` offline tại commit `314fb2c`: driver kiểm chuỗi
+attempt trước tick, nối lượt VERIFIED mồ côi chỉ khi có proof duy nhất và
+`verified_at` thuộc đúng attempt, rồi tự gọi auditor khi đạt 5/5. Nếu crash
+sau terminal report nhưng trước verdict, lượt chạy sau chỉ audit report có
+sẵn, không gọi tick thứ sáu. Đường closeout mặc định buộc có chuỗi attempt;
+replay lịch sử không có chuỗi được đánh dấu không có thẩm quyền đóng job.
+[Review độc lập bản WIP](../workspace/agents/f3b-resumable-closeout/kiem_luat/HANDOFF.md)
+đã tìm bốn lỗi này; ROOT thêm ca âm, chạy 47 test tập trung, full pytest,
+engineering graph, NNC và diff check đều PASS. Review cuối độc lập chưa chạy
+vì ghế builder gặp giới hạn sử dụng; bằng chứng này chỉ cho wiring offline.
+Report/verdict do harness tạo bằng exclusive-create; không tuyên bố chống
+được một tiến trình local khác sửa file sau đó.
 
-- `owned_nodes`: `gather_job_driver`, `first_done_job_audit` cho F3-B.
-- `upstream_dependencies`: F2-C driver, F2-A journal, F2-B slot IDs và F3
-  verifier; không tạo bộ xác minh thứ hai.
-- `downstream_consumers`: verdict đóng job một lần và preflight F4.
-- `acceptance_evidence`: chuỗi attempt append-only đi qua CLI canonical,
-  phục hồi sau crash không March lại slot đã VERIFIED, audit tự động nhận đúng
-  năm transition 0→5/5; các ca thiếu/sửa/lặp/đảo/sai job/thất bại chặn trước
-  tick kế và verdict cuối. Focused/full tests, graph và review độc lập phải PASS.
-- `known_blockers`: bốn lỗi review F3-B nêu trên; archive không có queue
-  0/5 có provenance, profile thiếu glyph 0, F4-A1 chưa được tiêu thụ và trace
-  host vẫn gắn từng `run_id`.
-- `graph_delta_expected`: driver → auditor là đường gọi thật trên chuỗi
-  attempt → một verdict; giữ riêng `DISPATCHED` và `VERIFIED`.
+[F4-A1 attestation](../workspace/agents/f4a-startup-attestation/root/VALIDATION.md)
+đã `IMPLEMENTED` offline: một assertion của operator gắn với job, ảnh native,
+client, thời điểm và QueueIndicatorReader đọc 0/5. Driver/tick chưa dùng artifact,
+fixture synthetic chưa tạo mốc 0/5 thật. `runtime-status.yaml` sở hữu mức
+capability hiện hành và vẫn giữ FIRST DONE `UNIMPLEMENTED`.
 
-Sau F3-B, ROOT giao [F4-A2](../workspace/agents/f4a-attestation-wiring/root/BRIEF.md)
-nối một attestation vào driver/tick, rồi [F4-B](../workspace/agents/f4b-host-trace/root/BRIEF.md)
-tự thu trace cho mỗi tick. Một frame queue 0/5 có provenance và glyph được
-kiểm chứng vẫn cần cho attestation thật. `runtime-status.yaml` giữ FIRST DONE
-`UNIMPLEMENTED`; replay offline không phải bằng chứng live. Game hiện có thể
-tắt và chỉ cần mở lại khi thu baseline 0/5 theo một phạm vi live riêng.
+- `owned_nodes`: consumer của `startup_character_attestation`, preflight
+  `gather_job_driver` và đường `gather_cli` chạy trực tiếp.
+- `upstream_dependencies`: F3-B attempt chain đã nhận, F4-A1 artifact/validator,
+  job store revoke và client binding.
+- `downstream_consumers`: năm tick dưới một job; preflight host F4-B sau đó.
+- `acceptance_evidence`: cùng một đường artifact và digest cho năm `run_id`
+  kể cả resume; driver kiểm trước khi tạo attempt và trước mỗi tick, CLI trực
+  tiếp không đi vòng. Thiếu/sửa/sai job/client/nhân vật/hết hạn/revoke đều
+  dừng trước tick; không hỏi operator từng march. Test structural chứng minh
+  consumer thật, hai công tắc `--arm-live` vẫn chặn.
+- `known_blockers`: profile queue thật thiếu glyph `0`, archive không có frame
+  march-queue 0/5 được hỗ trợ; host trace hiện chỉ gắn một `run_id` và số
+  input ngoài luồng bằng 0 là tự khai của recorder.
+- `graph_delta_expected`: thay edge attestation→driver đang ghi `planned`
+  bằng edge consumer thật, thêm attestation→gather_cli; giữ input guard cũ.
+
+[Brief F4-A2](../workspace/agents/f4a-attestation-wiring/root/BRIEF.md) và
+[nghiên cứu seam](../workspace/agents/f4a-attestation-wiring/nghien_cuu/HANDOFF.md)
+đủ đầu vào để giao code offline. Sau đó [F4-B](../workspace/agents/f4b-host-trace/root/BRIEF.md)
+tự thu trace mới cho đúng `run_id` trước mỗi tick, không thêm approval thủ công.
+Một capture queue 0/5 có provenance và glyph đã kiểm chứng còn cần để cấp
+attestation thật; chỉ mở game lại khi thực hiện gói live riêng cho việc đó.
+Hiện game có thể tắt. Không chạy game, gửi input hoặc gọi endpoint model trong
+gói offline này.
