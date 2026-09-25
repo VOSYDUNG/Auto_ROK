@@ -219,7 +219,10 @@ class JsonGatherJobStore:
                     or type(item["before_count"]) is not int or item["before_count"] != index - 1
                     or type(item["after_count"]) is not int or item["after_count"] != index
                     or type(item["capacity"]) is not int or item["capacity"] != job.max_marches
-                    or item["before_source"] not in {"visible_ocr_queue_anchor", "visible_ocr_march_queue_region"}
+                    or (index == 1 and item["before_source"] != "job_initial_slot_ordinal")
+                    or (index > 1 and item["before_source"] not in {
+                        "visible_ocr_queue_anchor", "visible_ocr_march_queue_region"
+                    })
                     or item["after_source"] not in {"visible_ocr_queue_anchor", "visible_ocr_march_queue_region"}
                     or item["character_id"] != job.character_id
                     or item["client_binding"] != raw["client_binding"]

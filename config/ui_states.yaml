@@ -367,19 +367,19 @@ states:
 
   - id: TROOP_DISPATCH_DRAWER
     status: trained
-    description: "Right-side troop dispatch drawer after choosing Gather."
+    description: "Troop dispatch step after choosing Gather; the march queue is optional here and appears only after the first March."
     positive_evidence:
       - kind: text
         value: "Dispatch a new troop from your city"
       - kind: button
         value: "New Troop"
-      - kind: text_pattern
-        value: "Queue X/5"
     outputs:
       - march_queue_used
       - march_queue_capacity
     entities:
       - NEW_TROOP
+    notes:
+      - "The two same-frame dispatch/New Troop anchors identify this step before the first March; no queue counter is required for classification."
 
   - id: NEW_TROOP_SETUP
     status: trained
@@ -411,14 +411,14 @@ states:
     description: "World-map view after March with an active troop/march indicator."
     positive_evidence:
       - kind: queue
-        value: "used march count is greater than before dispatch"
+        value: "first post-March queue is 1/5; later post-March count exceeds a sourced pre-dispatch count"
       - kind: visual
         value: "troop/path indicator may be visible on map"
     outputs:
       - march_queue_used
       - march_queue_capacity
     notes:
-      - "Training example transitions from Queue 0/5 to 1/5 after March."
+      - "The right-side queue appears after the first March; do not require or infer a pre-first 0/5 frame."
 
 scene_classifier_rules:
   - "Prefer stable text/layout anchors over absolute coordinates."

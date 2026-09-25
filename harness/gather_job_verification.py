@@ -48,14 +48,32 @@ def record_verified_gather_tick(
     receipt = feedback.facts.get("receipt")
     if not isinstance(baseline, Mapping) or not isinstance(receipt, Mapping):
         raise GatherJobStoreError("verified GATHER transition lacks baseline or receipt")
-    before_count, after_count = baseline.get("counter_value"), after.facts.get("march_queue_used")
-    if (baseline.get("predicate_id") != "march_queue_used_increased"
-            or baseline.get("counter_fact") != "march_queue_used"
-            or type(before_count) is not int or type(after_count) is not int
-            or after_count != before_count + 1
+    sequence = feedback.facts.get("gather_job_dispatch_sequence")
+    after_count = after.facts.get("march_queue_used")
+    first_slot = sequence == 1
+    # before_count is a durable job ordinal. On the first slot it is not an
+    # observed queue value; before_source states that distinction explicitly.
+    before_count = 0 if first_slot else baseline.get("counter_value")
+    if (baseline.get("counter_fact") != "march_queue_used"
+            or type(sequence) is not int or not 1 <= sequence <= job.max_marches
+            or type(after_count) is not int or after_count != sequence
+            or (first_slot and (
+                baseline.get("predicate_id") != "first_march_queue_appeared_at_one"
+                or baseline.get("source") != "job_initial_slot_ordinal"
+                or baseline.get("job_id") != job.job_id
+                or "counter_value" in baseline
+                or baseline.get("source_frame_id") != before.frame_id
+                or baseline.get("source_timestamp") != before.observed_at
+                or before.state != "NEW_TROOP_SETUP"
+                or type(before.facts.get("march_queue_used")) is int
+            ))
+            or (not first_slot and (
+                baseline.get("predicate_id") != "march_queue_used_increased"
+                or type(before_count) is not int or before_count != sequence - 1
+                or baseline.get("source") not in _QUEUE_SOURCES
+            ))
             or baseline.get("capacity") != job.max_marches
             or after.facts.get("march_queue_capacity") != job.max_marches
-            or baseline.get("source") not in _QUEUE_SOURCES
             or after.facts.get("march_queue_source") not in _QUEUE_SOURCES
             or baseline.get("character_id") != job.character_id
             or before.facts.get("character_id") != job.character_id

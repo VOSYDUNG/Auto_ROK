@@ -6,12 +6,12 @@ slot. A caller must supply a new observation for each subsequent tick.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import json
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from harness.gather_job_authority import GatherJobAuthority, GatherJobProgress
 from harness.gather_job_store import GatherClientBinding, JsonGatherJobStore
@@ -63,12 +63,14 @@ class _FreshObservationTool:
     def __init__(self, inner: Any, *, job: GatherJobAuthority,
                  prior_frame_ids: frozenset[str], minimum_observed_at: float | None,
                  previous_checkpoint_frame: str | None,
+                 persisted_baseline: Mapping[str, Any] | None,
                  client: GatherClientBinding | None) -> None:
         self.inner = inner
         self.job = job
         self.prior_frame_ids = prior_frame_ids
         self.minimum_observed_at = minimum_observed_at
         self.previous_checkpoint_frame = previous_checkpoint_frame
+        self.persisted_baseline = persisted_baseline
         self.client = client
 
     def observe(self, context: MissionContext) -> ToolSnapshot:
@@ -84,14 +86,37 @@ class _FreshObservationTool:
             raise GatherJobCoordinationError("GATHER observation character changed")
         if self.client is not None and GatherClientBinding.from_window(snapshot.facts.get("window")) != self.client:
             raise GatherJobCoordinationError("GATHER observation client changed")
-        if (snapshot.state == "TROOP_DISPATCH_DRAWER" and
+        if (self.expected_count == 0 and snapshot.state == "TROOP_DISPATCH_DRAWER"
+                and type(snapshot.facts.get("march_queue_used")) is int):
+            raise GatherJobCoordinationError("first GATHER slot cannot adopt a numeric pre-March queue")
+        if (self.expected_count > 0 and snapshot.state == "TROOP_DISPATCH_DRAWER" and
                 (type(snapshot.facts.get("march_queue_used")) is not int or
                  snapshot.facts["march_queue_used"] != self.expected_count)):
             raise GatherJobCoordinationError("GATHER queue baseline diverges from verified journal")
         if any(item.action_id == "MARCH_WITH_CURRENT_SELECTION" for item in snapshot.allowed_actions):
-            baseline = snapshot.facts.get("completion_baseline")
-            if (not isinstance(baseline, dict) or
-                    baseline.get("counter_value") != self.expected_count or
+            baseline = snapshot.facts.get("completion_baseline") or self.persisted_baseline
+            if self.expected_count == 0:
+                if (snapshot.state != "NEW_TROOP_SETUP" or baseline is not None
+                        or type(snapshot.facts.get("march_queue_used")) is int
+                        or snapshot.facts.get("gather_job_id") != self.job.job_id
+                        or snapshot.facts.get("new_troop_formation_ready") is not True
+                        or not isinstance(snapshot.observed_at, (int, float))
+                        or isinstance(snapshot.observed_at, bool)
+                        or not snapshot.frame_id):
+                    raise GatherJobCoordinationError("first March lacks fresh job-bound New Troop evidence")
+                # This is an initial job-slot marker, not an observed queue 0/5.
+                baseline = {
+                    "predicate_id": "first_march_queue_appeared_at_one",
+                    "counter_fact": "march_queue_used", "capacity": self.job.max_marches,
+                    "source_frame_id": snapshot.frame_id,
+                    "source_timestamp": snapshot.observed_at,
+                    "source": "job_initial_slot_ordinal",
+                    "character_id": self.job.character_id, "job_id": self.job.job_id,
+                }
+                snapshot = replace(snapshot, facts=dict(snapshot.facts) | {"completion_baseline": baseline})
+            elif (not isinstance(baseline, Mapping) or
+                    type(baseline.get("counter_value")) is not int or
+                    baseline["counter_value"] != self.expected_count or
                     baseline.get("capacity") != self.job.max_marches or
                     baseline.get("character_id") != self.job.character_id or
                     baseline.get("source") not in {
@@ -200,6 +225,7 @@ class GatherJobCoordinator:
             ),
             minimum_observed_at=prior[-1]["after_observed_at"] if prior else None,
             previous_checkpoint_frame=checkpoint.last_frame_id if checkpoint else None,
+            persisted_baseline=checkpoint.completion_baseline if checkpoint else None,
             client=self.ledger.client_binding(self.job),
         )
         fresh.expected_count = plan.progress.verified_marches

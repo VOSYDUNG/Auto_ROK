@@ -16,24 +16,25 @@
 schema_version: 1
 
 head_basis:
-  sha: c8613c0c95a5ef061288c3ca03ddb6e3146f12c4
+  sha: 65c661c5c42e64a15d02ddbdc2cc040663f369fc
   branch: master
   recorded_at: "2026-09-25"
-  context: F1/F2, F3-B audited attempt chain and F4-A2 startup-attestation consumption wired offline; no autonomous live job proof
+  context: first-march bootstrap correction verified offline on a worktree based on this commit; no autonomous live job proof
 
 objective:
   id: FIRST_DONE_GATHER_FIVE_MARCHES
   statement: >
     One startup-authorized GATHER job autonomously dispatches five farm marches
     for one visible character/client, preserving each fresh New Troop screen's
-    game-filled pair and verifying queue transitions 0/5 to 5/5 after each march.
+    game-filled pair and verifying a fresh post-first-march 1/5, followed by
+    numeric queue transitions 1/5 through 5/5 after each later march.
   required_capabilities:
     - bounded_gather_job
     - startup_job_issuance
     - client_binding
     - new_troop_formation_fact
     - startup_character_attestation
-    - fresh_0_of_5_queue_baseline
+    - fresh_1_of_5_first_postcheck
     - five_transition_job_coordinator
     - five_march_job_driver
     - first_done_job_audit
@@ -57,7 +58,7 @@ capabilities:
     limitations:
       - operator approved each troop-selection occurrence individually
       - manual intervention occurred (window focus, occurrence retries)
-      - no provenance-safe 0/5 queue baseline or autonomous five-transition chain
+      - no provenance-safe first post-march 1/5 or autonomous five-transition chain
       - achieved with the gathering buff OFF for the entire run
       - not repeated; a second batch has never been attempted
 
@@ -116,15 +117,25 @@ capabilities:
     limitations:
       - canonical driver and direct job tick consume and revalidate the canonical record; evidence is offline synthetic only
       - one digest is pinned across resumed attempts; local external edits are not claimed tamper-proof
-      - no real 0/5 march-queue frame or trained zero glyph in the current profile
+      - no real first post-march 1/5 frame in the current profile
       - one operator assertion is bound to job/frame/client/time, not independently OCR-proven UI identity
       - both gather-job live-arm switches remain blocked
 
-  fresh_0_of_5_queue_baseline:
-    status: UNIMPLEMENTED
+  fresh_1_of_5_first_postcheck:
+    status: WIRED
+    live_proof_after_commit: false
+    evidence:
+      - tests/test_gather_job_coordinator.py
+      - tests/test_gather_job_verification.py
+      - tests/test_gather_job_cli_wiring.py
+      - tests/test_audit_first_done_job.py
     note: >
-      The archive survey found no supported 0/5 march-queue frame. An OCR 0/5
-      from the quest panel is not a queue observation.
+      The march queue is not visible before the first March. The first valid
+      queue observation for a new job must therefore be a fresh, provenance-safe
+      1/5 postcheck after that first dispatch; later postchecks must prove 2/5,
+      3/5, 4/5 and 5/5 in order. The canonical synthetic runner, journal and
+      audit consume this nonnumeric first-slot marker offline; no fresh live
+      1/5 occurrence has proven it. A quest-panel ratio is not queue evidence.
 
   five_transition_job_coordinator:
     status: WIRED
@@ -231,11 +242,12 @@ acceptance:
     passed: false
   fresh_game_filled_new_troop_pair_preserved_on_each_march:
     passed: false
-  five_fresh_verified_queue_increments_0_to_5_of_5:
+  five_fresh_verified_queue_increments_1_to_5_of_5:
     passed: false
     note: >
-      Requires same job/client/character, five dispatch receipts and five fresh
-      queue postchecks; the archived queue frames are independent snapshots.
+      Requires same job/client/character, five dispatch receipts, a fresh 1/5
+      postcheck after the first March, and fresh 2/5 through 5/5 postchecks in
+      order; the archived queue frames are independent snapshots.
   immutable_job_close_report:
     passed: false
 
@@ -261,8 +273,8 @@ later_milestones:
           operator's weak band; both operator baselines assume the 50% buff
 
 known_blockers:
-  - no provenance-safe fresh 0/5 march-queue baseline for a new job
-  - startup attestation is wired offline but no real 0/5 frame has supported its issuance
+  - no provenance-safe fresh 1/5 post-march queue observation for a new job
+  - startup attestation is wired offline but no real startup job attestation has been issued
   - host input-isolation trace is still run-scoped and self-reported, not job-scoped independent telemetry
   - no autonomous live job occurrence
   - job live arming remains blocked; this status file grants no input authority
@@ -270,10 +282,12 @@ known_blockers:
 next_live_falsification:
   hypothesis: >
     Once separately authorized, one GATHER job for a startup-attested character
-    starts at a fresh queue 0/5 and completes five independent +1 postchecks.
+    begins with the first March and proves a fresh 1/5 postcheck, then completes
+    four independent +1 postchecks through 5/5.
   expected_observation: >
     Append-only evidence binds job/client/character, each New Troop formation
-    and dispatch receipt, each newer verified queue frame, then closeout at 5/5.
+    and dispatch receipt, each newer verified queue frame from 1/5 through 5/5,
+    then closeout at 5/5.
   prohibited_shortcut: >
-    Do not treat a quest 0/5, independent archive frames, dispatch receipts, or
+    Do not treat a quest-panel ratio, independent archive frames, dispatch receipts, or
     the operator-assisted historical 5/5 as this job's verification.

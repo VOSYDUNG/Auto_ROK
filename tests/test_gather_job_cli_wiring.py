@@ -237,15 +237,7 @@ def test_canonical_runner_consumes_job_guard_with_synthetic_frames_only(
 
     observations = iter((
         bundle(frame, ("New Troop", "MARCH", "Units", "Total Power"),
-               targets=(target,), facts={
-                   "completion_baseline": {
-                       "predicate_id": "march_queue_used_increased",
-                       "counter_fact": "march_queue_used", "counter_value": 0,
-                       "capacity": 5, "source_frame_id": "synthetic-baseline",
-                       "source": "visible_ocr_queue_anchor", "character_id": "character-1",
-                       "source_timestamp": now.timestamp() - 1,
-                   },
-               }),
+               targets=(target,), facts={}),
         bundle("synthetic-after", (
             "used march count is greater than before dispatch",
             "troop/path indicator may be visible on map",

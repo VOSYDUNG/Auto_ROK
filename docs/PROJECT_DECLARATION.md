@@ -19,7 +19,8 @@ không sửa số đo để tài liệu có vẻ đúng. Trạng thái triển k
 **Kết quả cuối:** LLM local của người vận hành dùng harness để farm ROK hằng ngày.
 **FIRST DONE:** một nhân vật tự đưa năm đạo đi farm trong một công việc GATHER
 được ủy quyền lúc đầu, giữ cặp chỉ huy New Troop do game tự điền rồi bấm March và
-hậu kiểm hàng đợi 0→5/5; không duyệt từng lượt điều quân. Chưa cần chờ quân về,
+hậu kiểm đạo đầu khi UI queue xuất hiện ở 1/5, rồi 2/5 đến 5/5; không duyệt
+từng lượt điều quân. Chưa cần chờ quân về,
 nạp lại, buff hay chạy 24 giờ. [GOAL](GOAL.md) định nghĩa mốc;
 [PRD](PRD.md) sở hữu hợp đồng sản phẩm. Đây là đích cần xây, không phải claim
 runtime đã đạt. Quyền công việc phải có phạm vi và chốt an toàn trước live.

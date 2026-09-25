@@ -54,17 +54,21 @@ class SyntheticMarchTool:
         self.observations += 1
         if self.observations == 1:
             frame = f"{self.frame_prefix}-march-{self.sequence}"
-            baseline = {
-                "predicate_id": "march_queue_used_increased",
-                "counter_fact": "march_queue_used", "counter_value": self.sequence - 1,
-                "capacity": 5, "source_frame_id": f"{self.frame_prefix}-baseline-{self.sequence}",
-                "source": "visible_ocr_queue_anchor", "character_id": self.job.character_id,
-                "source_timestamp": self.start,
-            }
+            facts = {"character_id": self.job.character_id,
+                     "window": WINDOW, "precondition_evidence": {PRECONDITION: True},
+                     "gather_job_id": self.job.job_id,
+                     "new_troop_formation_ready": True}
+            if self.sequence > 1:
+                facts["completion_baseline"] = {
+                    "predicate_id": "march_queue_used_increased",
+                    "counter_fact": "march_queue_used", "counter_value": self.sequence - 1,
+                    "capacity": 5, "source_frame_id": f"{self.frame_prefix}-baseline-{self.sequence}",
+                    "source": "visible_ocr_queue_anchor", "character_id": self.job.character_id,
+                    "source_timestamp": self.start,
+                }
             return ToolSnapshot(
                 context.mission_id, context.task_id, frame, "NEW_TROOP_SETUP",
-                facts={"completion_baseline": baseline, "character_id": self.job.character_id,
-                       "window": WINDOW, "precondition_evidence": {PRECONDITION: True}},
+                facts=facts,
                 allowed_actions=(AllowedAction(ACTION, True, ("TROOP_MARCH",)),),
                 target_ids=("TROOP_MARCH",), observed_at=self.start,
             )
@@ -167,12 +171,13 @@ def test_ambiguous_postcheck_does_not_advance_and_replay_does_not_dispatch_again
     coord.ledger.bind_client(current_job, WINDOW)
     tool = SyntheticMarchTool(current_job, coord.ledger, 1, after_count=3)
     first = coord.tick(MissionRunner(compiled(), tool, coord.checkpoints))
-    assert first.result.status is CheckpointStatus.COMPLETE
-    assert first.error is not None
+    assert first.result.status is CheckpointStatus.REOBSERVE
+    assert first.error is None
     assert first.progress.verified_marches == 0
     assert len(tool.actions) == 1
-    with pytest.raises(Exception, match="inconsistent queue"):
-        coord.plan()
+    pending = coord.plan()
+    assert pending.sequence == 1 and pending.progress.verified_marches == 0
+    assert len(tool.actions) == 1
 
 
 def test_replayed_prior_frame_is_rejected_before_another_dispatch(tmp_path):

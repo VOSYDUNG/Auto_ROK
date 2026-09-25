@@ -11,7 +11,8 @@ phải xác nhận wiring hoặc readiness của HEAD hiện tại; mức đã c
 [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md).
 
 Theo mục tiêu hiện hành, thiết kế được áp dụng trước cho FIRST DONE: một nhân
-vật đưa năm đạo đi farm theo cặp New Troop tự điền, hậu kiểm 0→5/5 dưới một quyền
+vật đưa năm đạo đi farm theo cặp New Troop tự điền, hậu kiểm 1/5 sau đạo đầu
+rồi lần lượt đến 5/5 dưới một quyền
 công việc ban đầu; không duyệt từng march. Theo dõi quân về, nạp lại, buff,
 24 giờ, nhiều nhân vật, order và các mission khác là pha sau theo
 [`GOAL`](GOAL.md).

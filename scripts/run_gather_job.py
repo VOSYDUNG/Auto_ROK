@@ -403,7 +403,6 @@ def main(argv: list[str] | None = None) -> int:
             workspace_root=ROOT / "workspace", ledger_root=GATHER_JOB_STORE_ROOT,
             mission_flows=ROOT / "config" / "mission_flows.yaml",
             ui_states=ROOT / "config" / "ui_states.yaml",
-            profile_path=ROOT / "config" / "queue_indicator_profile.json",
         )
         prior_terminal = _unverdict_terminal_result(args.report_root, job)
         if prior_terminal is not None:
@@ -439,7 +438,6 @@ def main(argv: list[str] | None = None) -> int:
                 workspace_root=ROOT / "workspace", ledger_root=GATHER_JOB_STORE_ROOT,
                 mission_flows=ROOT / "config" / "mission_flows.yaml",
                 ui_states=ROOT / "config" / "ui_states.yaml",
-                profile_path=ROOT / "config" / "queue_indicator_profile.json",
                 expected_sha256=startup_attestation_sha256,
             )
             return _subprocess_tick(command)

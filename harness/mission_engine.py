@@ -460,6 +460,36 @@ def _completion_matches(
     baseline = before.facts.get("completion_baseline")
     if not isinstance(baseline, Mapping) or baseline.get("counter_fact") != counter:
         return False
+    if feedback.facts.get("gather_job_dispatch_sequence") == 1:
+        # The first queue counter is only visible in the fresh post-March
+        # frame. No numeric pre-dispatch queue reading exists for this job.
+        return (
+            baseline.get("predicate_id") == "first_march_queue_appeared_at_one"
+            and baseline.get("source") == "job_initial_slot_ordinal"
+            and baseline.get("job_id") == feedback.facts.get("gather_job_id")
+            and isinstance(baseline.get("job_id"), str)
+            and bool(baseline["job_id"])
+            and "counter_value" not in baseline
+            and baseline.get("source_frame_id") == before.frame_id
+            and baseline.get("source_timestamp") == before.observed_at
+            and before.state == "NEW_TROOP_SETUP"
+            and type(after.facts.get(counter)) is int
+            and after.facts[counter] == 1
+            and type(baseline.get("capacity")) is int
+            and baseline["capacity"] == after.facts.get("march_queue_capacity")
+            and after.facts.get("march_queue_source") in {
+                "visible_ocr_queue_anchor", "visible_ocr_march_queue_region"
+            }
+            and isinstance(baseline.get("character_id"), str)
+            and bool(baseline["character_id"])
+            and baseline["character_id"] == before.facts.get("character_id")
+            and baseline["character_id"] == after.facts.get("character_id")
+            and _missing_preconditions(before.facts, required_preconditions) == ()
+            and _has_matching_receipt(feedback.facts, before.frame_id, after.frame_id)
+            and feedback.facts["receipt"].get("character_id") == baseline["character_id"]
+        )
+    if baseline.get("source") == "job_initial_slot_ordinal":
+        return False
     before_count, after_count = baseline.get("counter_value"), after.facts.get(counter)
     if type(before_count) is not int or type(after_count) is not int or after_count <= before_count:
         return False

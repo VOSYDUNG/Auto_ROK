@@ -48,9 +48,10 @@ preflight phải lưu job/nhân vật/frame/hash/client/thời điểm của xá
 FIRST DONE không đòi OCR tên nhân vật từ UI. `character_id` hiện do CLI cấu
 hình với nguồn `configured_single_character_scope`; riêng giá trị cấu hình
 chưa phải bằng chứng xác nhận khởi đầu. Để mở live, còn thiếu artifact xác
-nhận từ frame thật được driver tiêu thụ, hàng đợi khởi đầu **0/5** và chuỗi
-hậu kiểm live mới. Hàng đợi 0/5 cần được
-quan sát trước lượt đầu để chứng minh cả năm đạo của vòng này do harness điều.
+nhận từ frame thật được driver tiêu thụ và chuỗi hậu kiểm live mới. Theo xác
+nhận của người vận hành, UI queue bên phải **chưa xuất hiện trước đạo đầu**:
+không đòi ảnh 0/5 và không suy OCR trống thành số 0 quan sát. Đạo đầu chỉ
+được `VERIFIED` khi frame hậu kiểm mới đọc đúng 1/5; sai/thiếu thì dừng.
 
 Trace cô lập input của đường live cũ gắn với một `run_id`; job FIRST DONE có
 năm `run_id` xác định từ cùng một quyền khởi đầu. Preflight live của job phải
@@ -85,8 +86,9 @@ reserve. Extractor canonical nay tạo fact này từ ảnh/nhãn có hash cùng
 và đã qua bốn ảnh archive dương cùng test âm tổng hợp; chưa có ca âm thật để
 đo khả năng nhận sai trên layout chưa thấy. `ALLOW` chỉ là đủ điều kiện;
 receipt là `DISPATCHED`. Khung mới sau
-march phải cho `Queue used` tăng đúng một với cùng nhân vật và job mới ghi
-`VERIFIED`. Năm postcondition 0→1→2→3→4→5 và queue cuối 5/5 mới đóng vòng
+march phải cho đúng số queue sau lượt đó với cùng nhân vật và job mới ghi
+`VERIFIED`: đạo đầu đọc 1/5 khi UI xuất hiện, bốn lượt tiếp theo tăng
+1→2→3→4→5. Queue cuối 5/5 mới đóng vòng
 FIRST DONE. Nếu không đủ bằng chứng, đóng `BLOCKED` hoặc `UNKNOWN_STATE` cùng
 lý do, không coi là đạt. Ước lượng thời gian đào/về, nếu có, ghi nguồn và sai
 số; nó không thay observation và không trì hoãn việc đóng vòng.
@@ -106,8 +108,9 @@ Không chép màn hình thô vào tài liệu Git; artifact nặng ở `workspac
 
 Graph hiện nối catalog/job → loader/store/client binding → `policy_overlay`,
 fact New Troop từ frame hiện tại và `gather_job_input_guard` → input boundary.
-Đường recovery journal và bộ điều phối verified queue sequence 0→5/5 đã được
-kiểm offline. Driver nhiều tick đã nối qua CLI; F3-B kiểm chuỗi attempt
+Đường recovery journal và bộ điều phối năm postcheck 1/5→5/5 đã được
+kiểm trên fixture offline; fixture cũ có baseline số 0 sẽ được thay bằng
+marker job không mang quan sát queue trước đạo đầu. Driver nhiều tick đã nối qua CLI; F3-B kiểm chuỗi attempt
 trước tick và tự gọi auditor đóng vòng ở mức `WIRED` offline
 ([kiểm chứng](../workspace/agents/f3b-resumable-closeout/root/VALIDATION.md)).
 Artifact xác nhận ban đầu F4-A1 nay được driver và tick trực tiếp tiêu thụ,

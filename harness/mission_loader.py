@@ -180,7 +180,7 @@ def compile_mission(mission_path: str | Path, states_path: str | Path,
     criterion = None
     textual = [x for x in completion.get("success_when", []) if isinstance(x, str)]
     if textual:
-        known = "march queue used count increased relative to pre-dispatch observation"
+        known = "march queue postcheck: first job March shows 1/5; later Marches increase from sourced pre-dispatch count"
         for item in textual:
             if item != known:
                 raise MissionCompileError(f"unsupported completion criterion: {item!r}")

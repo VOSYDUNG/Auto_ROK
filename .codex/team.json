@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "project": "Auto_ROK",
-  "goal": "FIRST DONE: one startup-authorized GATHER job autonomously dispatches five farm marches for one visible ROK character using the pair auto-filled by each fresh New Troop screen, with verified queue transitions from 0/5 to 5/5.",
+  "goal": "FIRST DONE: one startup-authorized GATHER job autonomously dispatches five farm marches for one visible ROK character using the pair auto-filled by each fresh New Troop screen, with fresh postchecks 1/5 after the first March and 2/5 through 5/5 thereafter; no pre-first numeric queue is claimed.",
   "profile": "inherit",
   "root_document": "docs/ROOT.md",
   "available_models": [],
@@ -59,10 +59,10 @@
   },
   "fallback": "Stop the unavailable role and report to root; root may continue in its current model. No automatic model/account/reset change.",
   "generated": {
-    ".codex/agents/nghien_cuu.toml": "c20f244d5907c2adf86c5beeec62fd057d50f4039ad75aabd07dd9de698dc72f",
-    ".codex/agents/tho_dung.toml": "17fcd7067a3bca8c3b24a65a9bfbd4b5aea8356fac1eddeb388c163972fb1f8a",
-    ".codex/agents/kiem_luat.toml": "35b0db508fadf774a052dbe56241e0cc46b16baadd6d27cd2d74f8d9b9c8bc43",
-    ".codex/agents/nguoi_thu.toml": "0db9ef4cabe4637ae67d74b7d87464f438369e140193c540f03ba2bc220b7b64",
+    ".codex/agents/nghien_cuu.toml": "11b31dc52ef542ff19c0bea9a1720f095c0e8ef639375ba2dedb69f1cce08bd3",
+    ".codex/agents/tho_dung.toml": "7412f8859f460df72bd5a162977995377f898b6afea6a523e5467beea1a44c6b",
+    ".codex/agents/kiem_luat.toml": "1430a4b25236da299a69597e475df30fae3e20bede8ae815c179760e462aacf3",
+    ".codex/agents/nguoi_thu.toml": "7451af081fc5c4466b0bf01d023ae0a13267624432ccb452e15937224335ed12",
     ".codex/config.toml": "0e693ed610ecb09580cc493f3e553083e42540233f2e4924dab4c8f8fa6cfcba"
   }
 }

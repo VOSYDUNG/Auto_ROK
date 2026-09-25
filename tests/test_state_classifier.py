@@ -22,7 +22,7 @@ def test_classifies_each_supported_gather_state() -> None:
         "WORLD_MAP_VIEW": ("map terrain and world objects occupy central canvas", "resource counters across top", "bottom-right primary navigation is visible"),
         "RESOURCE_SEARCH_PANEL": ("SEARCH", "Barbarians", "Cropland"),
         "RESOURCE_POINT_DETAIL": ("Resource Point", "GATHER"),
-        "TROOP_DISPATCH_DRAWER": ("Dispatch a new troop from your city", "New Troop", "Queue 0/5"),
+        "TROOP_DISPATCH_DRAWER": ("Dispatch a new troop from your city", "New Troop"),
         "NEW_TROOP_SETUP": ("New Troop", "MARCH", "Units", "Total Power"),
         "MARCH_IN_PROGRESS": ("used march count is greater than before dispatch", "troop/path indicator may be visible on map"),
     }
@@ -33,26 +33,15 @@ def test_classifies_each_supported_gather_state() -> None:
         assert result.ambiguity["candidate_states"] == (expected,)
 
 
-def test_queue_pattern_does_not_accept_arbitrary_text() -> None:
-    result = StateClassifier().classify(observed(
-        "Dispatch a new troop from your city",
-        "New Troop",
-        "Queue nope",
-    ))
+def test_queue_text_alone_cannot_classify_dispatch_step() -> None:
+    result = StateClassifier().classify(observed("Queue 1/5"))
     assert result.state_id == UNKNOWN_STATE
 
 
-def test_drawer_queue_roi_anchor_is_enough_to_reach_next_guarded_action() -> None:
+def test_dispatch_step_reaches_next_guarded_action_without_queue_widget() -> None:
     values = (
         Evidence("ocr", "Dispatch a new troop from your city", 0.0, value="Dispatch a new troop from your city", metadata={"frame_id": FRAME}),
         Evidence("ocr", "New Troop", 0.0, value="New Troop", metadata={"frame_id": FRAME}),
-        Evidence(
-            "ocr",
-            "Queue",
-            0.0,
-            value="Queue",
-            metadata={"frame_id": FRAME, "acquisition": "ocr_march_queue_region"},
-        ),
     )
     result = StateClassifier().classify(
         Observation(1.0, FRAME, (1280, 720), values)

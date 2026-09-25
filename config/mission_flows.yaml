@@ -130,14 +130,14 @@ flows:
         expect: [MARCH_IN_PROGRESS, WORLD_MAP_VIEW]
     completion:
       success_when:
-        - "march queue used count increased relative to pre-dispatch observation"
+        - "march queue postcheck: first job March shows 1/5; later Marches increase from sourced pre-dispatch count"
       supporting_evidence:
         - "active troop/march indicator appears"
         - "map returns after March"
     trained_observation_examples:
       - "Resource search panel exposes Barbarians, Cropland, Logging Camp, Stone Deposit, Gold Deposit and a level control."
       - "A selected Level 6 Logging Camp detail frame exposes Reserves=1,260,000, Gatherer=None, Owner=None and GATHER."
-      - "Archived frames include independent march-queue readings 1/5 through 5/5; no provenance-supported 0/5 queue baseline was found."
+      - "The march queue is not visible before the first March; archived frames include independent march-queue readings 1/5 through 5/5."
     unresolved_policy:
       - "Whether Owner/Gatherer values impose a hard selection constraint."
 

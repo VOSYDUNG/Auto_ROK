@@ -356,17 +356,29 @@ class GatherJobInputGuard:
         if progress.dispatched_marches != progress.verified_marches:
             return InterferenceCheck(False, "GATHER_JOB_PREVIOUS_MARCH_UNVERIFIED")
         if (not isinstance(baseline, Mapping)
-                or baseline.get("predicate_id") != "march_queue_used_increased"
                 or baseline.get("counter_fact") != "march_queue_used"
-                or type(baseline.get("counter_value")) is not int
-                or baseline["counter_value"] != progress.verified_marches
                 or type(baseline.get("capacity")) is not int
                 or baseline["capacity"] != self.job.max_marches
-                or baseline.get("source") not in {"visible_ocr_queue_anchor", "visible_ocr_march_queue_region"}
                 or baseline.get("character_id") != self.job.character_id
                 or not isinstance(baseline.get("source_frame_id"), str)
                 or not baseline["source_frame_id"]
                 or not self._baseline_fresh(baseline, now, observed_at)):
+            return InterferenceCheck(False, "GATHER_JOB_QUEUE_BASELINE_INVALID")
+        if progress.verified_marches == 0:
+            # The right-side queue UI first appears after this March. A job
+            # ordinal of zero is not a sourced observation of queue 0/5.
+            if (baseline.get("predicate_id") != "first_march_queue_appeared_at_one"
+                    or baseline.get("source") != "job_initial_slot_ordinal"
+                    or baseline.get("job_id") != self.job.job_id
+                    or "counter_value" in baseline
+                    or baseline["source_frame_id"] != before.frame_id
+                    or baseline.get("source_timestamp") != observed_at
+                    or type(before.facts.get("march_queue_used")) is int):
+                return InterferenceCheck(False, "GATHER_JOB_QUEUE_BASELINE_INVALID")
+        elif (baseline.get("predicate_id") != "march_queue_used_increased"
+              or type(baseline.get("counter_value")) is not int
+              or baseline["counter_value"] != progress.verified_marches
+              or baseline.get("source") not in {"visible_ocr_queue_anchor", "visible_ocr_march_queue_region"}):
             return InterferenceCheck(False, "GATHER_JOB_QUEUE_BASELINE_INVALID")
 
         if (before.state != "NEW_TROOP_SETUP"

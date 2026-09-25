@@ -33,7 +33,6 @@ def main(argv: list[str] | None = None) -> int:
         record = build_startup_attestation(
             job_artifact=args.job_artifact, manifest_path=args.manifest,
             frame_path=args.frame,
-            profile_path=ROOT / "config" / "queue_indicator_profile.json",
             ledger_root=ROOT / "workspace" / "checkpoints" / "gather-jobs",
             workspace_root=ROOT / "workspace",
             mission_flows=ROOT / "config" / "mission_flows.yaml",

@@ -26,8 +26,11 @@ bằng chứng xác nhận này.
 Nếu cặp trên màn hiện tại trống/không đọc được hoặc bị đổi ngoài luồng thì
 dừng lượt, không tự xếp hạng thay game. Không duyệt thủ công từng march.
 
-Vòng hoàn tất khi cả năm lệnh điều quân có hậu kiểm bằng quan sát mới: hàng đợi
-tăng đúng một sau từng lượt và đạt 5/5 cho đúng nhân vật/công việc. Biên nhận
+Vòng hoàn tất khi cả năm lệnh điều quân có hậu kiểm bằng quan sát mới: giao
+diện hàng đợi bên phải chỉ xuất hiện sau đạo đầu, và lần hậu kiểm đầu phải đọc
+đúng 1/5. Các lượt tiếp theo đọc 2/5, 3/5, 4/5 rồi 5/5 cho đúng nhân vật/công
+việc. Không đòi một frame 0/5 không tồn tại và không biến việc thiếu UI trước
+đạo đầu thành một số 0 đã quan sát. Biên nhận
 input hoặc ảnh 5/5 của occurrence cũ không đủ. Thời gian đào/về có thể được
 ước lượng và ghi rõ nguồn, độ bất định; **không phải chờ quân về** để đạt FIRST
 DONE. Quyền công việc chỉ bao phủ đường GATHER cần để đưa năm đạo đi; hành động

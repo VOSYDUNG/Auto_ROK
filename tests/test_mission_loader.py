@@ -53,6 +53,6 @@ def test_completion_criterion_is_typed_and_preserves_supporting_evidence():
 
 def test_unknown_completion_text_fails_closed(tmp_path):
     bad = tmp_path / "bad-completion.yaml"
-    bad.write_text(MISSIONS.read_text(encoding="utf-8").replace("march queue used count increased relative to pre-dispatch observation", "invented completion rule"), encoding="utf-8")
+    bad.write_text(MISSIONS.read_text(encoding="utf-8").replace("march queue postcheck: first job March shows 1/5; later Marches increase from sourced pre-dispatch count", "invented completion rule"), encoding="utf-8")
     with pytest.raises(MissionCompileError, match="unsupported completion"):
         compile_mission(bad, STATES, "GATHER_RESOURCE", {"resource_type": "WOOD", "resource_level": 1})

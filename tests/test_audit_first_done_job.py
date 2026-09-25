@@ -37,25 +37,26 @@ class SyntheticMarchTool:
         if self.observations == 1:
             before = f"before-{self.sequence}"
             image_hash = f"{self.sequence:064x}"
-            baseline = {
-                "predicate_id": "march_queue_used_increased", "counter_fact": "march_queue_used",
-                "counter_value": self.sequence - 1, "capacity": 5,
-                "source_frame_id": f"baseline-{self.sequence}",
-                "source": "visible_ocr_queue_anchor", "character_id": self.job.character_id,
-                "source_timestamp": self.start,
+            facts = {
+                "character_id": self.job.character_id, "window": WINDOW,
+                "image_sha256": image_hash, "new_troop_formation_ready": True,
+                "new_troop_formation_source": "same_frame_new_troop_ocr_and_pixels_1366x768",
+                "new_troop_formation_frame_id": before,
+                "new_troop_formation_image_sha256": image_hash,
+                "precondition_evidence": {PRECONDITION: True},
+                "gather_job_id": self.job.job_id,
             }
+            if self.sequence > 1:
+                facts["completion_baseline"] = {
+                    "predicate_id": "march_queue_used_increased", "counter_fact": "march_queue_used",
+                    "counter_value": self.sequence - 1, "capacity": 5,
+                    "source_frame_id": f"baseline-{self.sequence}",
+                    "source": "visible_ocr_queue_anchor", "character_id": self.job.character_id,
+                    "source_timestamp": self.start,
+                }
             return ToolSnapshot(
                 context.mission_id, context.task_id, before, "NEW_TROOP_SETUP",
-                facts={
-                    "character_id": self.job.character_id, "window": WINDOW,
-                    "image_sha256": image_hash,
-                    "new_troop_formation_ready": True,
-                    "new_troop_formation_source": "same_frame_new_troop_ocr_and_pixels_1366x768",
-                    "new_troop_formation_frame_id": before,
-                    "new_troop_formation_image_sha256": image_hash,
-                    "completion_baseline": baseline,
-                    "precondition_evidence": {PRECONDITION: True},
-                },
+                facts=facts,
                 allowed_actions=(AllowedAction("MARCH_WITH_CURRENT_SELECTION", True,
                                                ("TROOP_MARCH",)),),
                 target_ids=("TROOP_MARCH",), observed_at=self.start,

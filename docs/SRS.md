@@ -36,7 +36,8 @@ nhìn-và-bấm của người chơi · không đọc bộ nhớ, không chèn c
 
 **FIRST DONE.** Một nhân vật được harness đưa năm đạo đi farm trong một công việc
 GATHER đã ủy quyền lúc bắt đầu. New Troop tự điền cặp theo gợi ý của game;
-harness giữ nguyên cặp trên khung hiện tại và hậu kiểm queue 0→5/5.
+harness giữ nguyên cặp trên khung hiện tại; UI queue bên phải xuất hiện sau đạo
+đầu nên hậu kiểm lần lượt 1/5 đến 5/5, không yêu cầu ảnh 0/5.
 Không duyệt từng march, không cần chờ quân về hoặc chạy 24 giờ. Đây là mục tiêu
 nghiệm thu, chưa phải claim runtime. Local LLM chỉ nhận ứng viên đã lọc ở điểm
 bất định thật, không có quyền phát input, chọn tọa độ, ghi knowledge hay thay
@@ -147,9 +148,9 @@ các mã MIS cũ và không nâng trạng thái của runtime.
 
 | Mã | Mệnh đề | Tiêu chí chấp nhận | Nguồn |
 |---|---|---|---|
-| MIS-FD-001 | Một công việc GATHER chỉ điều năm đạo cho một nhân vật, từ queue 0/5 | Xác nhận nhân vật một lần của operator được ràng job/frame/client/thời điểm cùng quan sát queue 0/5; mỗi event giữ cùng `job_id`/`character_id`; tối đa năm dispatch, không đòi OCR tên UI | GOAL, PRD §3.4 |
+| MIS-FD-001 | Một công việc GATHER chỉ điều năm đạo cho một nhân vật | Xác nhận nhân vật một lần của operator được ràng job/frame/client/thời điểm; UI queue chưa xuất hiện trước đạo đầu nên không đòi frame 0/5; mỗi event giữ cùng `job_id`/`character_id`; tối đa năm dispatch, không đòi OCR tên UI | GOAL, PRD §3.4 |
 | MIS-FD-002 | Mỗi lượt giữ nguyên đội hình New Troop được game tự điền | New Troop mở mới có đội hình và nút March hợp lệ; harness không bấm đổi chỉ huy, thiếu/stale/mâu thuẫn trả `HOLD`. Không cần đọc tên cặp hay nhãn xếp hạng riêng | PRD §3.4, F03 |
-| MIS-FD-003 | Mỗi march có hậu kiểm hàng đợi mới | Năm chuyển tiếp queue 0→1→2→3→4→5 được buộc vào cùng nhân vật/job; receipt không đủ để ghi `VERIFIED` | F07, F08 |
+| MIS-FD-003 | Mỗi march có hậu kiểm hàng đợi mới | Đạo đầu có hậu kiểm mới 1/5 khi UI queue xuất hiện; bốn đạo tiếp theo đọc 2/5, 3/5, 4/5, 5/5 cùng nhân vật/job; thiếu UI trước đạo đầu không được ghi là số 0 quan sát; receipt không đủ để ghi `VERIFIED` | F07, F08 |
 | MIS-FD-004 | Kết thúc vòng tại 5/5, ước lượng thời gian là metadata | Báo cáo append-only chỉ đạt khi năm postcondition xác minh; thời gian đào/về có nguồn và độ bất định nếu ghi, không yêu cầu quân về hay 24 giờ | PRD §3.4, F08 |
 | MIS-FD-005 | Một ủy quyền khởi đầu bao phủ các march trong scope GATHER | Không hỏi operator từng march; sai nhân vật/hạn/scope/revoke/sequence thì không input; item, tài sản và tài khoản nằm ngoài scope | F06 |
 | MIS-FD-006 | Canonical runner dùng fact cặp gợi ý và guard quyền công việc | Wiring test chứng minh fact/guard chặn đường input khi thiếu; không tái dùng B003 historical, model không tạo cặp hoặc quyền | F03, F06, F07 |

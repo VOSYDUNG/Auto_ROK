@@ -10,7 +10,8 @@ Kế hoạch này là thứ tự việc cần làm, không phải quyền chạy
 
 Một công việc GATHER cho một nhân vật đã đăng nhập: người vận hành ủy quyền
 một lần, harness giữ cặp New Troop do game tự điền rồi bấm March cho từng đạo,
-hậu kiểm hàng đợi 0→1→2→3→4→5. Đạt 5/5 thì đóng vòng; ước lượng
+hậu kiểm 1/5 khi UI queue xuất hiện sau đạo đầu, rồi 2/5→3/5→4/5→5/5.
+Đạt 5/5 thì đóng vòng; ước lượng
 đào/về là metadata, không chờ quân về. Không có duyệt từng march. B003/R3 là
 đường benchmark/repetition riêng; G6/endurance và 24 giờ thuộc mốc farm hằng
 ngày sau FIRST DONE.
@@ -67,10 +68,11 @@ PASS. Revoke hoặc frame/job hết hạn trong lúc đọc ledger đều chặn
 offline; [F4-A2](../workspace/agents/f4a-attestation-wiring/root/VALIDATION.md)
 đã nối driver/tick tiêu thụ offline, chưa có artifact trên frame thật. Ảnh âm
 New Troop thật chưa có. Reader
-queue đã đọc đúng các snapshot 1/5–5/5 nhưng chưa có 0/5 được hỗ trợ từ ROI
-march queue. Chuỗi OCR `0/5` trong quest panel là mồi nhử, không phải baseline.
-Nghiệm thu phần còn lại cần xác nhận nhân vật khởi đầu và queue 0/5 từ frame có provenance,
-không cần duyệt từng march. Quyền khởi đầu không cần Windows Hello trong ranh
+queue đã đọc đúng các snapshot 1/5–5/5. Người vận hành xác nhận UI queue bên phải
+chỉ xuất hiện sau đạo đầu. Bản chỉnh hợp đồng khởi đầu bỏ yêu cầu 0/5,
+ghi queue là chưa đo trước March đầu và đòi hậu kiểm mới 1/5; chuỗi OCR `0/5`
+trong quest panel không thể làm baseline. Chưa có hậu kiểm 1/5 từ một job mới
+trên game thật. Quyền khởi đầu không cần Windows Hello trong ranh
 giới same-user local; nếu threat model đổi thì mở issuer riêng.
 
 ## F2 — Nối canonical runner và hậu kiểm năm lượt
@@ -82,9 +84,11 @@ giới same-user local; nếu threat model đổi thì mở issuer riêng.
 audit và lần live được ủy quyền sau này.
 
 **Việc:** đi qua đường input guard hiện có, không tạo motor song song. Trước
-mỗi march đọc New Troop readiness và quyền từ frame mới; sau dispatch đòi queue tăng một,
+mỗi march đọc New Troop readiness và quyền từ frame mới; sau dispatch đòi 1/5
+ở lượt đầu, rồi tăng đúng một theo số queue đã đọc cho bốn lượt sau,
 ghi `DISPATCHED` và `VERIFIED` riêng, khóa retry khi kết quả chưa rõ. Bắt
-đầu tại 0/5, đóng sau năm postcondition tới 5/5.
+không giả lập một quan sát số 0 trước đạo đầu; đóng sau năm postcondition
+1/5→2/5→3/5→4/5→5/5.
 
 Chia theo dependency: F2-A ghi journal VERIFIED/recovery; F2-B chọn slot và
 gọi canonical runner một tick; F2-C điều khiển bounded ticks/occurrences của
@@ -92,7 +96,8 @@ cả job từ một lần khởi đầu. Gói preflight sau F2-C phải ràng b�
 lập input vào job thay vì buộc người vận hành xác nhận mỗi slot. Các phần này
 vẫn offline cho đến khi preflight live có nguồn được kiểm riêng.
 
-**Nghiệm thu:** replay 0→5 và failure matrix (missing frame, queue không
+**Nghiệm thu:** replay đạo đầu hiện UI 1/5 rồi 2/5→5/5 và failure matrix
+(missing frame, queue không
 tăng, wrong character, timeout, restart/duplicate); structural wiring test
 chứng minh CLI thật dùng fact/guard. Graph PASS. Không kết luận live từ replay.
 
@@ -123,13 +128,14 @@ không phải lệnh chạy game ngay.
 **Owned nodes:** consumer của `startup_character_attestation`, job-scoped
 `host_input_isolation_evidence` và đường preflight driver/tick hiện có.
 
-**Upstream:** F3-B đã nhận, F4-A1 artifact offline, queue 0/5 có provenance.
+**Upstream:** F3-B đã nhận; F4-A1/F4-A2 đã có nhánh startup chỉnh theo UI thật ở mức offline.
 **Downstream:** một occurrence live riêng được ủy quyền sau này.
 
 **Thứ tự:** F4-A2 đã nối một attestation bất biến vào cả driver và tick trực
 tiếp ở mức `WIRED` offline; F4-B tự thu trace mới cho đúng `run_id` trước từng tick, vẫn dưới một
-ủy quyền ban đầu. Sau đó cần frame queue 0/5 thật và glyph đã kiểm chứng;
-không lấy dữ liệu quest panel hoặc fixture tổng hợp làm baseline. Recorder
+ủy quyền ban đầu. Không tìm frame 0/5: hậu kiểm đạo đầu cần frame mới 1/5;
+không lấy dữ liệu quest panel hoặc fixture tổng hợp làm
+baseline. Recorder
 host hiện tự khai zero input ngoài luồng, nên cần kiểm thêm nguồn telemetry
 trước khi dựa vào nó để chứng minh không có can thiệp. Hai công tắc
 `--arm-live` giữ chặn trong các gói offline.

@@ -28,11 +28,12 @@ def result_for(number, *, run_id=None):
     run = run_id or f"run-{number}"
     before_frame, after_frame = f"march-{number}", f"queue-{number}"
     baseline = {
-        "predicate_id": "march_queue_used_increased", "counter_fact": "march_queue_used",
-        "counter_value": number - 1, "capacity": 5,
-        "source_frame_id": f"queue-{number - 1}",
-        "source": "visible_ocr_march_queue_region", "character_id": "character-1",
-        "source_timestamp": NOW.timestamp() + number * 3 - 1,
+        "predicate_id": "first_march_queue_appeared_at_one" if number == 1 else "march_queue_used_increased",
+        "counter_fact": "march_queue_used", "capacity": 5,
+        "source_frame_id": before_frame if number == 1 else f"queue-{number - 1}",
+        "source": "job_initial_slot_ordinal" if number == 1 else "visible_ocr_march_queue_region",
+        "character_id": "character-1", "source_timestamp": NOW.timestamp() + number * 3,
+        **({"job_id": "job-1"} if number == 1 else {"counter_value": number - 1}),
     }
     before = ToolSnapshot(
         "GATHER_RESOURCE", "task-1", before_frame, "NEW_TROOP_SETUP",
@@ -63,6 +64,30 @@ def result_for(number, *, run_id=None):
     return MissionContext("GATHER_RESOURCE", "task-1", run), MissionTickResult(
         CheckpointStatus.COMPLETE, checkpoint, before, engine_result=step,
     )
+
+
+def test_first_slot_rejects_numeric_zero_as_an_observed_queue_baseline(tmp_path):
+    ledger = JsonGatherJobStore(tmp_path / "ledger")
+    ledger.bind_client(job(), WINDOW)
+    reserve(ledger, 1)
+    context, result = result_for(1)
+    step = result.engine_result
+    before = replace(step.snapshot, facts=dict(step.snapshot.facts) | {"march_queue_used": 0})
+    result = replace(result, engine_result=replace(step, snapshot=before))
+    with pytest.raises(GatherJobStoreError, match="inconsistent queue"):
+        record_verified_gather_tick(job(), context, result, ledger)
+
+
+def test_first_postcheck_must_be_one_of_five(tmp_path):
+    ledger = JsonGatherJobStore(tmp_path / "ledger")
+    ledger.bind_client(job(), WINDOW)
+    reserve(ledger, 1)
+    context, result = result_for(1)
+    step = result.engine_result
+    after = replace(step.after_snapshot, facts=dict(step.after_snapshot.facts) | {"march_queue_used": 2})
+    result = replace(result, engine_result=replace(step, after_snapshot=after))
+    with pytest.raises(GatherJobStoreError, match="inconsistent queue"):
+        record_verified_gather_tick(job(), context, result, ledger)
 
 
 def reserve(ledger, number):

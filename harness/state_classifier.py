@@ -8,7 +8,6 @@ from current-frame word boxes.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import re
 from typing import Any, Mapping, Sequence
 
 from harness.contracts import Evidence, Observation
@@ -75,7 +74,6 @@ _STATE_RULES: Mapping[str, tuple[tuple[str, ...], ...]] = {
         (
             "Dispatch a new troop from your city",
             "New Troop",
-            "Queue X/5",
         ),
     ),
     # Keep this synchronized with config/ui_states.yaml. "Load" was an older
@@ -88,9 +86,6 @@ _STATE_RULES: Mapping[str, tuple[tuple[str, ...], ...]] = {
         ),
     ),
 }
-
-_QUEUE_PATTERN = re.compile(r"^queue\s+\d{1,2}\s*/\s*\d{1,2}$", re.IGNORECASE)
-
 
 def _current_evidence(observation: Observation, scene: SceneGraph | None) -> tuple[Evidence, ...]:
     """Return only evidence bound to the supplied observation and scene frame."""
@@ -111,32 +106,13 @@ def _text(item: Evidence) -> tuple[str, ...]:
 
 
 def _matches(item: Evidence, expected: str) -> bool:
-    """Match exact trained anchors plus the one declared queue text pattern."""
-    if expected == "Queue X/5":
-        return any(_QUEUE_PATTERN.fullmatch(value.strip()) is not None for value in _text(item))
+    """Match exact trained anchors from the current frame."""
     if expected == "Dispatch a new troop from your city":
         return any(
             value == expected or value in ("Dispatch a new", "troop from your city")
             for value in _text(item)
         )
     return any(value == expected or value.rstrip(":") == expected for value in _text(item))
-
-
-def _matches_drawer_queue_anchor(item: Evidence) -> bool:
-    """Accept a bounded queue ROI anchor when digits are unreadable.
-
-    The dispatch drawer can expose a current-frame ``Queue`` token while the
-    small ``0/5`` glyph is lost by Windows OCR.  The queue counter itself is
-    still required for completion evidence by ``gather_facts``; this fallback
-    only lets the state machine reach the drawer's next guarded action when
-    the card and its queue ROI are otherwise positively grounded.
-    """
-    if _matches(item, "Queue X/5"):
-        return True
-    return (
-        _matches(item, "Queue")
-        and item.metadata.get("acquisition") in {"ocr_march_queue_region", "ocr_troop_drawer_region"}
-    )
 
 
 def _first_satisfied(
@@ -148,12 +124,7 @@ def _first_satisfied(
     for required in alternatives:
         matched: list[Evidence] = []
         for expected in required:
-            if state_id == "TROOP_DISPATCH_DRAWER" and expected == "Queue X/5":
-                item = next(
-                    (c for c in evidence if _matches_drawer_queue_anchor(c)), None
-                )
-            else:
-                item = next((c for c in evidence if _matches(c, expected)), None)
+            item = next((c for c in evidence if _matches(c, expected)), None)
             if item is None:
                 break
             matched.append(item)

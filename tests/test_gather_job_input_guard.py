@@ -39,10 +39,11 @@ def current_frame(frame_id="frame-1", **fact_overrides):
         "window": WINDOW,
         "gather_client_binding_source": "same_frame_capture_target_and_post_capture",
         "completion_baseline": {
-            "predicate_id": "march_queue_used_increased", "counter_fact": "march_queue_used",
-            "counter_value": 0, "capacity": 5, "source_frame_id": "queue-zero",
+            "predicate_id": "first_march_queue_appeared_at_one", "counter_fact": "march_queue_used",
+            "capacity": 5, "source_frame_id": frame_id,
             "source_timestamp": NOW.timestamp() - 1,
-            "source": "visible_ocr_queue_anchor", "character_id": "character-1",
+            "source": "job_initial_slot_ordinal", "character_id": "character-1",
+            "job_id": "job-1",
         },
     }
     facts.update(fact_overrides)
@@ -126,8 +127,8 @@ def test_next_run_requires_verified_count_and_matching_fresh_baseline(tmp_path):
     entry = {
         "sequence": 1, "job_id": "job-1", "run_id": "run-1",
         "before_frame_id": "frame-1", "after_frame_id": "queue-1",
-        "baseline_frame_id": "queue-zero", "before_count": 0, "after_count": 1,
-        "capacity": 5, "before_source": "visible_ocr_queue_anchor",
+        "baseline_frame_id": "frame-1", "before_count": 0, "after_count": 1,
+        "capacity": 5, "before_source": "job_initial_slot_ordinal",
         "after_source": "visible_ocr_march_queue_region", "character_id": "character-1",
         "client_binding": ledger.client_binding(job()).to_json(),
         "before_observed_at": NOW.timestamp() - 1,
@@ -143,7 +144,8 @@ def test_next_run_requires_verified_count_and_matching_fresh_baseline(tmp_path):
     assert dispatch(action_provider, next_before, next_scene,
                     replace(CONTEXT, run_id="run-2")).code == "GATHER_JOB_QUEUE_BASELINE_INVALID"
     next_baseline = dict(next_before.facts["completion_baseline"]) | {
-        "counter_value": 1, "source_frame_id": "queue-1",
+        "predicate_id": "march_queue_used_increased", "counter_value": 1,
+        "source": "visible_ocr_queue_anchor", "source_frame_id": "queue-1",
     }
     facts = dict(next_scene.facts) | {"completion_baseline": next_baseline}
     next_before = replace(next_before, facts=facts)
@@ -361,11 +363,32 @@ def test_missing_old_or_invalid_queue_baseline_denies_before_input(tmp_path, sou
 
 def test_queue_baseline_expiring_during_final_ledger_check_keeps_reservation(tmp_path):
     action_provider, ledger, recorder = provider(tmp_path)
-    before, scene = current_frame()
-    # Keep the current frame fresh at final check but make its source queue
-    # frame cross the age boundary while the ledger operation runs.
-    baseline = dict(before.facts["completion_baseline"]) | {
-        "source_timestamp": NOW.timestamp() - 9,
+    # The first slot has no numeric queue baseline. Establish its durable
+    # verification so the second slot can exercise a genuinely older queue
+    # frame while the current New Troop frame remains fresh.
+    ledger.reserve_dispatch(job(), run_id="run-1", frame_id="frame-1", action=ACTION, now=NOW)
+    ledger.record_verified(job(), {
+        "sequence": 1, "job_id": "job-1", "run_id": "run-1",
+        "before_frame_id": "frame-1", "after_frame_id": "queue-1",
+        "baseline_frame_id": "frame-1", "before_count": 0, "after_count": 1,
+        "capacity": 5, "before_source": "job_initial_slot_ordinal",
+        "after_source": "visible_ocr_march_queue_region", "character_id": "character-1",
+        "client_binding": ledger.client_binding(job()).to_json(),
+        "before_observed_at": NOW.timestamp() - 12,
+        "after_observed_at": NOW.timestamp() - 11,
+        "verified_at": NOW.isoformat(),
+        "receipt": {
+            "action_id": ACTION, "target_id": "TROOP_MARCH",
+            "before_frame_id": "frame-1", "after_frame_id": "queue-1",
+            "character_id": "character-1", "non_interference_confirmed": True,
+        },
+    })
+    before, scene = current_frame("frame-2")
+    baseline = {
+        "predicate_id": "march_queue_used_increased", "counter_fact": "march_queue_used",
+        "counter_value": 1, "capacity": 5,
+        "source_frame_id": "queue-1", "source_timestamp": NOW.timestamp() - 9,
+        "source": "visible_ocr_march_queue_region", "character_id": "character-1",
     }
     facts = dict(before.facts) | {"completion_baseline": baseline}
     before, scene = replace(before, facts=facts), replace(scene, facts=facts)
@@ -383,8 +406,8 @@ def test_queue_baseline_expiring_during_final_ledger_check_keeps_reservation(tmp
         return result
 
     ledger.require_client = slow_client_check
-    receipt = dispatch(action_provider, before, scene)
+    receipt = dispatch(action_provider, before, scene, replace(CONTEXT, run_id="run-2"))
     assert receipt.code == "GATHER_JOB_QUEUE_BASELINE_STALE_AFTER_LEDGER"
-    assert receipt.facts["gather_job_dispatch_sequence"] == 1
+    assert receipt.facts["gather_job_dispatch_sequence"] == 2
     assert recorder.actions == []
-    assert ledger.progress(job()).dispatched_marches == 1
+    assert ledger.progress(job()).dispatched_marches == 2

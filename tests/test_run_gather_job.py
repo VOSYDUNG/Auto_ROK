@@ -331,7 +331,6 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(
     actions = []
     tick_calls = []
     attestation_checks = []
-    synthetic_times = {}
     with TemporaryDirectory(dir=driver.ROOT / "workspace") as folder:
         root = Path(folder)
         ledger_root = root / "ledger"
@@ -359,7 +358,7 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(
 
         def synthetic_attestation(*_args, **kwargs):
             assert kwargs.get("expected_sha256") in (None, ATTESTATION_SHA)
-            assert kwargs["profile_path"] == driver.ROOT / "config" / "queue_indicator_profile.json"
+            assert "profile_path" not in kwargs
             attestation_checks.append(kwargs.get("expected_sha256"))
             return ATTESTATION_SHA
 
@@ -375,32 +374,35 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(
             def __init__(self, sequence):
                 self.sequence = sequence
                 self.observations = 0
-                current = datetime.now(timezone.utc).timestamp()
-                self.start = max(current, synthetic_times.get(sequence - 1, current - 2) + 2)
-                synthetic_times[sequence] = self.start
+                # Keep all synthetic frames inside the job window and in
+                # deterministic order, without putting later frames in the
+                # future relative to the journal's real verified_at clock.
+                self.start = now.timestamp() - 12 + sequence * 2
 
             def observe(self, context):
                 self.observations += 1
                 if self.observations == 1:
                     image_hash = f"{self.sequence:064x}"
-                    baseline = {
-                        "predicate_id": "march_queue_used_increased",
-                        "counter_fact": "march_queue_used", "counter_value": self.sequence - 1,
-                        "capacity": 5, "source_frame_id": f"baseline-{self.sequence}",
-                        "source": "visible_ocr_queue_anchor", "character_id": job.character_id,
-                        "source_timestamp": self.start,
-                    }
+                    facts = {"character_id": job.character_id, "window": window,
+                             "image_sha256": image_hash, "new_troop_formation_ready": True,
+                             "new_troop_formation_source":
+                                 "same_frame_new_troop_ocr_and_pixels_1366x768",
+                             "new_troop_formation_frame_id": f"before-{self.sequence}",
+                             "new_troop_formation_image_sha256": image_hash,
+                             "precondition_evidence": {precondition: True},
+                             "gather_job_id": job.job_id}
+                    if self.sequence > 1:
+                        facts["completion_baseline"] = {
+                            "predicate_id": "march_queue_used_increased",
+                            "counter_fact": "march_queue_used", "counter_value": self.sequence - 1,
+                            "capacity": 5, "source_frame_id": f"baseline-{self.sequence}",
+                            "source": "visible_ocr_queue_anchor", "character_id": job.character_id,
+                            "source_timestamp": self.start,
+                        }
                     return ToolSnapshot(
                         context.mission_id, context.task_id, f"before-{self.sequence}",
                         "NEW_TROOP_SETUP",
-                        facts={"completion_baseline": baseline, "character_id": job.character_id,
-                               "window": window, "image_sha256": image_hash,
-                               "new_troop_formation_ready": True,
-                               "new_troop_formation_source":
-                                   "same_frame_new_troop_ocr_and_pixels_1366x768",
-                               "new_troop_formation_frame_id": f"before-{self.sequence}",
-                               "new_troop_formation_image_sha256": image_hash,
-                               "precondition_evidence": {precondition: True}},
+                        facts=facts,
                         allowed_actions=(AllowedAction("MARCH_WITH_CURRENT_SELECTION", True,
                                                        ("TROOP_MARCH",)),),
                         target_ids=("TROOP_MARCH",), observed_at=self.start,

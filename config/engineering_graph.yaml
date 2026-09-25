@@ -526,7 +526,7 @@ nodes:
 
   - id: startup_character_attestation
     kind: verification
-    responsibility: Records and revalidates one operator assertion of the open character against the exact startup job, native first-frame client and sourced march-queue 0/5 at a deterministic per-job path; the canonical driver and direct job tick consume its fixed-path digest without granting it input authority.
+    responsibility: Records and revalidates one operator assertion of the open character against the exact startup job and native first-frame client at a deterministic per-job path; the queue UI is not present before the first March, so this record makes no numeric queue claim and grants no input authority.
     authority: canonical
     status: implemented
     path: harness/gather_job_startup_attestation.py
@@ -547,7 +547,7 @@ nodes:
 
   - id: gather_job_verification
     kind: verification
-    responsibility: Adopts only a matching MissionEngine COMPLETE and VERIFIED March result with fresh same-client and same-character queue n to n+1 evidence into the durable job journal.
+    responsibility: Adopts only a matching MissionEngine COMPLETE and VERIFIED March result with fresh same-client and same-character post-dispatch queue evidence; the first slot requires newly visible 1/5 without claiming an observed 0/5, then slots two through five require numeric n to n+1.
     authority: canonical
     status: implemented
     path: harness/gather_job_verification.py
@@ -729,7 +729,7 @@ nodes:
 
   - id: gather_job_input_guard
     kind: safety
-    responsibility: Rechecks the bound client, job, same-frame New Troop readiness, compiled action, character, fresh queue baseline and prior VERIFIED progress before input, then reserves one March attempt at the canonical boundary.
+    responsibility: Rechecks the bound client, job, same-frame New Troop readiness, compiled action, character and prior VERIFIED progress before input; the first slot uses a nonnumeric bootstrap state, later slots require a fresh numeric queue baseline before reserving one March attempt.
     authority: canonical
     status: implemented
     path: harness/windows_interference_guard.py
@@ -838,7 +838,7 @@ nodes:
 
   - id: post_action_verification
     kind: verification
-    responsibility: Requires a fresh post-action frame, expected transition and typed completion or control evidence.
+    responsibility: Requires a fresh post-action frame, expected transition and typed completion or control evidence; a job's first March completes only on a sourced 1/5 post-frame from an explicit nonnumeric first-slot marker, while later queue completions retain numeric pre/post checks.
     authority: canonical
     status: implemented
     path: harness/mission_engine.py
@@ -876,7 +876,7 @@ nodes:
 
   - id: gather_job_coordinator
     kind: orchestration
-    responsibility: Selects a deterministic five-march job occurrence from durable VERIFIED progress, resumes a matching checkpoint, requires fresh observation and invokes the canonical MissionRunner for at most one tick; an unverified reservation cannot open the next slot.
+    responsibility: Selects a deterministic five-march job occurrence from durable VERIFIED progress, creates the nonnumeric first-slot marker only from fresh job-bound New Troop evidence, resumes a matching checkpoint, and invokes the canonical MissionRunner for at most one tick; an unverified reservation cannot open the next slot.
     authority: canonical
     status: implemented
     path: harness/gather_job_coordinator.py
@@ -1078,7 +1078,7 @@ edges:
   - {from: gather_job_issuance, to: gather_job_driver, relation: supplies_launch_spec_bound_to_startup_artifact}
   - {from: gather_job_issuance, to: startup_character_attestation, relation: supplies_exact_job_artifact}
   - {from: live_capture, to: startup_character_attestation, relation: supplies_native_first_frame_and_client}
-  - {from: march_queue_indicator, to: startup_character_attestation, relation: supplies_sourced_start_queue_reading}
+  - {from: march_queue_indicator, to: gather_job_verification, relation: supplies_first_post_1_of_5_and_later_numeric_queue_reads}
   - {from: gather_job_store, to: startup_character_attestation, relation: supplies_revocation_and_client_binding}
   - {from: startup_character_attestation, to: gather_job_driver, relation: pins_and_revalidates_canonical_startup_record}
   - {from: startup_character_attestation, to: gather_cli, relation: preflights_direct_job_tick}

@@ -105,8 +105,10 @@ client. Nhận mốc này chỉ khi đồng thời:
    luồng. Không cần đọc danh tính từng chỉ huy hay chứng minh nhãn xếp hạng
    “best” riêng; thiếu đội hình hoặc state không rõ thì dừng.
 3. Năm lần điều quân có chuỗi bằng chứng append-only theo cùng nhân vật/công
-   việc. Hậu kiểm mới sau từng dispatch cho thấy `Queue used` tăng đúng một và
-   lần cuối đạt 5/5. `DISPATCHED` không phải `VERIFIED`; một ảnh 5/5 cũ hoặc
+   việc. Trước đạo đầu, UI hàng đợi bên phải chưa xuất hiện nên không yêu cầu
+   frame 0/5 hoặc suy số 0 từ OCR trống. Hậu kiểm mới sau đạo đầu phải cho 1/5;
+   bốn hậu kiểm tiếp theo cho 2/5, 3/5, 4/5, rồi 5/5. `DISPATCHED` không phải
+   `VERIFIED`; một ảnh 5/5 cũ hoặc
    một lần có can thiệp tay không đủ chứng minh vòng tự chủ.
 4. Báo cáo đóng vòng ghi thời điểm, nguồn và ước lượng thời gian đào/về nếu có;
    ước lượng được phân biệt với số đo và không là điều kiện kết thúc. Không

@@ -93,6 +93,25 @@ def _evidence_matches(entry: Mapping[str, Any], record: Mapping[str, Any],
             or not math.isfinite(baseline_at) or not math.isfinite(before_at)
             or not 0 <= before_at - baseline_at <= GATHER_JOB_MAX_FRAME_AGE_SECONDS):
         return False
+    first_slot = entry["sequence"] == 1
+    if first_slot:
+        baseline_matches = (
+            baseline.get("predicate_id") == "first_march_queue_appeared_at_one"
+            and baseline.get("source") == "job_initial_slot_ordinal"
+            and baseline.get("job_id") == job.job_id
+            and "counter_value" not in baseline
+            and baseline.get("source_frame_id") == entry["before_frame_id"]
+            and baseline_at == before_at
+            and type(before.get("march_queue_used")) is not int
+        )
+    else:
+        baseline_matches = (
+            baseline.get("predicate_id") == "march_queue_used_increased"
+            and baseline.get("counter_value") == entry["before_count"]
+            and baseline.get("source") in {
+                "visible_ocr_queue_anchor", "visible_ocr_march_queue_region"
+            }
+        )
     return (
         (identity.get("mission_id"), identity.get("task_id"), identity.get("run_id"),
          identity.get("character_id"))
@@ -115,7 +134,7 @@ def _evidence_matches(entry: Mapping[str, Any], record: Mapping[str, Any],
         and before_client == entry["client_binding"]
         and after_client == entry["client_binding"]
         and baseline.get("source_frame_id") == entry["baseline_frame_id"]
-        and baseline.get("counter_value") == entry["before_count"]
+        and baseline_matches
         and baseline.get("capacity") == 5
         and baseline.get("source") == entry["before_source"]
         and baseline.get("character_id") == job.character_id

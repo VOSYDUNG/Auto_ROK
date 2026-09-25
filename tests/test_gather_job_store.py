@@ -19,9 +19,9 @@ def verified_entry(number):
     return {
         "sequence": number, "job_id": "job-1", "run_id": f"run-{number}",
         "before_frame_id": before, "after_frame_id": after,
-        "baseline_frame_id": f"queue-{number - 1}",
+        "baseline_frame_id": before if number == 1 else f"queue-{number - 1}",
         "before_count": number - 1, "after_count": number, "capacity": 5,
-        "before_source": "visible_ocr_queue_anchor",
+        "before_source": "job_initial_slot_ordinal" if number == 1 else "visible_ocr_queue_anchor",
         "after_source": "visible_ocr_march_queue_region",
         "character_id": "character-1", "client_binding": {
             "hwnd": WINDOW["hwnd"], "pid": WINDOW["pid"],

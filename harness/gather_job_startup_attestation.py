@@ -20,7 +20,6 @@ import numpy as np
 from harness.gather_job_authority import compiled_gather_catalog
 from harness.gather_job_store import GatherClientBinding, JsonGatherJobStore, load_gather_job_authority
 from harness.mission_loader import compile_mission
-from harness.queue_indicator import QueueIndicatorProfile, QueueIndicatorReader, QueueReadStatus
 
 
 class StartupAttestationError(ValueError):
@@ -82,7 +81,7 @@ def _rect(snapshot: dict[str, Any], key: str) -> tuple[int, int, int, int]:
 
 def build_startup_attestation(
     *, job_artifact: Path, manifest_path: Path, frame_path: Path,
-    profile_path: Path, ledger_root: Path, workspace_root: Path,
+    ledger_root: Path, workspace_root: Path,
     mission_flows: Path, ui_states: Path, resource_type: str,
     resource_level: int | None, affirmative_character_id: str,
     now: datetime | None = None, max_age_seconds: float = 30.0,
@@ -161,18 +160,18 @@ def build_startup_attestation(
     if (not job.starts_at <= captured_at < job.expires_at
             or not 0 <= (instant - captured_at).total_seconds() <= max_age_seconds):
         raise StartupAttestationError("capture is stale, future, or outside job window")
-    profile_bytes = profile_path.read_bytes()
-    profile = QueueIndicatorProfile.from_mapping(_json(profile_path))
-    size = list(profile.client_size)
+    size = [frame.get("width"), frame.get("height")]
+    if (any(type(part) is not int or part <= 0 for part in size)
+            or frame.get("client_bounds") != [0, 0, *size]):
+        raise StartupAttestationError("capture frame dimensions are invalid")
     if ([frame.get("width"), frame.get("height")] != size
-            or frame.get("client_bounds") != [0, 0, *size]
             or before.get("client_size") != size or after.get("client_size") != size):
-        raise StartupAttestationError("capture client dimensions differ from profile")
+        raise StartupAttestationError("capture client dimensions are inconsistent")
     window = _rect(before, "window_rect")
     client = _rect(before, "client_screen_rect")
     if (_rect(after, "window_rect") != window
             or _rect(after, "client_screen_rect") != client
-            or (client[2] - client[0], client[3] - client[1]) != profile.client_size
+            or [client[2] - client[0], client[3] - client[1]] != size
             or client[0] < window[0] or client[1] < window[1]
             or client[2] > window[2] or client[3] > window[3]):
         raise StartupAttestationError("capture window/client geometry changed or is inconsistent")
@@ -204,14 +203,11 @@ def build_startup_attestation(
     if not frame_bytes.startswith(b"\x89PNG\r\n\x1a\n") or _sha(frame_bytes) != frame_sha.lower():
         raise StartupAttestationError("capture PNG hash differs from manifest")
     image = cv2.imdecode(np.frombuffer(frame_bytes, dtype=np.uint8), cv2.IMREAD_GRAYSCALE)
-    if image is None:
-        raise StartupAttestationError("capture PNG cannot be decoded")
-    reading = QueueIndicatorReader(profile).read(image)
-    if reading.status is not QueueReadStatus.READ or (reading.used, reading.capacity) != (0, 5):
-        raise StartupAttestationError(f"startup march queue is not sourced 0/5: {reading.status.value}")
+    if image is None or image.shape != (size[1], size[0]):
+        raise StartupAttestationError("capture PNG cannot be decoded at client dimensions")
     # The operator assertion is deliberately distinct from observed UI facts.
     return {
-        "schema_version": 1, "status": "startup_attested_offline",
+        "schema_version": 2, "status": "startup_attested_offline",
         "authority": "operator_assertion_only_no_input_authority",
         "job_id": job.job_id, "task_id": job.task_id,
         "character_id": job.character_id, "catalog_digest": job.catalog_digest,
@@ -229,10 +225,9 @@ def build_startup_attestation(
             "client_binding": binding.to_json(),
         },
         "queue": {
-            "used": 0, "capacity": 5, "source": "QueueIndicatorReader/native_frame_roi",
-            "profile_path": str(profile_path.resolve()),
-            "profile_sha256": _sha(profile_bytes),
-            "roi": list(profile.roi),
+            "status": "unmeasured_before_first_march",
+            "observed": False,
+            "source": "native_first_frame_no_queue_assertion",
         },
     }
 
@@ -260,24 +255,29 @@ def write_startup_attestation(path: Path, workspace_root: Path, record: dict[str
 
 def validate_startup_attestation(
     path: Path, *, job_artifact: Path, manifest_path: Path, frame_path: Path,
-    profile_path: Path, ledger_root: Path, workspace_root: Path,
+    ledger_root: Path, workspace_root: Path,
     mission_flows: Path, ui_states: Path, resource_type: str,
     resource_level: int | None, now: datetime | None = None,
     max_age_seconds: float = 30.0,
 ) -> dict[str, Any]:
     """Recheck immutable sources and current revocation before a future consumer."""
     actual = _json(_within(path, workspace_root))
-    if not isinstance(actual, dict) or actual.get("schema_version") != 1:
-        raise StartupAttestationError("attestation schema is invalid")
+    if not isinstance(actual, dict) or actual.get("schema_version") != 2:
+        raise StartupAttestationError("attestation schema is invalid; v1 records are rejected")
     if _within(path, workspace_root) != canonical_startup_attestation_path(actual.get("job_id"), workspace_root):
         raise StartupAttestationError("attestation is outside its canonical job path")
     assertion = actual.get("operator_assertion")
     if not isinstance(assertion, dict) or assertion.get("meaning") != "operator_affirms_currently_open_character":
         raise StartupAttestationError("operator assertion is missing")
+    queue = actual.get("queue")
+    if (not isinstance(queue, dict)
+            or queue.get("status") != "unmeasured_before_first_march"
+            or queue.get("observed") is not False):
+        raise StartupAttestationError("startup queue must remain explicitly unmeasured")
     affirmed_at = _instant(assertion.get("affirmed_at"))
     expected = build_startup_attestation(
         job_artifact=job_artifact, manifest_path=manifest_path, frame_path=frame_path,
-        profile_path=profile_path, ledger_root=ledger_root, workspace_root=workspace_root,
+        ledger_root=ledger_root, workspace_root=workspace_root,
         mission_flows=mission_flows, ui_states=ui_states, resource_type=resource_type,
         resource_level=resource_level, affirmative_character_id=assertion.get("character_id"),
         now=affirmed_at, max_age_seconds=max_age_seconds, require_unused_job=False,
@@ -303,13 +303,13 @@ def validate_startup_attestation(
 def validate_canonical_startup_attestation(
     job_artifact: Path, job_id: str, *, resource_type: str,
     resource_level: int | None, workspace_root: Path, ledger_root: Path,
-    mission_flows: Path, ui_states: Path, profile_path: Path,
+    mission_flows: Path, ui_states: Path,
     expected_sha256: str | None = None, now: datetime | None = None,
 ) -> str:
     """Consume the one canonical assertion and return its pinned file digest.
 
-    Capture paths come from the immutable record, but the queue profile is
-    supplied by the caller's fixed repository configuration, never the record.
+    Capture paths come from the immutable record. Startup queue state is
+    deliberately unmeasured until a fresh post-march observation.
     """
     path = canonical_startup_attestation_path(job_id, workspace_root)
     try:
@@ -330,7 +330,7 @@ def validate_canonical_startup_attestation(
         raise StartupAttestationError("startup attestation capture paths are invalid")
     validate_startup_attestation(
         path, job_artifact=job_artifact, manifest_path=Path(manifest),
-        frame_path=Path(frame), profile_path=profile_path,
+        frame_path=Path(frame),
         ledger_root=ledger_root, workspace_root=workspace_root,
         mission_flows=mission_flows, ui_states=ui_states,
         resource_type=resource_type, resource_level=resource_level, now=now,

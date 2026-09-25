@@ -325,7 +325,6 @@ def main(argv: list[str] | None = None) -> int:
                 workspace_root=workspace_root, ledger_root=GATHER_JOB_STORE_ROOT,
                 mission_flows=ROOT / "config" / "mission_flows.yaml",
                 ui_states=ROOT / "config" / "ui_states.yaml",
-                profile_path=ROOT / "config" / "queue_indicator_profile.json",
                 expected_sha256=args.startup_attestation_sha256,
             )
             gather_job_store = JsonGatherJobStore(GATHER_JOB_STORE_ROOT)
