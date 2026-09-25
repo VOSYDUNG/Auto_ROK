@@ -176,6 +176,7 @@ def attempt_chain(tmp_path, *, orphan_second=False):
             "schema_version": 1, "kind": "attempt_start", "job_id": job.job_id,
             "task_id": job.task_id, "character_id": job.character_id,
             "catalog_digest": job.catalog_digest, "attempt_sequence": sequence,
+            "startup_attestation_sha256": "a" * 64,
             "initial_verified": initial, "started_at": (instant + timedelta(seconds=second)).isoformat(),
             "previous_start_sha256": digest(previous_start) if previous_start else None,
             "previous_result_sha256": digest(previous_result) if previous_result else None,
@@ -231,6 +232,7 @@ def partial_chain_for_preflight(tmp_path):
         "schema_version": 1, "kind": "attempt_start", "job_id": job.job_id,
         "task_id": job.task_id, "character_id": job.character_id,
         "catalog_digest": job.catalog_digest, "attempt_sequence": 1,
+        "startup_attestation_sha256": "a" * 64,
         "initial_verified": 0, "started_at": instant.isoformat(),
         "previous_start_sha256": None, "previous_result_sha256": None,
     })
@@ -245,6 +247,7 @@ def partial_chain_for_preflight(tmp_path):
         "schema_version": 1, "kind": "attempt_start", "job_id": job.job_id,
         "task_id": job.task_id, "character_id": job.character_id,
         "catalog_digest": job.catalog_digest, "attempt_sequence": 2,
+        "startup_attestation_sha256": "a" * 64,
         "initial_verified": 2,
         "started_at": (instant + timedelta(seconds=2)).isoformat(),
         "previous_start_sha256": hashlib.sha256(first_start.read_bytes()).hexdigest(),
@@ -266,7 +269,8 @@ def test_ordered_attempt_chain_and_exact_durable_bridge_pass_offline(tmp_path, o
 
 
 @pytest.mark.parametrize("damage", [
-    "missing", "duplicate", "reordered", "foreign", "edited", "stale", "failed",
+    "missing", "duplicate", "reordered", "foreign", "edited", "stale",
+    "attestation", "failed",
 ])
 def test_attempt_chain_damage_blocks_closeout(tmp_path, damage):
     job, ledger, checkpoints, terminal, evidence_root, root, _ = attempt_chain(tmp_path)
@@ -290,6 +294,10 @@ def test_attempt_chain_damage_blocks_closeout(tmp_path, damage):
     elif damage == "stale":
         value = json.loads(second_start.read_text(encoding="utf-8"))
         value["started_at"] = (job.starts_at - timedelta(seconds=1)).isoformat()
+        second_start.write_text(json.dumps(value), encoding="utf-8")
+    elif damage == "attestation":
+        value = json.loads(second_start.read_text(encoding="utf-8"))
+        value["startup_attestation_sha256"] = "b" * 64
         second_start.write_text(json.dumps(value), encoding="utf-8")
     else:
         value = json.loads(first.read_text(encoding="utf-8"))

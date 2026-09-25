@@ -233,6 +233,7 @@ def _attempt_chain_history(
     verified = 0
     previous_start_hash: str | None = None
     previous_result_hash: str | None = None
+    pinned_attestation_hash: str | None = None
     previous_time: datetime | None = None
     prior_orphan_bridged_to_five = False
     for sequence in range(1, len(starts) + 1):
@@ -247,7 +248,7 @@ def _attempt_chain_history(
                 or frozenset(start) != {"schema_version", "kind", "job_id", "task_id",
                                             "character_id", "catalog_digest", "attempt_sequence",
                                             "initial_verified", "started_at", "previous_start_sha256",
-                                            "previous_result_sha256"}
+                                            "previous_result_sha256", "startup_attestation_sha256"}
                 or start.get("schema_version") != 1 or start.get("kind") != "attempt_start"
                 or (start.get("job_id"), start.get("task_id"), start.get("character_id"),
                     start.get("catalog_digest")) != (job.job_id, job.task_id,
@@ -257,11 +258,16 @@ def _attempt_chain_history(
                 or start.get("initial_verified") != verified
                 or start.get("previous_start_sha256") != previous_start_hash
                 or start.get("previous_result_sha256") != previous_result_hash
+                or not isinstance(start.get("startup_attestation_sha256"), str)
+                or re.fullmatch(r"[0-9a-f]{64}", start["startup_attestation_sha256"]) is None
+                or (pinned_attestation_hash is not None
+                    and start["startup_attestation_sha256"] != pinned_attestation_hash)
                 or started is None or not job.starts_at <= started < job.expires_at
                 or (previous_time is not None and started <= previous_time)):
             errors.append(f"attempt {sequence} start scope, order or hash differs")
             break
         start_hash = hashlib.sha256(start_path.read_bytes()).hexdigest()
+        pinned_attestation_hash = start["startup_attestation_sha256"]
         result_path = results.get(sequence)
         if result_path is None:
             if sequence == len(starts):

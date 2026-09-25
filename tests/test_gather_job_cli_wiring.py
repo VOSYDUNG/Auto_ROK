@@ -34,6 +34,8 @@ BASE_ARGS = [
 def test_canonical_cli_constructs_job_overlay_and_pre_input_guard_without_game(
     monkeypatch, capsys, fake_status,
 ):
+    monkeypatch.setattr(run_gather_tick, "validate_canonical_startup_attestation",
+                        lambda *a, **k: "a" * 64)
     compiled = compile_mission(
         ROOT / "config" / "mission_flows.yaml", ROOT / "config" / "ui_states.yaml",
         "GATHER_RESOURCE", {"resource_type": "FOOD", "resource_level": 5},
@@ -93,6 +95,7 @@ def test_canonical_cli_constructs_job_overlay_and_pre_input_guard_without_game(
     assert seen["catalog"] == catalog
     payload = json.loads(capsys.readouterr().out)
     assert payload["gather_job_id"] == "job-1"
+    assert payload["startup_attestation_sha256"] == "a" * 64
     assert payload["policy_approved"] is False
     assert payload["gather_job_verified_marches"] == 0
     assert bool(payload["gather_job_verification_error"]) is (
@@ -107,8 +110,33 @@ def test_job_mode_live_arm_is_blocked_before_any_capture(capsys):
     assert "GATHER_JOB_LIVE_ARM_BLOCKED_PENDING_BASELINE_IDENTITY_AND_FIVE_MARCH_PREFLIGHT" in error["error"]["message"]
 
 
+def test_direct_job_tick_requires_canonical_attestation_before_runner(monkeypatch, capsys):
+    compiled = compile_mission(
+        ROOT / "config" / "mission_flows.yaml", ROOT / "config" / "ui_states.yaml",
+        "GATHER_RESOURCE", {"resource_type": "FOOD", "resource_level": 5},
+    )
+    catalog = compiled_gather_catalog(compiled)
+    now = datetime.now(timezone.utc)
+    monkeypatch.setattr(run_gather_tick, "MissionRunner",
+                        lambda *a, **k: pytest.fail("runner must not start"))
+    with TemporaryDirectory(dir=ROOT / "workspace") as folder:
+        artifact = Path(folder) / "job.json"
+        artifact.write_text(json.dumps({
+            "schema_version": 1, "job_id": "direct-missing-record", "task_id": "task-1",
+            "character_id": "character-1", "catalog_digest": catalog.digest,
+            "starts_at": (now - timedelta(minutes=1)).isoformat(),
+            "expires_at": (now + timedelta(minutes=20)).isoformat(),
+            "allowed_actions": sorted(catalog.actions), "max_marches": 5,
+            "mission_id": "GATHER_RESOURCE",
+        }), encoding="utf-8")
+        assert run_gather_tick.main(BASE_ARGS[2:] + ["--gather-job", str(artifact)]) == 2
+    assert "canonical startup attestation is missing" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize("failure", ["plan", "closeout_write"])
 def test_cli_never_reports_closeout_when_validation_or_write_fails(monkeypatch, capsys, failure):
+    monkeypatch.setattr(run_gather_tick, "validate_canonical_startup_attestation",
+                        lambda *a, **k: "a" * 64)
     compiled = compile_mission(
         ROOT / "config" / "mission_flows.yaml", ROOT / "config" / "ui_states.yaml",
         "GATHER_RESOURCE", {"resource_type": "FOOD", "resource_level": 5},
@@ -185,6 +213,8 @@ def test_canonical_runner_consumes_job_guard_with_synthetic_frames_only(
     monkeypatch, capsys, journal_failure,
 ):
     """No capture, Win32 input, endpoint, or live game is used by this fixture."""
+    monkeypatch.setattr(run_gather_tick, "validate_canonical_startup_attestation",
+                        lambda *a, **k: "a" * 64)
     compiled = compile_mission(
         ROOT / "config" / "mission_flows.yaml", ROOT / "config" / "ui_states.yaml",
         "GATHER_RESOURCE", {"resource_type": "FOOD", "resource_level": 5},

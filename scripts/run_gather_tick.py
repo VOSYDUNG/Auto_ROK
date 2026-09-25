@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT))
 from harness.action_surface import TRAINED_NATIVE_SHORTCUTS  # noqa: E402
 from harness.gather_facts import GatherFactObservationProvider  # noqa: E402
 from harness.gather_job_authority import compiled_gather_catalog  # noqa: E402
+from harness.gather_job_startup_attestation import validate_canonical_startup_attestation  # noqa: E402
 from harness.gather_job_store import JsonGatherJobStore, load_gather_job_authority  # noqa: E402
 from harness.gather_client_binding import GatherClientBindingObservationProvider  # noqa: E402
 from harness.gather_job_coordinator import GatherJobCoordinator, persist_gather_job_closeout  # noqa: E402
@@ -232,6 +233,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--gather-job",
         help="operator-created startup GATHER job JSON under workspace; separate from legacy B003 approval",
     )
+    parser.add_argument(
+        "--startup-attestation-sha256",
+        help="driver-pinned digest of the canonical startup attestation for this job",
+    )
     parser.add_argument("--arm-live", action="store_true")
     parser.add_argument(
         "--r3-repetition",
@@ -274,6 +279,8 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("GATHER_JOB_CANNOT_MIX_LEGACY_B003_OR_R3")
         if args.gather_job and args.arm_live:
             raise ValueError("GATHER_JOB_LIVE_ARM_BLOCKED_PENDING_BASELINE_IDENTITY_AND_FIVE_MARCH_PREFLIGHT")
+        if args.startup_attestation_sha256 and not args.gather_job:
+            raise ValueError("startup attestation digest requires --gather-job")
         if args.r3_repetition and not args.arm_live:
             raise ValueError("R3_REPETITION_REQUIRES_LIVE_ARM")
         if args.r3_repetition and not args.r3_reservation_ledger:
@@ -312,6 +319,15 @@ def main(argv: list[str] | None = None) -> int:
             )
             if gather_job.task_id != context.task_id or gather_job.character_id != args.character_id:
                 raise ValueError("GATHER job task or character does not match this tick")
+            startup_attestation_sha256 = validate_canonical_startup_attestation(
+                job_path, gather_job.job_id,
+                resource_type=args.resource_type, resource_level=args.resource_level,
+                workspace_root=workspace_root, ledger_root=GATHER_JOB_STORE_ROOT,
+                mission_flows=ROOT / "config" / "mission_flows.yaml",
+                ui_states=ROOT / "config" / "ui_states.yaml",
+                profile_path=ROOT / "config" / "queue_indicator_profile.json",
+                expected_sha256=args.startup_attestation_sha256,
+            )
             gather_job_store = JsonGatherJobStore(GATHER_JOB_STORE_ROOT)
             job_coordinator = GatherJobCoordinator(gather_job, gather_job_store, checkpoint_store)
             job_plan = job_coordinator.plan()
@@ -321,6 +337,7 @@ def main(argv: list[str] | None = None) -> int:
                 closeout_path = persist_gather_job_closeout(gather_job, job_plan, args.evidence_root)
                 print(json.dumps({
                     "status": "complete", "gather_job_id": gather_job.job_id,
+                    "startup_attestation_sha256": startup_attestation_sha256,
                     "gather_job_verified_marches": job_plan.progress.verified_marches,
                     "gather_job_closed_at_five": True,
                     "gather_job_closeout": job_plan.closeout,
@@ -475,6 +492,7 @@ def main(argv: list[str] | None = None) -> int:
         if gather_job is not None:
             evidence_record["runtime"]["gather_job"] = {
                 "job_id": gather_job.job_id,
+                "startup_attestation_sha256": startup_attestation_sha256,
                 "catalog_digest": gather_job.catalog_digest,
                 "reserved_marches": gather_job_store.progress(gather_job).dispatched_marches,
                 "verified_marches": job_progress.verified_marches,
@@ -512,6 +530,7 @@ def main(argv: list[str] | None = None) -> int:
             "gather_job_id": gather_job.job_id if gather_job is not None else None,
         }
         if gather_job is not None:
+            payload["startup_attestation_sha256"] = startup_attestation_sha256
             payload["gather_job_verified_marches"] = job_progress.verified_marches
             payload["gather_job_closed_at_five"] = job_closed_at_five
             payload["gather_job_journaled_this_tick"] = journaled_this_tick

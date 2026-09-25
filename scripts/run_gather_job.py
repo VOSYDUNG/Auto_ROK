@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT))
 
 from harness.gather_job_authority import GatherJobAuthority, compiled_gather_catalog  # noqa: E402
 from harness.gather_job_coordinator import GatherJobCoordinator  # noqa: E402
+from harness.gather_job_startup_attestation import validate_canonical_startup_attestation  # noqa: E402
 from harness.gather_job_store import (  # noqa: E402
     GatherJobStoreError, JsonGatherJobStore, load_gather_job_authority,
 )
@@ -155,13 +156,14 @@ def drive_job(
     return outcome("suspended", "GATHER job tick ceiling reached")
 
 
-def _tick_command(args: argparse.Namespace) -> list[str]:
+def _tick_command(args: argparse.Namespace, startup_attestation_sha256: str) -> list[str]:
     command = [
         sys.executable, str(ROOT / "scripts" / "run_gather_tick.py"),
         "--gather-job", str(args.gather_job),
         "--task-id", args.task_id,
         "--character-id", args.character_id,
         "--resource-type", args.resource_type,
+        "--startup-attestation-sha256", startup_attestation_sha256,
     ]
     if args.resource_level is not None:
         command.extend(("--resource-level", str(args.resource_level)))
@@ -294,7 +296,9 @@ def _write_report(root: Path, result: Mapping[str, Any]) -> Path:
     return destination
 
 
-def _write_attempt_start(root: Path, job: GatherJobAuthority) -> tuple[Path, dict[str, Any]]:
+def _write_attempt_start(
+    root: Path, job: GatherJobAuthority, startup_attestation_sha256: str,
+) -> tuple[Path, dict[str, Any]]:
     workspace = (ROOT / "workspace").resolve()
     if not root.resolve().is_relative_to(workspace):
         raise ValueError("driver report root must be under workspace")
@@ -309,10 +313,16 @@ def _write_attempt_start(root: Path, job: GatherJobAuthority) -> tuple[Path, dic
         raise ValueError("GATHER attempt-start chain is not contiguous")
     previous_start = starts[-1] if starts else None
     previous_result = directory / f"attempt-{sequence - 1:06d}.result.json" if starts else None
+    if previous_start is not None:
+        predecessor = json.loads(previous_start.read_text(encoding="utf-8"),
+                                 object_pairs_hook=_launch_pairs)
+        if predecessor.get("startup_attestation_sha256") != startup_attestation_sha256:
+            raise ValueError("GATHER startup attestation differs across attempts")
     record: dict[str, Any] = {
         "schema_version": 1, "kind": "attempt_start", "job_id": job.job_id,
         "task_id": job.task_id, "character_id": job.character_id,
         "catalog_digest": job.catalog_digest, "attempt_sequence": sequence,
+        "startup_attestation_sha256": startup_attestation_sha256,
         "initial_verified": JsonGatherJobStore(GATHER_JOB_STORE_ROOT).progress(job).verified_marches,
         "started_at": datetime.now(timezone.utc).isoformat(),
         "previous_start_sha256": (hashlib.sha256(previous_start.read_bytes()).hexdigest()
@@ -387,24 +397,55 @@ def main(argv: list[str] | None = None) -> int:
         if args.arm_live:
             raise ValueError("GATHER job live arm is blocked pending job-scoped preflight")
         args, job = _validated_launch(args)
+        startup_attestation_sha256 = validate_canonical_startup_attestation(
+            args.gather_job, job.job_id,
+            resource_type=args.resource_type, resource_level=args.resource_level,
+            workspace_root=ROOT / "workspace", ledger_root=GATHER_JOB_STORE_ROOT,
+            mission_flows=ROOT / "config" / "mission_flows.yaml",
+            ui_states=ROOT / "config" / "ui_states.yaml",
+            profile_path=ROOT / "config" / "queue_indicator_profile.json",
+        )
         prior_terminal = _unverdict_terminal_result(args.report_root, job)
         if prior_terminal is not None:
             report, result = prior_terminal
+            sequence = result.get("attempt_sequence")
+            if type(sequence) is not int or sequence < 1:
+                raise ValueError("terminal result has no valid attempt sequence")
+            start_path = report.with_name(f"attempt-{sequence:06d}.start.json")
+            start = json.loads(start_path.read_text(encoding="utf-8"),
+                               object_pairs_hook=_launch_pairs)
+            if start.get("startup_attestation_sha256") != startup_attestation_sha256:
+                raise ValueError("terminal attestation differs from pinned attempt")
             audit_status, verdict_path = _audit_closeout(job, result, report)
             print(json.dumps({**result, "report_path": str(report),
                               "audit_status": audit_status, "verdict_path": str(verdict_path)},
                              ensure_ascii=False))
             return 0 if audit_status == "OFFLINE_REPLAY_PASS" else 4
-        start_path, start = _write_attempt_start(args.report_root, job)
+        start_path, start = _write_attempt_start(
+            args.report_root, job, startup_attestation_sha256,
+        )
         from scripts.audit_first_done_job import preflight_attempt_chain
         preflight_attempt_chain(
             job, JsonGatherJobStore(GATHER_JOB_STORE_ROOT),
             JsonMissionStore(GATHER_CHECKPOINT_ROOT), start_path.parent,
             GATHER_EVIDENCE_ROOT,
         )
-        command = _tick_command(args)
+        command = _tick_command(args, startup_attestation_sha256)
+
+        def attested_tick() -> tuple[int, Mapping[str, Any]]:
+            validate_canonical_startup_attestation(
+                args.gather_job, job.job_id,
+                resource_type=args.resource_type, resource_level=args.resource_level,
+                workspace_root=ROOT / "workspace", ledger_root=GATHER_JOB_STORE_ROOT,
+                mission_flows=ROOT / "config" / "mission_flows.yaml",
+                ui_states=ROOT / "config" / "ui_states.yaml",
+                profile_path=ROOT / "config" / "queue_indicator_profile.json",
+                expected_sha256=startup_attestation_sha256,
+            )
+            return _subprocess_tick(command)
+
         result = drive_job(
-            lambda: _subprocess_tick(command), job_id=job.job_id,
+            attested_tick, job_id=job.job_id,
             max_ticks=args.max_ticks, max_idle_ticks=args.max_idle_ticks,
             idle_delay_seconds=args.idle_delay_seconds,
             settle_seconds=args.settle_seconds,

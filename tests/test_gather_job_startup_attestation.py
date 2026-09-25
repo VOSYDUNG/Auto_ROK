@@ -13,7 +13,8 @@ import pytest
 from harness.gather_job_startup_attestation import (
     StartupAttestationError, build_startup_attestation,
     canonical_startup_attestation_path,
-    validate_startup_attestation, write_startup_attestation,
+    validate_canonical_startup_attestation, validate_startup_attestation,
+    write_startup_attestation,
 )
 from scripts.create_gather_job import build_artifact
 
@@ -256,3 +257,112 @@ def test_untrained_profile_copy_cannot_attest_synthetic_zero(tmp_path: Path) -> 
             output, kwargs["workspace_root"], build_startup_attestation(**kwargs),
         )
     assert not output.exists()
+
+
+def _write_fixture_attestation(kwargs: dict, output: Path) -> bytes:
+    record = build_startup_attestation(**kwargs)
+    write_startup_attestation(output, kwargs["workspace_root"], record)
+    return output.read_bytes()
+
+
+def _consumer_validation_kwargs(kwargs: dict) -> dict:
+    return {
+        key: kwargs[key]
+        for key in (
+            "resource_type", "resource_level", "workspace_root", "ledger_root",
+            "mission_flows", "ui_states", "profile_path",
+        )
+    }
+
+
+def test_canonical_consumer_rejects_missing_record(tmp_path: Path) -> None:
+    kwargs, output = _fixture(tmp_path)
+    with pytest.raises(StartupAttestationError, match="missing"):
+        validate_canonical_startup_attestation(
+            kwargs["job_artifact"], "job-synthetic",
+            **_consumer_validation_kwargs(kwargs), now=NOW,
+        )
+    assert output == canonical_startup_attestation_path("job-synthetic", kwargs["workspace_root"])
+
+
+def test_canonical_consumer_rejects_fixed_profile_mismatch(tmp_path: Path) -> None:
+    kwargs, output = _fixture(tmp_path)
+    _write_fixture_attestation(kwargs, output)
+    _mutate_json(kwargs["profile_path"], lambda value: value["roi"].update(x=value["roi"]["x"] + 1))
+    with pytest.raises(StartupAttestationError):
+        validate_canonical_startup_attestation(
+            kwargs["job_artifact"], "job-synthetic",
+            **_consumer_validation_kwargs(kwargs), now=NOW,
+        )
+
+
+@pytest.mark.parametrize("alter", ["source", "record"])
+def test_canonical_consumer_rejects_altered_source_or_record(tmp_path: Path, alter: str) -> None:
+    kwargs, output = _fixture(tmp_path)
+    original = _write_fixture_attestation(kwargs, output)
+    if alter == "source":
+        kwargs["job_artifact"].write_bytes(kwargs["job_artifact"].read_bytes() + b" ")
+    else:
+        _mutate_json(output, lambda value: value["capture"].update(frame_id="altered"))
+    with pytest.raises(StartupAttestationError):
+        validate_canonical_startup_attestation(
+            kwargs["job_artifact"], "job-synthetic",
+            **_consumer_validation_kwargs(kwargs), now=NOW,
+        )
+    assert output.read_bytes() != original or alter == "source"
+
+
+def test_canonical_consumer_pins_expected_record_hash(tmp_path: Path) -> None:
+    kwargs, output = _fixture(tmp_path)
+    raw = _write_fixture_attestation(kwargs, output)
+    common = _consumer_validation_kwargs(kwargs)
+    assert validate_canonical_startup_attestation(
+        kwargs["job_artifact"], "job-synthetic", **common,
+        expected_sha256=hashlib.sha256(raw).hexdigest(), now=NOW,
+    ) == hashlib.sha256(raw).hexdigest()
+    with pytest.raises(StartupAttestationError, match="digest|hash"):
+        validate_canonical_startup_attestation(
+            kwargs["job_artifact"], "job-synthetic", **common,
+            expected_sha256="0" * 64, now=NOW,
+        )
+
+
+def test_canonical_consumer_rejects_expired_or_revoked_job(tmp_path: Path) -> None:
+    kwargs, output = _fixture(tmp_path)
+    _write_fixture_attestation(kwargs, output)
+    common = _consumer_validation_kwargs(kwargs)
+    with pytest.raises(StartupAttestationError, match="expired"):
+        validate_canonical_startup_attestation(
+            kwargs["job_artifact"], "job-synthetic", **common,
+            now=NOW + timedelta(minutes=6),
+        )
+    from harness.gather_job_store import JsonGatherJobStore, load_gather_job_authority
+    from harness.gather_job_authority import compiled_gather_catalog
+    from harness.mission_loader import compile_mission
+    catalog = compiled_gather_catalog(compile_mission(
+        kwargs["mission_flows"], kwargs["ui_states"], "GATHER_RESOURCE",
+        {"resource_type": "FOOD", "resource_level": None},
+    ))
+    job = load_gather_job_authority(
+        kwargs["job_artifact"], canonical_actions=catalog.actions,
+        expected_catalog_digest=catalog.digest,
+    )
+    JsonGatherJobStore(kwargs["ledger_root"]).revoke(job)
+    with pytest.raises(StartupAttestationError, match="revoked"):
+        validate_canonical_startup_attestation(
+            kwargs["job_artifact"], "job-synthetic", **common, now=NOW,
+        )
+
+
+def test_canonical_consumer_supports_resume_using_original_assertion_freshness(
+    tmp_path: Path,
+) -> None:
+    kwargs, output = _fixture(tmp_path)
+    raw = _write_fixture_attestation(kwargs, output)
+    digest = hashlib.sha256(raw).hexdigest()
+    resumed_at = NOW + timedelta(minutes=2)
+    assert validate_canonical_startup_attestation(
+        kwargs["job_artifact"], "job-synthetic",
+        **_consumer_validation_kwargs(kwargs), expected_sha256=digest,
+        now=resumed_at,
+    ) == digest

@@ -298,3 +298,43 @@ def validate_startup_attestation(
             or JsonGatherJobStore(ledger_root).progress(job).revoked):
         raise StartupAttestationError("attestation job is expired or revoked")
     return actual
+
+
+def validate_canonical_startup_attestation(
+    job_artifact: Path, job_id: str, *, resource_type: str,
+    resource_level: int | None, workspace_root: Path, ledger_root: Path,
+    mission_flows: Path, ui_states: Path, profile_path: Path,
+    expected_sha256: str | None = None, now: datetime | None = None,
+) -> str:
+    """Consume the one canonical assertion and return its pinned file digest.
+
+    Capture paths come from the immutable record, but the queue profile is
+    supplied by the caller's fixed repository configuration, never the record.
+    """
+    path = canonical_startup_attestation_path(job_id, workspace_root)
+    try:
+        before = _sha(path.read_bytes())
+    except FileNotFoundError as exc:
+        raise StartupAttestationError("canonical startup attestation is missing") from exc
+    if expected_sha256 is not None and before != expected_sha256:
+        raise StartupAttestationError("startup attestation digest changed")
+    record = _json(path)
+    if not isinstance(record, dict) or record.get("job_id") != job_id:
+        raise StartupAttestationError("startup attestation job differs")
+    capture = record.get("capture")
+    if not isinstance(capture, dict):
+        raise StartupAttestationError("startup attestation capture is missing")
+    manifest = capture.get("manifest_path")
+    frame = capture.get("frame_path")
+    if not isinstance(manifest, str) or not isinstance(frame, str):
+        raise StartupAttestationError("startup attestation capture paths are invalid")
+    validate_startup_attestation(
+        path, job_artifact=job_artifact, manifest_path=Path(manifest),
+        frame_path=Path(frame), profile_path=profile_path,
+        ledger_root=ledger_root, workspace_root=workspace_root,
+        mission_flows=mission_flows, ui_states=ui_states,
+        resource_type=resource_type, resource_level=resource_level, now=now,
+    )
+    if _sha(path.read_bytes()) != before:
+        raise StartupAttestationError("startup attestation changed during validation")
+    return before
