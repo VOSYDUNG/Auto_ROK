@@ -144,6 +144,12 @@ host vẫn tự khai zero input ngoài luồng, nên cần nguồn telemetry đ�
 khi dùng nó làm bằng chứng không có can thiệp. Hai công tắc
 `--arm-live` giữ chặn trong các gói offline.
 
+F4-C đã khảo sát API Windows ở mức tài liệu, không lắp hook. Low-level hook
+có thể mất mà không báo, nên chưa có thiết kế đo liên tục chứng minh được
+vắng input; [ROOT review](../workspace/agents/f4c-host-telemetry/root/VALIDATION.md)
+giữ giới hạn đó. Bước F5 là kiểm kê offline từng artifact và cổng của một
+job thật để chuẩn bị một scope live riêng, không giả định F4-C đã tháo chốt.
+
 ## Sau FIRST DONE — farm hằng ngày
 
 Quan sát `Returning → HOME`, nạp lại slot, theo dõi và duy trì buff, rồi đo

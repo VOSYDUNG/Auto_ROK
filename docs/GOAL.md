@@ -70,8 +70,11 @@ số lần gọi model tùy ý làm điều kiện cho một đường determini
 | G6 | Chỉ sau G1–G5, đủ lặp R3 và uỷ quyền tường minh mới xét endurance; G6 thuộc promotion endurance sau FIRST DONE |
 
 `scripts/audit_goal_readiness.py` kiểm G1–G6 từ artifact đã lưu. Audit PASS trên
-bằng chứng cũ không tự cấp quyền cho công việc mới. FIRST DONE cần quyền công
-việc GATHER ban đầu và hậu kiểm 5/5 theo PRD, không đợi G6 endurance; G4 hiện
+bằng chứng cũ không tự cấp quyền cho công việc mới. Riêng giá trị zero input
+trong trace G1 là recorder tự khai và foreground chỉ được lấy trước/sau
+capture; G1 PASS lịch sử chưa chứng minh host không có input ngoài luồng bằng
+telemetry độc lập. FIRST DONE cần quyền công việc GATHER ban đầu và hậu kiểm
+5/5 theo PRD, không đợi G6 endurance; G4 hiện
 tại chỉ chứng minh phê duyệt của occurrence lịch sử. Không thay nó bằng cờ cho
 phép chung.
 

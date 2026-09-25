@@ -77,6 +77,14 @@ NNC PASS; chỉ đạt **WIRED offline**. Một xác nhận quiescence và recov
 artifact được cấp lúc bắt đầu drive, không có prompt mỗi March. Recorder
 tự ghi `unexpected_input_events=0`; đó chưa phải phép đo input độc lập.
 
+[Khảo sát F4-C](../workspace/agents/f4c-host-telemetry/tho_dung/HANDOFF.md)
+đối chiếu API Windows. [ROOT review](../workspace/agents/f4c-host-telemetry/root/VALIDATION.md)
+giữ kết quả `NEEDS_DECISION` cho phép đo độc lập: last-input tick chỉ theo
+session và không nhất thiết tăng đều; foreground event cần message loop;
+low-level hook có thể bị gỡ im lặng. Chưa có adapter hoặc phép chứng minh
+observer còn sống, nên không dùng “không thấy event” để khẳng định “không có
+người chạm”. Không cài hook, không thêm bước duyệt từng March.
+
 Plugin `shin-agentic-work@personal` 0.1.0 và NNC đã được đối chiếu trong
 [plugin check](../workspace/agents/gather-evidence/root/plugin-check.md).
 `.codex/team.json` giữ profile model động; các role TOML được tái sinh từ
@@ -84,18 +92,19 @@ manifest hiện hành bằng NNC, không ấn định tên model.
 
 ## Gói kế tiếp và điểm chưa chứng minh
 
-Gói kế tiếp là **F4-C khảo sát telemetry host, offline** để quyết định nguồn
-đo tối thiểu cho input ngoài luồng và focus đổi rồi quay lại trong lúc job
-tự chạy. `owned_nodes`: hợp đồng bằng chứng `host_input_isolation_evidence`;
-`upstream_dependencies`: trace F4-B, foreground snapshots và Windows guard
-hiện có; `downstream_consumers`: preflight driver/CLI và live gate sau này.
-`acceptance_evidence`: một hồ sơ thiết kế đối chiếu nguồn Windows khả thi,
-thời điểm/độ hạt đo, quyền cần dùng, ca giả lập input/focus bất ngờ phải
-chặn, và quyết định triển khai hay hạ claim; không thêm bước duyệt từng
-March. `known_blockers`: chưa có phép đo độc lập và chưa có occurrence game
-thật. `graph_delta_expected`: chỉ sửa cạnh evidence → preflight nếu khảo sát
-chứng minh nguồn mới; không tạo input channel khác. Đây là gói làm rõ trước
-khi giao implementation.
+Gói kế tiếp là **F5 kiểm kê readiness cho một job game thật, offline**.
+`owned_nodes`: audit chỉ đọc các biên `startup_character_attestation`,
+`host_input_isolation_evidence`, `gather_job_driver` và
+`first_done_job_audit`. `upstream_dependencies`: F4-B wired, F4-C giới hạn
+telemetry, quyền job và chuỗi 1/5→5/5. `downstream_consumers`: quyết định
+scope cho một occurrence live riêng. `acceptance_evidence`: một ma trận
+đường từ job artifact → attestation → trace/tick → năm postcheck → closeout,
+đối chiếu mỗi input/artefact có thật hay còn thiếu, ghi rõ claim không được
+nâng và lệnh read-only kiểm lại; không chạy game. `known_blockers`: chưa có
+startup attestation game thật, chưa có hậu kiểm 1/5 của job mới, chưa có
+telemetry input độc lập và cả hai live-arm vẫn chặn. `graph_delta_expected`:
+không đổi graph trừ khi thấy cạnh thẩm quyền sai; không tạo input channel
+hoặc bước duyệt March mới.
 
 Hai công tắc `--gather-job --arm-live` vẫn chặn. FIRST DONE tổng thể còn
 `UNIMPLEMENTED`: chưa có một occurrence game thật tự chủ đi 1/5→5/5 cùng
