@@ -1,6 +1,6 @@
 # Auto_ROK — điều phối hiện hành
 
-Cập nhật 2026-09-24. Đây là mục điều phối duy nhất. ROOT giao gói theo
+Cập nhật 2026-09-25. Đây là mục điều phối duy nhất. ROOT giao gói theo
 dependency, nhận handoff ngắn từ `workspace/agents/`, kiểm bằng chứng rồi
 sửa tài liệu hiện hành tại chỗ. Git giữ lịch sử; không tạo bản v1/v2/final.
 
@@ -111,6 +111,15 @@ toàn bộ pytest, engineering graph, NNC team validator và `git diff --check`
 artifact xác nhận một lần của operator gắn với frame/client lúc bắt đầu.
 `--gather-job --arm-live` tiếp tục bị chặn. FIRST
 DONE chưa live-proven hay đạt 5/5 tự chủ.
+
+[Q0 trainer](../workspace/agents/q0-training-safety/tho_dung/HANDOFF.md) nay
+chỉ ghi profile sau khi kiểm `capture.json` native, hash PNG và reader đọc
+đúng nhãn operator; ghi bằng thay thế atomic có khóa một writer. [Kiểm chứng
+ROOT](../workspace/agents/q0-training-safety/root/VALIDATION.md) ghi nhận review độc lập đã buộc sửa lệch
+schema manifest; ROOT chạy 41 test queue tập trung và thử đọc một capture
+archive qua hàm kiểm manifest, đều PASS. Mức chứng minh của công cụ là
+`IMPLEMENTED` offline. Profile thật chưa được sửa, chưa có glyph `0` hoặc
+frame march queue 0/5, nên baseline live vẫn thiếu.
 
 ROOT đã thực hiện **một capture thụ động** game đang mở:
 [run artifact](../workspace/runs/first-done-recon-20260923-01/run.json),
