@@ -211,8 +211,8 @@ Bất kỳ điều kiện nào hỏng thì không phát.
 
 ### F07 — Xác minh hậu điều kiện
 Sau hành động, thu khung hình mới và chứng minh hậu điều kiện đã khai báo. Với
-dispatch GATHER khi có slot, `Queue used` tăng đúng 1; FIRST DONE cần năm
-postcondition liên tiếp tới 5/5. Phát hiện quân trở về, nạp lại và dùng buff
+FIRST DONE, đạo đầu cần queue mới xuất hiện ở 1/5, không dựa vào số 0 trước
+March; bốn đạo sau cần `Queue used` tăng đúng 1 tới 5/5. Phát hiện quân trở về, nạp lại và dùng buff
 thuộc mốc sau và có hậu điều kiện riêng gắn quan sát mới. Không đồng nhất
 `DISPATCHED` với `VERIFIED` và không lấy biên nhận input làm bằng chứng.
 

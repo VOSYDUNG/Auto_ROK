@@ -54,10 +54,13 @@ không đòi ảnh 0/5 và không suy OCR trống thành số 0 quan sát. Đạ
 được `VERIFIED` khi frame hậu kiểm mới đọc đúng 1/5; sai/thiếu thì dừng.
 
 Trace cô lập input của đường live cũ gắn với một `run_id`; job FIRST DONE có
-năm `run_id` xác định từ cùng một quyền khởi đầu. Preflight live của job phải
-chứng minh host/client không bị can thiệp trong phạm vi job và được kiểm lại
-trước input, nhưng không biến thành năm lần người vận hành duyệt March. Cho
-đến khi preflight cấp job có nguồn thực và các blocker live được giải quyết,
+năm `run_id` xác định từ cùng một quyền khởi đầu. F4-B đã nối offline trace
+thụ động mới cho từng tick còn mở, ràng đúng `run_id` và client đã attested,
+được driver/CLI kiểm trước runner. Một xác nhận input quiescence ở đầu drive
+không biến thành năm lần người vận hành duyệt March. Recorder hiện tự khai
+`unexpected_input_events=0` và chỉ lấy foreground trước/sau capture, nên
+chưa chứng minh độc lập rằng host không bị can thiệp xuyên suốt. Cho đến khi
+có nguồn thực cho preflight và các blocker live được giải quyết,
 `--gather-job --arm-live` vẫn bị
 chặn.
 

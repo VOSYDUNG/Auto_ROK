@@ -100,8 +100,8 @@ The offline G1–G6 audit correction was accepted after independent review and
 focused tests; all 10 referenced historical artifacts exist and G6 remains
 blocked. G6 is the later endurance track, not the five-march criterion.
 [ROOT](ROOT.md) links current verification. F4-A2 consumes the one-time startup
-attestation in driver and direct tick offline. The next FIRST DONE dependency is
-F4-B job-scoped host trace is now wired offline as described in
+attestation in driver and direct tick offline. F4-B job-scoped host trace is
+now wired offline as described in
 [BUILD_PLAN](BUILD_PLAN.md), alongside F3-B/F4-A2. The remaining gap is a
 fresh startup job and real host/game trace with an independently justified
 input-interference claim before live authorization. These results
