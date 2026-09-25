@@ -132,12 +132,16 @@ không phải lệnh chạy game ngay.
 **Downstream:** một occurrence live riêng được ủy quyền sau này.
 
 **Thứ tự:** F4-A2 đã nối một attestation bất biến vào cả driver và tick trực
-tiếp ở mức `WIRED` offline; F4-B tự thu trace mới cho đúng `run_id` trước từng tick, vẫn dưới một
-ủy quyền ban đầu. Không tìm frame 0/5: hậu kiểm đạo đầu cần frame mới 1/5;
+tiếp ở mức `WIRED` offline. F4-B đã nối recorder thụ động vào driver: trước
+mỗi tick còn mở, driver lấy `run_id` từ coordinator, thu trace riêng rồi kiểm
+tuổi trace, client attested và focus; CLI kiểm lại trước runner. Test tổng hợp
+cho năm trace riêng và các ca sai/thiếu, nên trạng thái vẫn chỉ `WIRED` offline
+theo [runtime-status](../runtime-status.yaml). Một xác nhận quiescence và đường
+recovery được cấp lúc khởi động drive; không có prompt mỗi march. Không tìm frame 0/5: hậu kiểm đạo đầu cần frame mới 1/5;
 không lấy dữ liệu quest panel hoặc fixture tổng hợp làm
 baseline. Recorder
-host hiện tự khai zero input ngoài luồng, nên cần kiểm thêm nguồn telemetry
-trước khi dựa vào nó để chứng minh không có can thiệp. Hai công tắc
+host vẫn tự khai zero input ngoài luồng, nên cần nguồn telemetry độc lập trước
+khi dùng nó làm bằng chứng không có can thiệp. Hai công tắc
 `--arm-live` giữ chặn trong các gói offline.
 
 ## Sau FIRST DONE — farm hằng ngày

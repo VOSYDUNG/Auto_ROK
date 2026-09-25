@@ -1,7 +1,7 @@
 """Bounded caller of the canonical one-tick GATHER job CLI.
 
-This driver adds no perception, action selection or input authority. Live job
-arming remains disabled until the job-scoped preflight is implemented.
+This driver adds no perception, action selection or input authority. Its
+job-scoped passive preflight is wired offline; live job arming remains disabled.
 """
 from __future__ import annotations
 
@@ -22,9 +22,14 @@ sys.path.insert(0, str(ROOT))
 
 from harness.gather_job_authority import GatherJobAuthority, compiled_gather_catalog  # noqa: E402
 from harness.gather_job_coordinator import GatherJobCoordinator  # noqa: E402
-from harness.gather_job_startup_attestation import validate_canonical_startup_attestation  # noqa: E402
+from harness.gather_job_startup_attestation import (  # noqa: E402
+    canonical_startup_attestation_path, validate_canonical_startup_attestation,
+)
 from harness.gather_job_store import (  # noqa: E402
-    GatherJobStoreError, JsonGatherJobStore, load_gather_job_authority,
+    GatherClientBinding, GatherJobStoreError, JsonGatherJobStore, load_gather_job_authority,
+)
+from harness.host_input_isolation import (  # noqa: E402
+    HostInputIsolationEvidenceError, validate_gather_job_host_trace,
 )
 from harness.mission_loader import compile_mission  # noqa: E402
 from harness.mission_store import JsonMissionStore  # noqa: E402
@@ -156,7 +161,12 @@ def drive_job(
     return outcome("suspended", "GATHER job tick ceiling reached")
 
 
-def _tick_command(args: argparse.Namespace, startup_attestation_sha256: str) -> list[str]:
+def _tick_command(
+    args: argparse.Namespace, startup_attestation_sha256: str, *,
+    run_id: str | None = None, host_trace_path: Path | None = None,
+) -> list[str]:
+    if (run_id is None) != (host_trace_path is None):
+        raise ValueError("GATHER run ID and host trace must be supplied together")
     command = [
         sys.executable, str(ROOT / "scripts" / "run_gather_tick.py"),
         "--gather-job", str(args.gather_job),
@@ -167,7 +177,68 @@ def _tick_command(args: argparse.Namespace, startup_attestation_sha256: str) -> 
     ]
     if args.resource_level is not None:
         command.extend(("--resource-level", str(args.resource_level)))
+    if run_id is not None:
+        command.extend(("--run-id", run_id, "--input-isolation-evidence", str(host_trace_path)))
     return command
+
+
+def _attested_client(job: GatherJobAuthority, digest: str) -> GatherClientBinding:
+    path = canonical_startup_attestation_path(job.job_id, ROOT / "workspace")
+    data = path.read_bytes()
+    if hashlib.sha256(data).hexdigest() != digest:
+        raise ValueError("GATHER startup attestation changed before host preflight")
+    record = json.loads(data)
+    capture = record.get("capture") if isinstance(record, dict) else None
+    if not isinstance(capture, dict):
+        raise ValueError("GATHER startup attestation lacks client binding")
+    return GatherClientBinding.from_window(capture.get("client_binding"))
+
+
+def _record_job_host_trace(
+    args: argparse.Namespace, job: GatherJobAuthority, *, run_id: str,
+    client: GatherClientBinding, attempt_sequence: int, tick_index: int,
+) -> Path:
+    """Capture one passive, append-only trace for this planned tick."""
+    if (not args.operator_confirms_quiescent or not args.host_session_id
+            or not args.recovery_evidence):
+        raise ValueError("job host preflight needs one startup quiescence assertion, host session ID and recovery evidence")
+    recovery = args.recovery_evidence.resolve()
+    evidence_root = (ROOT / "workspace" / "evidence").resolve()
+    if not recovery.is_file() or not recovery.is_relative_to(evidence_root):
+        raise ValueError("job recovery evidence must be a file under workspace/evidence")
+    identity = hashlib.sha256(job.job_id.encode("utf-8")).hexdigest()[:20]
+    suffix = f"attempt-{attempt_sequence:06d}/tick-{tick_index:06d}"
+    trace_path = evidence_root / "host" / "gather-jobs" / identity / f"{suffix}.json"
+    capture_path = ROOT / "workspace" / "runs" / "host-gather-jobs" / identity / f"{suffix}.png"
+    capture_meta = capture_path.with_suffix(".capture.json")
+    if any(path.exists() for path in (trace_path, capture_path, capture_meta)):
+        raise ValueError("job host trace path already exists; refusing to replace evidence")
+    from scripts.record_host_input_isolation import record
+    from harness.windows_capture_backend import WindowsCaptureError
+
+    try:
+        payload = record(
+            run_id=run_id, session_id=args.host_session_id,
+            output=trace_path, capture_output=capture_path,
+            operator_confirms_quiescent=True, recovery_evidence=recovery,
+            focus_delay_seconds=0.0,
+        )
+    except (OSError, ValueError, WindowsCaptureError) as exc:
+        raise ValueError(f"job passive host trace recorder failed: {exc}") from exc
+    trace_path.parent.mkdir(parents=True, exist_ok=True)
+    with trace_path.open("x", encoding="utf-8", newline="\n") as handle:
+        json.dump(payload, handle, ensure_ascii=False, sort_keys=True, indent=2)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    try:
+        validate_gather_job_host_trace(
+            trace_path, expected_run_id=run_id, expected_client=client,
+            workspace_root=ROOT / "workspace",
+        )
+    except HostInputIsolationEvidenceError as exc:
+        raise ValueError(f"job host trace preflight failed: {exc}") from exc
+    return trace_path
 
 
 _LAUNCH_FIELDS = frozenset({
@@ -387,6 +458,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--settle-seconds", type=float, default=1.2)
     parser.add_argument("--report-root", type=Path,
                         default=ROOT / "workspace" / "evidence" / "gather" / "job-drives")
+    parser.add_argument("--operator-confirms-quiescent", action="store_true",
+                        help="one assertion for this job drive; no per-tick prompt")
+    parser.add_argument("--host-session-id",
+                        help="Windows operator session identity for passive per-tick traces")
+    parser.add_argument("--recovery-evidence", type=Path,
+                        help="no-input recovery matrix under workspace/evidence")
     parser.add_argument("--arm-live", action="store_true")
     return parser
 
@@ -395,7 +472,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         if args.arm_live:
-            raise ValueError("GATHER job live arm is blocked pending job-scoped preflight")
+            raise ValueError("GATHER job live arm is blocked pending live evidence and separate authorization")
         args, job = _validated_launch(args)
         startup_attestation_sha256 = validate_canonical_startup_attestation(
             args.gather_job, job.job_id,
@@ -429,9 +506,10 @@ def main(argv: list[str] | None = None) -> int:
             JsonMissionStore(GATHER_CHECKPOINT_ROOT), start_path.parent,
             GATHER_EVIDENCE_ROOT,
         )
-        command = _tick_command(args, startup_attestation_sha256)
+        tick_index = 0
 
         def attested_tick() -> tuple[int, Mapping[str, Any]]:
+            nonlocal tick_index
             validate_canonical_startup_attestation(
                 args.gather_job, job.job_id,
                 resource_type=args.resource_type, resource_level=args.resource_level,
@@ -440,6 +518,25 @@ def main(argv: list[str] | None = None) -> int:
                 ui_states=ROOT / "config" / "ui_states.yaml",
                 expected_sha256=startup_attestation_sha256,
             )
+            client = _attested_client(job, startup_attestation_sha256)
+            plan = GatherJobCoordinator(
+                job, JsonGatherJobStore(GATHER_JOB_STORE_ROOT),
+                JsonMissionStore(GATHER_CHECKPOINT_ROOT),
+            ).plan()
+            tick_index += 1
+            if plan.closed:
+                command = _tick_command(args, startup_attestation_sha256)
+            else:
+                if not plan.run_id:
+                    raise ValueError("GATHER job plan lacks current run ID")
+                trace = _record_job_host_trace(
+                    args, job, run_id=plan.run_id, client=client,
+                    attempt_sequence=start["attempt_sequence"], tick_index=tick_index,
+                )
+                command = _tick_command(
+                    args, startup_attestation_sha256,
+                    run_id=plan.run_id, host_trace_path=trace,
+                )
             return _subprocess_tick(command)
 
         result = drive_job(

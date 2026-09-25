@@ -12,7 +12,9 @@ host execution.
 
 - a refreshed capture bound to the exact ROK HWND/PID/frame geometry;
 - ROK foreground verification immediately before the bounded action;
-- zero focus changes and zero unexpected input events in the action window;
+- the same foreground HWND immediately before and after capture; an away-and-back
+  focus change between those snapshots is not measured. `unexpected_input_events=0` is the
+  recorder's self-report, not an independent measurement of host input;
 - explicit operator input quiescence for the short action window;
 - a same-or-higher Windows token integrity level for the harness process before
   live input (otherwise UIPI can silently block `SendInput` into an elevated
@@ -46,6 +48,18 @@ The resulting evidence records the foreground HWND before and after capture,
 the automatic stale-frame rejection result, and the recovery report path.
 Only the human quiescence assertion remains an explicit operator input.
 
+For a startup GATHER job, `run_gather_job.py` derives the current slot's
+`run_id` before each tick and records a separate passive trace with
+`focus_delay_seconds=0`. One `--operator-confirms-quiescent` assertion,
+`--host-session-id` and `--recovery-evidence` are supplied at drive start;
+there is no per-march prompt. The driver and canonical tick both reject a
+missing, stale, wrong-run or foreign-client trace before the runner. The job
+validator compares HWND/PID/process path with the startup attestation, checks
+foreground before/after capture, native capture metadata and PNG hash. A
+completed 5/5 closeout path does not run the action runner or need a sixth
+trace. This is **WIRED offline** from synthetic tests; neither job
+`--arm-live` switch is enabled.
+
 Assess without changing the desktop:
 
 ```text
@@ -55,8 +69,9 @@ python scripts/assess_host_input_isolation.py \
   --output workspace/evidence/host/<run-id>-assessment.json
 ```
 
-`run_gather_tick.py --arm-live` accepts only a ready direct-host trace bound
-to the same `run_id`, and the foreground guard separately rejects
+The historical non-job `run_gather_tick.py --arm-live` path accepts only a
+ready direct-host trace bound to the same `run_id`; GATHER job live arming
+remains blocked. The foreground guard separately rejects
 `INPUT_INTEGRITY_MISMATCH` when the harness token is lower integrity than
 `MASS.exe`. In that case run the harness at the same/elevated integrity as the
 game (or run the game non-elevated); do not bypass the guard or replay the

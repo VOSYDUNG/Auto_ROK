@@ -10,6 +10,7 @@ from harness.action_surface import SemanticActionSurface
 from harness.gather_job_authority import compiled_gather_catalog
 from harness.gather_job_authority import GatherJobProgress
 from harness.gather_job_coordinator import GatherJobPlan, GatherJobTick
+from harness.host_input_isolation import HostInputIsolationEvidenceError
 from harness.gather_job_store import JsonGatherJobStore, load_gather_job_authority
 from harness.gather_client_binding import GatherClientBindingObservationProvider
 from harness.contracts import BoundingBox, Evidence, Observation
@@ -21,6 +22,7 @@ from harness.mission_tool import InterferenceCheck, ObservationBundle
 from harness.scene_graph import SceneGraph, VisualTarget
 from harness.windows_interference_guard import GatherJobInputGuard, WindowsForegroundInterferenceGuard
 from scripts import run_gather_tick
+from scripts.create_gather_job import build_artifact, write_artifact
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +30,40 @@ BASE_ARGS = [
     "--run-id", "run-1", "--task-id", "task-1", "--character-id", "character-1",
     "--resource-type", "FOOD", "--resource-level", "5",
 ]
+
+
+@pytest.mark.parametrize("failure", ["missing", "stale"])
+def test_driver_pinned_job_trace_denies_before_runner(monkeypatch, capsys, failure):
+    monkeypatch.setattr(run_gather_tick, "validate_canonical_startup_attestation",
+                        lambda *_, **__: "a" * 64)
+    monkeypatch.setattr(run_gather_tick, "MissionRunner",
+                        lambda *_, **__: pytest.fail("runner must not be constructed"))
+    with TemporaryDirectory(dir=ROOT / "workspace") as folder:
+        root = Path(folder)
+        now = datetime.now(timezone.utc)
+        scope = build_artifact(
+            job_id=f"trace-preflight-{failure}", task_id="task-1",
+            character_id="character-1", resource_type="FOOD", resource_level=5,
+            starts_at=now - timedelta(minutes=1), expires_at=now + timedelta(minutes=20),
+        )
+        artifact = write_artifact(root / "job.json", ROOT / "workspace", scope)
+        monkeypatch.setattr(run_gather_tick, "GATHER_JOB_STORE_ROOT", root / "ledger")
+        args = [
+            "--gather-job", str(artifact), "--task-id", "task-1",
+            "--character-id", "character-1", "--resource-type", "FOOD",
+            "--resource-level", "5", "--startup-attestation-sha256", "a" * 64,
+            "--checkpoint-root", str(root / "checkpoints"),
+        ]
+        if failure == "stale":
+            monkeypatch.setattr(run_gather_tick, "_attested_job_client",
+                                lambda *_, **__: object())
+            monkeypatch.setattr(run_gather_tick, "validate_gather_job_host_trace",
+                                lambda *_, **__: (_ for _ in ()).throw(
+                                    HostInputIsolationEvidenceError("trace is stale")))
+            args += ["--input-isolation-evidence", str(root / "trace.json")]
+        assert run_gather_tick.main(args) == 2
+        error = capsys.readouterr().err
+        assert ("requires a fresh host trace" if failure == "missing" else "trace is stale") in error
 
 
 @pytest.mark.parametrize("fake_status", [CheckpointStatus.WAITING, CheckpointStatus.COMPLETE])
@@ -107,7 +143,7 @@ def test_job_mode_live_arm_is_blocked_before_any_capture(capsys):
     result = run_gather_tick.main(BASE_ARGS + ["--gather-job", "missing.json", "--arm-live"])
     assert result == 2
     error = json.loads(capsys.readouterr().err)
-    assert "GATHER_JOB_LIVE_ARM_BLOCKED_PENDING_BASELINE_IDENTITY_AND_FIVE_MARCH_PREFLIGHT" in error["error"]["message"]
+    assert "GATHER_JOB_LIVE_ARM_BLOCKED_PENDING_LIVE_EVIDENCE_AND_AUTHORITY" in error["error"]["message"]
 
 
 def test_direct_job_tick_requires_canonical_attestation_before_runner(monkeypatch, capsys):

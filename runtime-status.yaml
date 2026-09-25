@@ -16,10 +16,10 @@
 schema_version: 1
 
 head_basis:
-  sha: 65c661c5c42e64a15d02ddbdc2cc040663f369fc
+  sha: 1e17d618011fffb24de2bf9ad0f675465733da6d
   branch: master
   recorded_at: "2026-09-25"
-  context: first-march bootstrap correction verified offline on a worktree based on this commit; no autonomous live job proof
+  context: F4-B host-trace preflight verified offline on the working tree based on this commit; no autonomous live job proof
 
 objective:
   id: FIRST_DONE_GATHER_FIVE_MARCHES
@@ -157,8 +157,28 @@ capabilities:
       - scripts/run_gather_job.py
       - workspace/agents/f2c-driver-review/kiem_luat/HANDOFF.md
     limitations:
-      - synthetic five-run cross-CLI replay, audited attempt resume and terminal-report recovery pass; no game observation or input
-      - live arm deliberately rejects until job-scoped preflight exists
+      - synthetic five-run cross-CLI replay now carries five distinct current-run host traces; no game observation or input
+      - one drive-start operator quiescence assertion and recovery artifact feed passive per-tick recording; no per-march prompt
+      - live arm remains deliberately blocked after the offline preflight wiring
+
+  job_scoped_host_preflight:
+    status: WIRED
+    live_proof_after_commit: false
+    evidence:
+      - harness/host_input_isolation.py
+      - scripts/record_host_input_isolation.py
+      - scripts/run_gather_job.py
+      - scripts/run_gather_tick.py
+      - tests/test_host_input_isolation.py
+      - tests/test_run_gather_job.py
+      - tests/test_gather_job_cli_wiring.py
+      - workspace/agents/f4b-host-trace/tho_dung/HANDOFF.md
+    limitations:
+      - synthetic traces prove canonical driver and CLI consume exact run/client/freshness preflight before runner; no fresh job trace from game
+      - recorder's unexpected_input_events zero is self-report without independent host event telemetry
+      - foreground is sampled before and after capture, not monitored continuously through the interval
+      - a 10-second trace age check occurs before the tick; the existing input guard separately checks foreground and frame at actuation
+      - both job live-arm switches stay blocked
 
   first_done_job_audit:
     status: WIRED
@@ -275,7 +295,7 @@ later_milestones:
 known_blockers:
   - no provenance-safe fresh 1/5 post-march queue observation for a new job
   - startup attestation is wired offline but no real startup job attestation has been issued
-  - host input-isolation trace is still run-scoped and self-reported, not job-scoped independent telemetry
+  - job-scoped host trace is wired offline but no fresh game trace or independent host input-event telemetry exists
   - no autonomous live job occurrence
   - job live arming remains blocked; this status file grants no input authority
 

@@ -5,12 +5,14 @@ from io import StringIO
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 
 import pytest
 
 from harness.gather_job_coordinator import gather_slot_run_id
 from harness.gather_job_store import load_gather_job_authority
 from harness.gather_job_store import JsonGatherJobStore
+from harness.gather_job_store import GatherClientBinding
 from harness.mission_runner import MissionTickResult
 from harness.mission_runtime import AllowedAction, ToolFeedback, ToolSnapshot
 from harness.mission_store import CheckpointStatus, MissionCheckpoint
@@ -18,6 +20,7 @@ from scripts.create_gather_job import build_artifact, write_artifact, write_laun
 from scripts import run_gather_job as driver
 from scripts import run_gather_tick
 from scripts import audit_first_done_job as auditor
+from scripts import record_host_input_isolation as host_recorder
 from scripts.run_gather_job import build_parser, drive_job, _tick_command
 
 
@@ -167,7 +170,66 @@ def test_live_arm_is_rejected_before_any_tick(monkeypatch, capsys):
         "--character-id", "char", "--resource-type", "FOOD", "--arm-live",
     ])
     assert code == 2
-    assert "job-scoped preflight" in capsys.readouterr().err
+    assert "live evidence and separate authorization" in capsys.readouterr().err
+
+
+def test_job_host_recorder_runs_without_per_tick_prompt_and_validates_before_tick(tmp_path, monkeypatch):
+    monkeypatch.setattr(driver, "ROOT", tmp_path)
+    recovery = tmp_path / "workspace" / "evidence" / "recovery.json"
+    recovery.parent.mkdir(parents=True)
+    recovery.write_text("{}", encoding="utf-8")
+    args = SimpleNamespace(operator_confirms_quiescent=True,
+                           host_session_id="windows-session-1", recovery_evidence=recovery)
+    job = SimpleNamespace(job_id="job-host-1")
+    client = GatherClientBinding.from_window({
+        "hwnd": 1001, "pid": 2001, "process_path": r"C:\Game\MASS.exe",
+    })
+    calls = []
+
+    def passive_record(**kwargs):
+        calls.append(kwargs)
+        return {"run_id": kwargs["run_id"], "assessment": {"ready": True}}
+
+    def validate(path, **kwargs):
+        assert path.is_file()
+        assert kwargs["expected_client"] == client
+        assert kwargs["expected_run_id"] == "run-1"
+        return {"ready": True}
+
+    monkeypatch.setattr(host_recorder, "record", passive_record)
+    monkeypatch.setattr(driver, "validate_gather_job_host_trace", validate)
+    trace = driver._record_job_host_trace(
+        args, job, run_id="run-1", client=client, attempt_sequence=1, tick_index=1,
+    )
+    assert trace.is_file() and len(calls) == 1
+    assert calls[0]["focus_delay_seconds"] == 0.0
+    assert calls[0]["operator_confirms_quiescent"] is True
+    with pytest.raises(ValueError, match="already exists"):
+        driver._record_job_host_trace(
+            args, job, run_id="run-1", client=client, attempt_sequence=1, tick_index=1,
+        )
+    assert len(calls) == 1
+
+
+def test_job_host_recorder_failure_denies_before_tick(tmp_path, monkeypatch):
+    monkeypatch.setattr(driver, "ROOT", tmp_path)
+    recovery = tmp_path / "workspace" / "evidence" / "recovery.json"
+    recovery.parent.mkdir(parents=True)
+    recovery.write_text("{}", encoding="utf-8")
+    args = SimpleNamespace(operator_confirms_quiescent=True,
+                           host_session_id="windows-session-1", recovery_evidence=recovery)
+    job = SimpleNamespace(job_id="job-host-1")
+    client = GatherClientBinding.from_window({
+        "hwnd": 1001, "pid": 2001, "process_path": r"C:\Game\MASS.exe",
+    })
+    monkeypatch.setattr(host_recorder, "record",
+                        lambda **_: (_ for _ in ()).throw(ValueError("synthetic recorder failure")))
+    monkeypatch.setattr(driver, "validate_gather_job_host_trace",
+                        lambda *_, **__: pytest.fail("invalid recorder must not validate"))
+    with pytest.raises(ValueError, match="synthetic recorder failure"):
+        driver._record_job_host_trace(
+            args, job, run_id="run-1", client=client, attempt_sequence=1, tick_index=1,
+        )
 
 
 def test_driver_requires_canonical_attestation_before_attempt_or_tick(monkeypatch, capsys):
@@ -366,6 +428,27 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(
                             synthetic_attestation)
         monkeypatch.setattr(run_gather_tick, "validate_canonical_startup_attestation",
                             synthetic_attestation)
+        binding = GatherClientBinding.from_window(window)
+        monkeypatch.setattr(driver, "_attested_client", lambda *_: binding)
+        monkeypatch.setattr(run_gather_tick, "_attested_job_client", lambda *_: binding)
+        host_traces = []
+
+        def synthetic_host_trace(_args, _job, *, run_id, client, attempt_sequence, tick_index):
+            assert client == binding
+            path = root / f"host-{attempt_sequence}-{tick_index}.json"
+            path.write_text(json.dumps({"run_id": run_id}), encoding="utf-8")
+            host_traces.append((run_id, path))
+            return path
+
+        def synthetic_host_validation(path, *, expected_run_id, expected_client, **_kwargs):
+            assert expected_client == binding
+            assert (expected_run_id, path) in host_traces
+            return {"ready": True, "trace_path": str(path), "run_id": expected_run_id,
+                    "input_telemetry": "recorder_self_report_only"}
+
+        monkeypatch.setattr(driver, "_record_job_host_trace", synthetic_host_trace)
+        monkeypatch.setattr(run_gather_tick, "validate_gather_job_host_trace",
+                            synthetic_host_validation)
         ledger = JsonGatherJobStore(ledger_root)
         ledger.bind_client(job, window)
         assert ledger.progress(job).verified_marches == 0
@@ -374,10 +457,9 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(
             def __init__(self, sequence):
                 self.sequence = sequence
                 self.observations = 0
-                # Keep all synthetic frames inside the job window and in
-                # deterministic order, without putting later frames in the
-                # future relative to the journal's real verified_at clock.
-                self.start = now.timestamp() - 12 + sequence * 2
+                # Keep synthetic frames current even on a slow Windows test
+                # run; the next slot gets a new tool after the prior tick.
+                self.start = datetime.now(timezone.utc).timestamp() - 0.01
 
             def observe(self, context):
                 self.observations += 1
@@ -415,7 +497,7 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(
                                "march_queue_source": "visible_ocr_queue_anchor",
                                "character_id": job.character_id, "window": window,
                                "image_sha256": f"{self.sequence + 100:064x}"},
-                        observed_at=self.start + 1,
+                        observed_at=self.start + 0.001,
                     )
                 raise AssertionError("unexpected extra observation")
 
@@ -520,6 +602,14 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(
         assert attestation_checks.count(ATTESTATION_SHA) >= len(tick_calls) * 2
         assert all(command[command.index("--startup-attestation-sha256") + 1]
                    == ATTESTATION_SHA for command in tick_calls)
+        assert [item[0] for item in host_traces] == run_ids
+        assert len({item[1] for item in host_traces}) == 5
+        traced_commands = [command for command in tick_calls
+                           if "--input-isolation-evidence" in command]
+        assert len(traced_commands) == 5
+        assert all(command[command.index("--input-isolation-evidence") + 1]
+                   == str(host_traces[index][1])
+                   for index, command in enumerate(traced_commands))
         if crash_phase == "after_result":
             assert len(tick_calls) == 5
         assert Path(result["report_path"]).is_file()

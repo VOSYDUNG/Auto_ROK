@@ -8,6 +8,7 @@ later validator can distinguish dispatch from verified live completion.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -18,13 +19,18 @@ sys.path.insert(0, str(ROOT))
 from harness.action_surface import TRAINED_NATIVE_SHORTCUTS  # noqa: E402
 from harness.gather_facts import GatherFactObservationProvider  # noqa: E402
 from harness.gather_job_authority import compiled_gather_catalog  # noqa: E402
-from harness.gather_job_startup_attestation import validate_canonical_startup_attestation  # noqa: E402
-from harness.gather_job_store import JsonGatherJobStore, load_gather_job_authority  # noqa: E402
+from harness.gather_job_startup_attestation import (  # noqa: E402
+    canonical_startup_attestation_path, validate_canonical_startup_attestation,
+)
+from harness.gather_job_store import (  # noqa: E402
+    GatherClientBinding, JsonGatherJobStore, load_gather_job_authority,
+)
 from harness.gather_client_binding import GatherClientBindingObservationProvider  # noqa: E402
 from harness.gather_job_coordinator import GatherJobCoordinator, persist_gather_job_closeout  # noqa: E402
 from harness.host_input_isolation import (  # noqa: E402
     HostInputIsolationEvidence,
     HostInputIsolationEvidenceError,
+    validate_gather_job_host_trace,
 )
 from harness.gather_replay_evidence import (  # noqa: E402
     build_gather_tick_evidence,
@@ -183,6 +189,18 @@ def _host_input_isolation_summary(path: str | None, context: MissionContext) -> 
     }
 
 
+def _attested_job_client(job_id: str, digest: str) -> GatherClientBinding:
+    path = canonical_startup_attestation_path(job_id, ROOT / "workspace")
+    data = path.read_bytes()
+    if hashlib.sha256(data).hexdigest() != digest:
+        raise ValueError("GATHER startup attestation changed before tick host preflight")
+    record = json.loads(data)
+    capture = record.get("capture") if isinstance(record, dict) else None
+    if not isinstance(capture, dict):
+        raise ValueError("GATHER startup attestation lacks client binding")
+    return GatherClientBinding.from_window(capture.get("client_binding"))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-id", help="single-occurrence ID; derived from job and slot in GATHER job mode")
@@ -278,7 +296,7 @@ def main(argv: list[str] | None = None) -> int:
         ):
             raise ValueError("GATHER_JOB_CANNOT_MIX_LEGACY_B003_OR_R3")
         if args.gather_job and args.arm_live:
-            raise ValueError("GATHER_JOB_LIVE_ARM_BLOCKED_PENDING_BASELINE_IDENTITY_AND_FIVE_MARCH_PREFLIGHT")
+            raise ValueError("GATHER_JOB_LIVE_ARM_BLOCKED_PENDING_LIVE_EVIDENCE_AND_AUTHORITY")
         if args.startup_attestation_sha256 and not args.gather_job:
             raise ValueError("startup attestation digest requires --gather-job")
         if args.r3_repetition and not args.arm_live:
@@ -352,7 +370,22 @@ def main(argv: list[str] | None = None) -> int:
             if not reservation_path.is_relative_to(evidence_root):
                 raise ValueError("R3 reservation ledger must be under workspace/evidence")
             r3_reservation = load_reserved_ticket(reservation_path, run_id=context.run_id)
-        host_input_isolation = _host_input_isolation_summary(args.input_isolation_evidence, context)
+        if gather_job is not None and args.input_isolation_evidence is not None:
+            try:
+                host_input_isolation = validate_gather_job_host_trace(
+                    Path(args.input_isolation_evidence),
+                    expected_run_id=context.run_id,
+                    expected_client=_attested_job_client(
+                        gather_job.job_id, startup_attestation_sha256,
+                    ),
+                    workspace_root=ROOT / "workspace",
+                )
+            except HostInputIsolationEvidenceError as exc:
+                raise ValueError(f"GATHER job host trace preflight failed: {exc}") from exc
+        elif gather_job is not None and args.startup_attestation_sha256 is not None:
+            raise ValueError("GATHER job driver tick requires a fresh host trace")
+        else:
+            host_input_isolation = _host_input_isolation_summary(args.input_isolation_evidence, context)
         if args.arm_live and host_input_isolation.get("ready") is not True:
             reasons = "; ".join(str(item) for item in host_input_isolation.get("reasons", []))
             raise ValueError("LIVE_ARM_REQUIRES_READY_HOST_INPUT_ISOLATION" + (f": {reasons}" if reasons else ""))

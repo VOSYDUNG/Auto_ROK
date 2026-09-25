@@ -162,7 +162,7 @@ def record(
     cancel_test = _recovery_contract(recovery_evidence)
     payload = {
         "schema_version": 1,
-        "evidence_id": f"host-direct-{run_id}",
+        "evidence_id": f"host-direct-{run_id}-{started:%Y%m%dT%H%M%S%fZ}",
         "run_id": run_id,
         "session_id": session_id,
         "environment": "windows_host_direct",

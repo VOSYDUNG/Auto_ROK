@@ -739,7 +739,7 @@ nodes:
 
   - id: host_input_isolation_evidence
     kind: evidence
-    responsibility: Validates direct one-user Windows host evidence for fresh target binding, foreground stability, operator quiescence, stale-frame rejection and cancel coverage.
+    responsibility: Validates direct one-user Windows host evidence and, for each GATHER job tick, binds a fresh passive trace to the deterministic run ID and startup-attested client before canonical tick execution; recorder input-event zero remains self-report, not independent telemetry.
     authority: operator
     status: implemented
     path: docs/HOST_INPUT_ISOLATION.md
@@ -886,7 +886,7 @@ nodes:
 
   - id: gather_cli
     kind: composition
-    responsibility: Composes one GATHER tick with either historical B003 or the opt-in five-march job coordinator, canonical startup attestation revalidation before planning/runner, guarded input, durable VERIFIED journal progress and per-tick evidence; job live arming remains blocked.
+    responsibility: Composes one GATHER tick with either historical B003 or the opt-in five-march job coordinator, canonical startup attestation revalidation and current-run host-trace preflight before planning/runner, guarded input, durable VERIFIED journal progress and per-tick evidence; job live arming remains blocked.
     authority: canonical
     status: implemented
     path: scripts/run_gather_tick.py
@@ -899,7 +899,7 @@ nodes:
 
   - id: gather_job_driver
     kind: adapter
-    responsibility: Pins one canonical startup attestation digest before an attempt and revalidates it before every bounded GATHER tick, checks the durable prior attempt chain, records append-only attempt starts/results, and automatically consumes the FIRST DONE audit verdict or recovers a completed terminal report; live arming remains disabled.
+    responsibility: Pins one canonical startup attestation digest, revalidates it and obtains a fresh passive host trace for each deterministic run before a bounded GATHER tick, checks the durable prior attempt chain, records append-only attempt starts/results, and automatically consumes the FIRST DONE audit verdict or recovers a completed terminal report; live arming remains disabled.
     authority: canonical
     status: implemented
     path: scripts/run_gather_job.py
@@ -1108,6 +1108,8 @@ edges:
   - {from: interference_guard, to: gather_job_input_guard, relation: must_pass_host_check_first}
   - {from: host_input_isolation_evidence, to: live_replay_evidence, relation: required_for}
   - {from: host_input_isolation_evidence, to: r3_preflight, relation: gates}
+  - {from: host_input_isolation_evidence, to: gather_job_driver, relation: supplies_fresh_current_run_client_trace_before_tick}
+  - {from: host_input_isolation_evidence, to: gather_cli, relation: preflights_current_run_client_trace_before_runner}
   - {from: troop_selection_policy_approval, to: r3_preflight, relation: checks}
   - {from: goal_readiness_audit, to: r3_preflight, relation: audits}
   - {from: goal_readiness_audit, to: gather_runtime_evidence, relation: audits}

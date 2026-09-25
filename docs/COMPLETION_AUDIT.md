@@ -63,7 +63,7 @@ limitations of measured capabilities remain in [runtime-status](../runtime-statu
 | Fresh New Troop → game-populated formation → March | [F1-C formation](../workspace/agents/f1c-formation-fact/tho_dung/HANDOFF.md) is wired offline from current-frame OCR/pixels and four positive archive frames; no real empty formation negative or live job yet. Harness must not send commander-selection input. Commander names and the game’s internal ranking are not separate acceptance gates. |
 | Startup job authorization → guarded automatic marches | PRD F06, SRS `MIS-FD-005`, and [SESSION_AUTHORITY](SESSION_AUTHORITY.md) define one local GATHER job and one operator confirmation of the open character bound to job/frame/client/time, with no approval per march. The offline `create_gather_job.py` command issues one non-overwriting artifact from the compiled catalog plus a separate non-authoritative launch spec. [F4-A1](../workspace/agents/f4a-startup-attestation/root/VALIDATION.md) implemented the artifact and [first-March correction](../workspace/agents/first-march-bootstrap/tho_dung/HANDOFF.md) removed its false pre-first queue requirement; [F4-A2](../workspace/agents/f4a-attestation-wiring/root/VALIDATION.md) wires its canonical digest into driver, attempt chain and direct tick offline. No real startup artifact has been issued. F1-B/C wired the guard and bound client offline. Historical G4/B003 only covers its named occurrence. |
 | Fresh queue observation → five verified transitions → 5/5 | [F2-A journal](../workspace/agents/f2a-verification-journal/tho_dung/HANDOFF.md) resolved the three [review](../workspace/agents/f2a-verification-journal/kiem_luat/HANDOFF.md) findings and is WIRED offline; ROOT's full suite passed. The [Q0 trainer](../workspace/agents/q0-training-safety/root/VALIDATION.md) now accepts native capture metadata and verifies an operator-labelled candidate before an atomic profile update, at IMPLEMENTED offline. Because the queue is not visible before the first March, a new autonomous job must show a fresh post-first-march 1/5, then 2/5, 3/5, 4/5 and 5/5 for the same character. |
-| One startup job → five autonomous occurrences | [F2-B coordinator](../workspace/agents/f2b-five-march/tho_dung/HANDOFF.md) is WIRED offline as a caller-driven one-tick implementation with journal-validated closeout. [F2-C driver](../workspace/agents/f2c-job-driver/root/HANDOFF.md) is WIRED offline after [independent re-review](../workspace/agents/f2c-driver-review/kiem_luat/HANDOFF.md): 20 focused tests cover canonical CLI/MissionRunner/coordinator/journal, launch-spec failure, false terminal report and safe already-closed recovery. The current host-isolation trace is bound to one run ID; no per-march operator reconfirmation is intended. |
+| One startup job → five autonomous occurrences | [F2-B coordinator](../workspace/agents/f2b-five-march/tho_dung/HANDOFF.md) and [F2-C driver](../workspace/agents/f2c-job-driver/root/HANDOFF.md) are WIRED offline with journal-validated closeout and bounded resume. [F4-B host trace](../workspace/agents/f4b-host-trace/tho_dung/HANDOFF.md) connects five distinct passive traces to the driver and canonical tick: each planned `run_id`, attested HWND/PID/process path, age and focus are checked before runner. Synthetic negatives cover missing/stale/wrong-run/foreign-client/recorder failure. One startup quiescence assertion serves the drive; no per-march reconfirmation. Recorder zero-input is self-report only, and neither live arm is open. |
 | Same job → write-once close report | [F3-B closeout](../workspace/agents/f3b-resumable-closeout/root/VALIDATION.md) is WIRED offline at `314fb2c`: the canonical driver checks an ordered attempt chain before another tick, accepts only a uniquely proven orphan VERIFIED slot in its own time window, recovers a terminal report without a sixth tick, and automatically writes an `OFFLINE_REPLAY_PASS`/`BLOCKED` verdict. Forty-seven focused tests and full pytest pass; no fresh live close report exists. Historical replay without an attempt chain is explicitly non-authoritative. Exclusive-create files are not protected from later edits by another local process. Estimated mining/return time remains optional sourced metadata. |
 | Daily continuity after FIRST DONE | `troops_panel_sensor`, `return_detection`, `automatic_refill`, `buff_sensor` and `buff_top_up` remain separate later capabilities. The [inventory](../workspace/agents/p1-continuity-evidence/nghien_cuu/HANDOFF.md) found no positive Returning/Home or buff-timer evidence. |
 | Local LLM benchmark | PRD F05 and SRS local-LLM contract; holdout is historical evidence of bounded selection. B003 review/training and model participation measurement do not grant farm input or add per-march approval. |
@@ -72,7 +72,7 @@ No first-done row is promoted by a planned requirement, a passing isolated test,
 or a historical live receipt. An unknown state, missing item or expired session
 authority blocks the affected action and must appear in the final evidence.
 
-## Current gate snapshot
+## Historical B003/R3 gate snapshot
 
 The September 23 offline recomputation on the working tree based on HEAD
 `7855c616` reports these gate statuses from persisted artifacts:
@@ -101,8 +101,10 @@ focused tests; all 10 referenced historical artifacts exist and G6 remains
 blocked. G6 is the later endurance track, not the five-march criterion.
 [ROOT](ROOT.md) links current verification. F4-A2 consumes the one-time startup
 attestation in driver and direct tick offline. The next FIRST DONE dependency is
-F4-B job-scoped host trace in [BUILD_PLAN](BUILD_PLAN.md).
-F3-B/F4-A2 are wired offline; their live evidence gap remains. These results
+F4-B job-scoped host trace is now wired offline as described in
+[BUILD_PLAN](BUILD_PLAN.md), alongside F3-B/F4-A2. The remaining gap is a
+fresh startup job and real host/game trace with an independently justified
+input-interference claim before live authorization. These results
 do not authorize a live run.
 
 The existing R3 execution gate remains a separate historical contract:

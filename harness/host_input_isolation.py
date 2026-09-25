@@ -10,12 +10,148 @@ not fall back to an unbound desktop surface.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
+import hashlib
+import json
+from pathlib import Path
 from typing import Any, Mapping
+
+from harness.gather_job_store import GatherClientBinding, GatherJobStoreError
 
 
 class HostInputIsolationEvidenceError(ValueError):
     """Raised when direct-host evidence is malformed."""
+
+
+def _read_json(path: Path, label: str) -> Mapping[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HostInputIsolationEvidenceError(f"{label} is unreadable") from exc
+    if not isinstance(value, Mapping):
+        raise HostInputIsolationEvidenceError(f"{label} must be an object")
+    return value
+
+
+def _under(path: Path, root: Path, label: str) -> Path:
+    resolved = path.resolve()
+    try:
+        resolved.relative_to(root.resolve())
+    except ValueError as exc:
+        raise HostInputIsolationEvidenceError(f"{label} must be under {root}") from exc
+    if resolved == root.resolve() or not resolved.is_file():
+        raise HostInputIsolationEvidenceError(f"{label} must be an existing file")
+    return resolved
+
+
+def _trace_path(value: Any, base: Path, root: Path, label: str) -> Path:
+    if not isinstance(value, str) or not value.strip():
+        raise HostInputIsolationEvidenceError(f"{label} path is missing")
+    path = Path(value)
+    if not path.is_absolute():
+        path = base / path
+    return _under(path, root, label)
+
+
+def validate_gather_job_host_trace(
+    path: Path,
+    *,
+    expected_run_id: str,
+    expected_client: GatherClientBinding,
+    workspace_root: Path,
+    now: datetime | None = None,
+    max_age_seconds: float = 10.0,
+) -> dict[str, object]:
+    """Validate one fresh recorder trace for a GATHER job preflight.
+
+    This validates recorder self-report and capture provenance only.  It does
+    not turn ``input_telemetry`` into independent host instrumentation.
+    """
+    if not isinstance(expected_run_id, str) or not expected_run_id:
+        raise HostInputIsolationEvidenceError("expected_run_id must be non-empty")
+    if type(max_age_seconds) not in (int, float) or max_age_seconds < 0:
+        raise HostInputIsolationEvidenceError("max_age_seconds must be non-negative")
+    workspace = Path(workspace_root).resolve()
+    if now is not None and now.tzinfo is None:
+        raise HostInputIsolationEvidenceError("now must include timezone")
+    evidence_root, runs_root = workspace / "evidence", workspace / "runs"
+    trace_path = _under(Path(path), evidence_root, "trace")
+    raw = _read_json(trace_path, "trace")
+    trace = raw.get("evidence") if isinstance(raw.get("evidence"), Mapping) else raw
+    evidence = HostInputIsolationEvidence.from_dict(trace)
+    if evidence.run_id != expected_run_id:
+        raise HostInputIsolationEvidenceError("trace run_id does not match expected run")
+    ready, reasons = evidence.assess()
+    if not ready:
+        raise HostInputIsolationEvidenceError("host input-isolation evidence is not ready: " + "; ".join(reasons))
+
+    def parse_time(value: Any, label: str) -> datetime:
+        if not isinstance(value, str):
+            raise HostInputIsolationEvidenceError(f"{label} must be ISO-8601")
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise HostInputIsolationEvidenceError(f"{label} must be ISO-8601") from exc
+        if parsed.tzinfo is None:
+            raise HostInputIsolationEvidenceError(f"{label} must include timezone")
+        return parsed.astimezone(timezone.utc)
+
+    started, ended = parse_time(evidence.started_at, "started_at"), parse_time(evidence.ended_at, "ended_at")
+    current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    if ended > current:
+        raise HostInputIsolationEvidenceError("trace ended_at is in the future")
+    if (current - ended).total_seconds() > float(max_age_seconds):
+        raise HostInputIsolationEvidenceError("trace is stale")
+
+    # Recorder paths are normally absolute; relative paths are rooted at the
+    # supplied workspace so synthetic/offline traces have one unambiguous base.
+    capture_meta = _trace_path(raw.get("capture_meta"), workspace, runs_root, "capture metadata")
+    png_path = _trace_path(raw.get("capture_output"), workspace, runs_root, "capture PNG")
+    capture = _read_json(capture_meta, "capture metadata")
+    if capture.get("status") != "captured":
+        raise HostInputIsolationEvidenceError("capture metadata status is not captured")
+    backend = capture.get("backend")
+    if (not isinstance(backend, Mapping) or backend.get("name") != "windows-capture"
+            or backend.get("target_mode") != "window_hwnd"):
+        raise HostInputIsolationEvidenceError("capture backend is not native windows-capture")
+    frame = capture.get("frame")
+    if not isinstance(frame, Mapping):
+        raise HostInputIsolationEvidenceError("capture frame metadata is missing")
+    manifest_png = _trace_path(capture.get("png"), workspace, runs_root, "capture manifest PNG")
+    if manifest_png != png_path:
+        raise HostInputIsolationEvidenceError("capture manifest PNG does not match trace capture PNG")
+    captured_at = parse_time(frame.get("captured_at"), "frame captured_at")
+    if captured_at < started or captured_at > ended:
+        raise HostInputIsolationEvidenceError("frame was not captured within trace window")
+    for name in ("target", "pre_capture", "post_capture"):
+        try:
+            observed = GatherClientBinding.from_window(capture.get(name))
+        except (GatherJobStoreError, ValueError, TypeError) as exc:
+            raise HostInputIsolationEvidenceError(f"capture {name} binding is invalid") from exc
+        if observed != expected_client:
+            raise HostInputIsolationEvidenceError(f"capture {name} binding does not match expected client")
+    if raw.get("foreground_before_hwnd") != expected_client.hwnd or raw.get("foreground_after_hwnd") != expected_client.hwnd:
+        raise HostInputIsolationEvidenceError("trace foreground target does not match expected client")
+    if raw.get("host_focus_changes") != 0:
+        raise HostInputIsolationEvidenceError("trace records a host focus change")
+    non_interference = capture.get("non_interference")
+    interference_flags = {"foreground_activation", "mouse_input", "keyboard_input", "desktop_fallback"}
+    if (not isinstance(non_interference, Mapping)
+            or not interference_flags.issubset(non_interference)
+            or any(non_interference.get(flag) is not False for flag in interference_flags)):
+        raise HostInputIsolationEvidenceError("capture non_interference must contain only false values")
+    expected_hash = frame.get("image_sha256")
+    if not isinstance(expected_hash, str) or hashlib.sha256(png_path.read_bytes()).hexdigest() != expected_hash:
+        raise HostInputIsolationEvidenceError("capture PNG hash does not match frame metadata")
+    return {
+        "ready": True,
+        "trace_id": evidence.evidence_id,
+        "evidence_id": evidence.evidence_id,
+        "run_id": evidence.run_id,
+        "client": expected_client.to_json(),
+        "ended_at": evidence.ended_at,
+        "input_telemetry": "recorder_self_report_only",
+    }
 
 
 @dataclass(frozen=True)

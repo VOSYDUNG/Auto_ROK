@@ -67,6 +67,16 @@ và [validation ROOT](../workspace/agents/first-march-bootstrap/root/VALIDATION.
 ghi phạm vi kiểm chứng. Full pytest, engineering graph và NNC team validator
 đã PASS offline. Đây không phải live proof.
 
+F4-B đã nối trace host thụ động vào từng tick của driver theo `run_id` hiện
+hành: recorder tạo artifact riêng, driver kiểm tuổi/client/focus và CLI kiểm
+lại trước runner. [Handoff builder](../workspace/agents/f4b-host-trace/tho_dung/HANDOFF.md),
+[review độc lập](../workspace/agents/f4b-host-trace/nguoi_thu/HANDOFF.md)
+và [kiểm chứng ROOT](../workspace/agents/f4b-host-trace/root/VALIDATION.md)
+ghi các ca dương/âm. Test tích hợp năm trace riêng, full pytest, graph và
+NNC PASS; chỉ đạt **WIRED offline**. Một xác nhận quiescence và recovery
+artifact được cấp lúc bắt đầu drive, không có prompt mỗi March. Recorder
+tự ghi `unexpected_input_events=0`; đó chưa phải phép đo input độc lập.
+
 Plugin `shin-agentic-work@personal` 0.1.0 và NNC đã được đối chiếu trong
 [plugin check](../workspace/agents/gather-evidence/root/plugin-check.md).
 `.codex/team.json` giữ profile model động; các role TOML được tái sinh từ
@@ -74,18 +84,18 @@ manifest hiện hành bằng NNC, không ấn định tên model.
 
 ## Gói kế tiếp và điểm chưa chứng minh
 
-Gói kế tiếp là **F4-B job-scoped host preflight trace, offline**. `owned_nodes`:
-producer `host_input_isolation_evidence` và consumer preflight của
-`gather_job_driver`/`gather_cli`. `upstream_dependencies`: attestation đã
-ghim digest, attempt chain F3-B, coordinator và recorder trace hiện có.
-`downstream_consumers`: input guard và một occurrence live riêng sau này.
-`acceptance_evidence`: mỗi tick có trace mới đúng `run_id` và client đã xác
-nhận; thiếu/cũ/sai focus hoặc recorder lỗi thì dừng trước runner.
-`known_blockers`: telemetry recorder về input ngoài luồng hiện tự khai, chưa
-là phép đo độc lập; chưa có startup attestation game thật hoặc hậu kiểm 1/5
-cho job mới. `graph_delta_expected`: trace → preflight driver/tick → guard
-hiện hành, không mở input path song song. [Brief F4-B](../workspace/agents/f4b-host-trace/root/BRIEF.md)
-là hồ sơ làm việc offline đã bỏ tiền đề 0/5 cũ.
+Gói kế tiếp là **F4-C khảo sát telemetry host, offline** để quyết định nguồn
+đo tối thiểu cho input ngoài luồng và focus đổi rồi quay lại trong lúc job
+tự chạy. `owned_nodes`: hợp đồng bằng chứng `host_input_isolation_evidence`;
+`upstream_dependencies`: trace F4-B, foreground snapshots và Windows guard
+hiện có; `downstream_consumers`: preflight driver/CLI và live gate sau này.
+`acceptance_evidence`: một hồ sơ thiết kế đối chiếu nguồn Windows khả thi,
+thời điểm/độ hạt đo, quyền cần dùng, ca giả lập input/focus bất ngờ phải
+chặn, và quyết định triển khai hay hạ claim; không thêm bước duyệt từng
+March. `known_blockers`: chưa có phép đo độc lập và chưa có occurrence game
+thật. `graph_delta_expected`: chỉ sửa cạnh evidence → preflight nếu khảo sát
+chứng minh nguồn mới; không tạo input channel khác. Đây là gói làm rõ trước
+khi giao implementation.
 
 Hai công tắc `--gather-job --arm-live` vẫn chặn. FIRST DONE tổng thể còn
 `UNIMPLEMENTED`: chưa có một occurrence game thật tự chủ đi 1/5→5/5 cùng
