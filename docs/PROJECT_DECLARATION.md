@@ -316,8 +316,8 @@ Chúng sẽ được huấn luyện dần bằng kiểm nghiệm thực địa t
 | `docs/DESIGN_BRIEF.md` | nghiên cứu và lý do chọn kiến trúc |
 | `docs/LLM_GAMEPLAY_SPEC.md` | hợp đồng gameplay của LLM local |
 | `docs/SESSION_AUTHORITY.md` | hợp đồng quyền phiên GATHER đề xuất, chưa cấp quyền live |
-| `docs/BUILD_PLAN.md` | thứ tự xây dựng và gói công việc hiện hành |
-| `docs/COMPLETION_AUDIT.md` | đối chiếu bằng chứng với điều kiện G1–G6 |
+| `docs/BUILD_PLAN.md` | thứ tự xây dựng và phụ thuộc công việc |
+| `docs/COMPLETION_AUDIT.md` | đối chiếu bằng chứng với G1–G6 và FIRST DONE |
 | `runtime-status.yaml` | mức chứng minh đã kiểm của từng capability |
 | `docs/ROOT.md` | điều phối hiện hành và bước tiếp theo |
 | `docs/COVERAGE.md` | bản chụp lịch sử ngày 2026-09-19 |

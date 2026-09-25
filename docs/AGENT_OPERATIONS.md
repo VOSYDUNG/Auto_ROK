@@ -47,4 +47,5 @@ thay model server, thao tác tài khoản, gửi tin, publish hay thanh toán. M
 live cần quyền công việc GATHER của người vận hành và các chốt được chứng minh
 theo đúng job/occurrence. [SESSION_AUTHORITY](SESSION_AUTHORITY.md) định nghĩa
 quyền khởi đầu cho FIRST DONE; B003 từng occurrence là đường benchmark lịch sử,
-không phải yêu cầu duyệt từng march. Các gói F1/F2 hiện chỉ kiểm offline.
+không phải yêu cầu duyệt từng march. Mức chứng minh của từng gói chỉ lấy từ
+[runtime-status](../runtime-status.yaml) và bằng chứng ROOT đã kiểm.
