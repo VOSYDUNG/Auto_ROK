@@ -282,13 +282,85 @@ def _write_report(root: Path, result: Mapping[str, Any]) -> Path:
     job_id = str(result["job_id"])
     directory = root / hashlib.sha256(job_id.encode("utf-8")).hexdigest()[:20]
     directory.mkdir(parents=True, exist_ok=True)
-    destination = directory / f"attempt-{time.time_ns()}-{os.getpid()}.json"
+    sequence = result.get("attempt_sequence")
+    destination = (directory / f"attempt-{sequence:06d}.result.json"
+                   if type(sequence) is int and sequence > 0
+                   else directory / f"attempt-{time.time_ns()}-{os.getpid()}.json")
     with destination.open("x", encoding="utf-8", newline="\n") as handle:
         json.dump(dict(result), handle, ensure_ascii=False, sort_keys=True, indent=2)
         handle.write("\n")
         handle.flush()
         os.fsync(handle.fileno())
     return destination
+
+
+def _write_attempt_start(root: Path, job: GatherJobAuthority) -> tuple[Path, dict[str, Any]]:
+    workspace = (ROOT / "workspace").resolve()
+    if not root.resolve().is_relative_to(workspace):
+        raise ValueError("driver report root must be under workspace")
+    directory = root / hashlib.sha256(job.job_id.encode("utf-8")).hexdigest()[:20]
+    directory.mkdir(parents=True, exist_ok=True)
+    if (directory / "first-done-closeout.json").exists():
+        raise ValueError("GATHER job already has an immutable FIRST DONE verdict")
+    starts = sorted(directory.glob("attempt-*.start.json"))
+    sequence = len(starts) + 1
+    if any(path.name != f"attempt-{index:06d}.start.json"
+           for index, path in enumerate(starts, 1)):
+        raise ValueError("GATHER attempt-start chain is not contiguous")
+    previous_start = starts[-1] if starts else None
+    previous_result = directory / f"attempt-{sequence - 1:06d}.result.json" if starts else None
+    record: dict[str, Any] = {
+        "schema_version": 1, "kind": "attempt_start", "job_id": job.job_id,
+        "task_id": job.task_id, "character_id": job.character_id,
+        "catalog_digest": job.catalog_digest, "attempt_sequence": sequence,
+        "initial_verified": JsonGatherJobStore(GATHER_JOB_STORE_ROOT).progress(job).verified_marches,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "previous_start_sha256": (hashlib.sha256(previous_start.read_bytes()).hexdigest()
+                                  if previous_start else None),
+        "previous_result_sha256": (hashlib.sha256(previous_result.read_bytes()).hexdigest()
+                                   if previous_result is not None and previous_result.is_file()
+                                   else None),
+    }
+    destination = directory / f"attempt-{sequence:06d}.start.json"
+    with destination.open("x", encoding="utf-8", newline="\n") as handle:
+        json.dump(record, handle, ensure_ascii=False, sort_keys=True, indent=2)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    return destination, record
+
+
+def _unverdict_terminal_result(root: Path, job: GatherJobAuthority) -> tuple[Path, dict[str, Any]] | None:
+    """Find a completed report left behind by a crash before verdict creation."""
+    if not root.resolve().is_relative_to((ROOT / "workspace").resolve()):
+        raise ValueError("driver report root must be under workspace")
+    directory = root / hashlib.sha256(job.job_id.encode("utf-8")).hexdigest()[:20]
+    if (directory / "first-done-closeout.json").exists():
+        return None
+    starts = sorted(directory.glob("attempt-*.start.json"))
+    if not starts:
+        return None
+    latest = directory / f"attempt-{len(starts):06d}.result.json"
+    if not latest.exists():
+        return None
+    result = json.loads(latest.read_text(encoding="utf-8"))
+    if not isinstance(result, dict):
+        raise ValueError("GATHER terminal result is not an object")
+    return (latest, result) if result.get("status") == "complete" else None
+
+
+def _audit_closeout(job: GatherJobAuthority, result: Mapping[str, Any], report: Path) -> tuple[str, Path]:
+    from scripts.audit_first_done_job import audit_first_done_job, write_verdict
+
+    verdict = audit_first_done_job(
+        job, JsonGatherJobStore(GATHER_JOB_STORE_ROOT),
+        JsonMissionStore(GATHER_CHECKPOINT_ROOT), result,
+        GATHER_EVIDENCE_ROOT, attempt_root=report.parent,
+    )
+    destination = write_verdict(
+        report.parent / "first-done-closeout.json", ROOT / "workspace", verdict,
+    )
+    return verdict["status"], destination
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -315,6 +387,21 @@ def main(argv: list[str] | None = None) -> int:
         if args.arm_live:
             raise ValueError("GATHER job live arm is blocked pending job-scoped preflight")
         args, job = _validated_launch(args)
+        prior_terminal = _unverdict_terminal_result(args.report_root, job)
+        if prior_terminal is not None:
+            report, result = prior_terminal
+            audit_status, verdict_path = _audit_closeout(job, result, report)
+            print(json.dumps({**result, "report_path": str(report),
+                              "audit_status": audit_status, "verdict_path": str(verdict_path)},
+                             ensure_ascii=False))
+            return 0 if audit_status == "OFFLINE_REPLAY_PASS" else 4
+        start_path, start = _write_attempt_start(args.report_root, job)
+        from scripts.audit_first_done_job import preflight_attempt_chain
+        preflight_attempt_chain(
+            job, JsonGatherJobStore(GATHER_JOB_STORE_ROOT),
+            JsonMissionStore(GATHER_CHECKPOINT_ROOT), start_path.parent,
+            GATHER_EVIDENCE_ROOT,
+        )
         command = _tick_command(args)
         result = drive_job(
             lambda: _subprocess_tick(command), job_id=job.job_id,
@@ -324,8 +411,20 @@ def main(argv: list[str] | None = None) -> int:
             validate_closed=lambda payload: _durably_closed(job, payload),
         )
         result["recorded_at"] = datetime.now(timezone.utc).isoformat()
+        result["attempt_sequence"] = start["attempt_sequence"]
+        result["initial_verified"] = start["initial_verified"]
+        result["start_sha256"] = hashlib.sha256(start_path.read_bytes()).hexdigest()
         report = _write_report(args.report_root, result)
-        print(json.dumps({**result, "report_path": str(report)}, ensure_ascii=False))
+        audit_status = None
+        verdict_path = None
+        if result["status"] == "complete":
+            audit_status, verdict_path = _audit_closeout(job, result, report)
+        print(json.dumps({**result, "report_path": str(report),
+                          "audit_status": audit_status,
+                          "verdict_path": str(verdict_path) if verdict_path else None},
+                         ensure_ascii=False))
+        if audit_status == "BLOCKED":
+            return 4
         return {"complete": 0, "suspended": 3, "failed": 4}[result["status"]]
     except (OSError, ValueError, json.JSONDecodeError, GatherJobStoreError) as exc:
         print(json.dumps({"status": "failed", "error": str(exc)}, ensure_ascii=False), file=sys.stderr)

@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import hashlib
 import json
 import math
 import os
 from pathlib import Path
+import re
 import sys
 from typing import Any, Mapping
 
@@ -22,7 +24,7 @@ from harness.gather_job_authority import GatherJobAuthority, compiled_gather_cat
 from harness.gather_job_coordinator import gather_slot_run_id  # noqa: E402
 from harness.gather_job_store import GatherClientBinding, GatherJobStoreError, JsonGatherJobStore, load_gather_job_authority  # noqa: E402
 from harness.gather_job_verification import record_verified_gather_tick  # noqa: E402
-from harness.gather_replay_evidence import build_gather_tick_evidence  # noqa: E402
+from harness.gather_replay_evidence import _run_directory, build_gather_tick_evidence  # noqa: E402
 from harness.mission_loader import compile_mission  # noqa: E402
 from harness.mission_runner import MissionTickResult, restore_verified_transition  # noqa: E402
 from harness.mission_runtime import MissionContext  # noqa: E402
@@ -126,7 +128,7 @@ def _evidence_matches(entry: Mapping[str, Any], record: Mapping[str, Any],
 
 
 def _history_matches_job(job: GatherJobAuthority, history: list[object]) -> bool:
-    """Require one ordered attempt that contains all five verified slots."""
+    """Require one ordered stream containing all five verified slots."""
     if len(history) < job.max_marches:
         return False
     verified = 0
@@ -145,6 +147,213 @@ def _history_matches_job(job: GatherJobAuthority, history: list[object]) -> bool
         elif count != verified:
             return False
     return verified == job.max_marches and history[-1].get("status") == "complete"
+
+
+def _record_time(value: object) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        instant = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return instant if instant.tzinfo is not None and instant.utcoffset() is not None else None
+
+
+def _verified_in_window(entry: Mapping[str, Any], start: datetime, end: datetime) -> bool:
+    verified_at = _record_time(entry.get("verified_at"))
+    return verified_at is not None and start <= verified_at < end
+
+
+def _bridge_artifacts(
+    job: GatherJobAuthority, sequence: int, journal: list[dict[str, Any]],
+    ledger: JsonGatherJobStore, checkpoints: JsonMissionStore, evidence_root: Path,
+) -> list[str]:
+    """Find exact persisted canonical tick proof for one unreported VERIFIED slot."""
+    if not 1 <= sequence <= len(journal):
+        return []
+    entry = journal[sequence - 1]
+    context = MissionContext(job.mission_id, job.task_id, gather_slot_run_id(job, sequence))
+    checkpoint = checkpoints.load(context)
+    if checkpoint is None or checkpoint.status is not CheckpointStatus.COMPLETE:
+        return []
+    try:
+        proof = restore_verified_transition(checkpoint, context)
+    except (ValueError, TypeError, KeyError):
+        return []
+    if not _proof_matches_journal(job, context, checkpoint, proof, ledger, entry):
+        return []
+    expected_engine = build_gather_tick_evidence(
+        context=context, character_id=job.character_id,
+        result=MissionTickResult(CheckpointStatus.COMPLETE, checkpoint, proof.snapshot,
+                                 engine_result=proof),
+        live_armed=False, policy_approval=None,
+        main_view_profile_trained=False, resource_level_profile_trained=False,
+    )["engine"]
+    directory = evidence_root / _run_directory({
+        "mission_id": job.mission_id, "task_id": job.task_id,
+        "run_id": context.run_id, "attempt": context.attempt,
+        "character_id": job.character_id,
+    })
+    matches: list[str] = []
+    for path in directory.glob("*.json"):
+        record = _load_evidence(str(path), evidence_root)
+        if record is not None and _evidence_matches(entry, record, job, expected_engine):
+            matches.append(str(path.resolve()))
+    return matches
+
+
+def _attempt_chain_history(
+    job: GatherJobAuthority, ledger: JsonGatherJobStore,
+    checkpoints: JsonMissionStore, terminal: Mapping[str, Any] | None,
+    attempt_root: Path, evidence_root: Path, journal: list[dict[str, Any]],
+    *, allow_open_tail: bool = False,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    errors: list[str] = []
+    history: list[dict[str, Any]] = []
+    files = sorted(attempt_root.glob("attempt-*.json"))
+    starts: dict[int, Path] = {}
+    results: dict[int, Path] = {}
+    pattern = re.compile(r"attempt-(\d{6})\.(start|result)\.json\Z")
+    for path in files:
+        match = pattern.fullmatch(path.name)
+        if match is None:
+            errors.append("unexpected attempt record")
+            continue
+        sequence = int(match.group(1))
+        target = starts if match.group(2) == "start" else results
+        if sequence in target:
+            errors.append("duplicate attempt record")
+        target[sequence] = path
+    if not starts or sorted(starts) != list(range(1, len(starts) + 1)):
+        errors.append("attempt-start chain is missing or unordered")
+    if any(sequence not in starts for sequence in results):
+        errors.append("attempt result lacks its start")
+    if errors:
+        return [], errors
+    verified = 0
+    previous_start_hash: str | None = None
+    previous_result_hash: str | None = None
+    previous_time: datetime | None = None
+    prior_orphan_bridged_to_five = False
+    for sequence in range(1, len(starts) + 1):
+        start_path = starts[sequence]
+        try:
+            start = json.loads(start_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            errors.append(f"attempt {sequence} start is unreadable")
+            break
+        started = _record_time(start.get("started_at")) if isinstance(start, dict) else None
+        if (not isinstance(start, dict)
+                or frozenset(start) != {"schema_version", "kind", "job_id", "task_id",
+                                            "character_id", "catalog_digest", "attempt_sequence",
+                                            "initial_verified", "started_at", "previous_start_sha256",
+                                            "previous_result_sha256"}
+                or start.get("schema_version") != 1 or start.get("kind") != "attempt_start"
+                or (start.get("job_id"), start.get("task_id"), start.get("character_id"),
+                    start.get("catalog_digest")) != (job.job_id, job.task_id,
+                                                     job.character_id, job.catalog_digest)
+                or start.get("attempt_sequence") != sequence
+                or type(start.get("initial_verified")) is not int
+                or start.get("initial_verified") != verified
+                or start.get("previous_start_sha256") != previous_start_hash
+                or start.get("previous_result_sha256") != previous_result_hash
+                or started is None or not job.starts_at <= started < job.expires_at
+                or (previous_time is not None and started <= previous_time)):
+            errors.append(f"attempt {sequence} start scope, order or hash differs")
+            break
+        start_hash = hashlib.sha256(start_path.read_bytes()).hexdigest()
+        result_path = results.get(sequence)
+        if result_path is None:
+            if sequence == len(starts):
+                if allow_open_tail:
+                    previous_start_hash = start_hash
+                    previous_time = started
+                    continue
+                errors.append(f"attempt {sequence} has no result or subsequent recovery start")
+                break
+            try:
+                next_start = json.loads(starts[sequence + 1].read_text(encoding="utf-8"))
+                target = next_start.get("initial_verified")
+                next_started = _record_time(next_start.get("started_at"))
+            except (OSError, ValueError, AttributeError):
+                target = None
+                next_started = None
+            if (type(target) is not int or not verified < target <= 5
+                    or next_started is None or next_started <= started):
+                errors.append(f"attempt {sequence} stopped before persisted VERIFIED tick")
+                break
+            for slot in range(verified + 1, target + 1):
+                if slot > len(journal) or not _verified_in_window(journal[slot - 1], started, next_started):
+                    errors.append(f"attempt {sequence} slot {slot} VERIFIED outside orphan attempt")
+                    break
+                matches = _bridge_artifacts(job, slot, journal, ledger, checkpoints, evidence_root)
+                if len(matches) != 1:
+                    errors.append(f"attempt {sequence} slot {slot} has no unique durable per-tick bridge")
+                    break
+                history.append({"status": "complete", "run_id": gather_slot_run_id(job, slot),
+                                "verified_marches": slot, "evidence_path": matches[0]})
+            if errors:
+                break
+            verified = target
+            prior_orphan_bridged_to_five = target == 5
+            previous_result_hash = None
+            previous_time = started
+        else:
+            try:
+                report = json.loads(result_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                errors.append(f"attempt {sequence} result is unreadable")
+                break
+            recorded = _record_time(report.get("recorded_at")) if isinstance(report, dict) else None
+            ticks = report.get("history") if isinstance(report, dict) else None
+            if (not isinstance(report, dict) or report.get("job_id") != job.job_id
+                    or report.get("attempt_sequence") != sequence
+                    or report.get("initial_verified") != verified
+                    or report.get("start_sha256") != start_hash
+                    or report.get("status") not in {"suspended", "complete"}
+                    or not isinstance(ticks, list) or type(report.get("ticks")) is not int
+                    or report["ticks"] != len(ticks) or recorded is None or recorded < started
+                    or (sequence < len(starts) and report.get("status") != "suspended")
+                    or (terminal is not None and sequence == len(starts) and report != terminal)):
+                errors.append(f"attempt {sequence} result scope, status or digest differs")
+                break
+            for tick in ticks:
+                if not isinstance(tick, dict):
+                    errors.append(f"attempt {sequence} tick is malformed")
+                    break
+                status, count = tick.get("status"), tick.get("verified_marches")
+                if (status == "complete" and tick.get("run_id") is None
+                        and count == 5 and verified == 5 and sequence == len(starts)
+                        and prior_orphan_bridged_to_five
+                        and report.get("reason") == "durable five-march closeout recovered"):
+                    continue
+                if (status not in {"running", "waiting", "reobserve", "complete"}
+                        or type(count) is not int
+                        or tick.get("run_id") != gather_slot_run_id(job, verified + 1)
+                        or (status == "complete" and count != verified + 1)
+                        or (status != "complete" and count != verified)):
+                    errors.append(f"attempt {sequence} tick order or VERIFIED progress differs")
+                    break
+                if status == "complete" and (
+                    verified >= len(journal)
+                    or not _verified_in_window(journal[verified], started, recorded)
+                ):
+                    errors.append(f"attempt {sequence} tick VERIFIED outside result attempt")
+                    break
+                history.append(tick)
+                if status == "complete":
+                    verified += 1
+            if (errors or report.get("verified_marches") != verified
+                    or (report.get("status") == "suspended" and verified == 5)):
+                errors.append(f"attempt {sequence} result progress differs")
+                break
+            previous_result_hash = hashlib.sha256(result_path.read_bytes()).hexdigest()
+            previous_time = recorded
+            prior_orphan_bridged_to_five = False
+        previous_start_hash = start_hash
+    if not errors and terminal is not None and len(starts) != terminal.get("attempt_sequence"):
+        errors.append("terminal attempt chain is incomplete")
+    return history, errors
 
 
 class _ProofJournalProjection:
@@ -180,26 +389,70 @@ def _proof_matches_journal(
             == {key: value for key, value in entry.items() if key != "verified_at"})
 
 
+def preflight_attempt_chain(
+    job: GatherJobAuthority, ledger: JsonGatherJobStore,
+    checkpoints: JsonMissionStore, attempt_root: Path, evidence_root: Path,
+) -> None:
+    """Reject an unaccounted prior attempt before the driver launches another tick."""
+    progress = ledger.progress(job)
+    journal = list(ledger.verifications(job))
+    if progress.revoked or progress.dispatched_marches != progress.verified_marches:
+        raise ValueError("GATHER job has revoked or unverified dispatch progress")
+    history, errors = _attempt_chain_history(
+        job, ledger, checkpoints, None, attempt_root, evidence_root, journal,
+        allow_open_tail=True,
+    )
+    complete = [item for item in history if item.get("status") == "complete"]
+    if len(complete) != progress.verified_marches:
+        errors.append("attempt chain does not account for durable VERIFIED progress")
+    for item in complete:
+        slot = item["verified_marches"]
+        if type(slot) is not int or not 1 <= slot <= len(journal):
+            errors.append("attempt chain has an invalid VERIFIED slot")
+            continue
+        verified_at = _record_time(journal[slot - 1].get("verified_at"))
+        if verified_at is None or not job.starts_at <= verified_at < job.expires_at:
+            errors.append(f"slot {slot} VERIFIED outside job time scope")
+        matches = _bridge_artifacts(job, slot, journal, ledger, checkpoints, evidence_root)
+        if (len(matches) != 1 or not isinstance(item.get("evidence_path"), str)
+                or Path(item["evidence_path"]).resolve() != Path(matches[0]).resolve()):
+            errors.append(f"slot {slot} lacks one matching durable per-tick artifact")
+    if errors:
+        raise ValueError("GATHER attempt chain preflight blocked: " + "; ".join(errors))
+
+
 def audit_first_done_job(
     job: GatherJobAuthority, ledger: JsonGatherJobStore,
     checkpoints: JsonMissionStore, driver_report: Mapping[str, Any],
     evidence_root: Path,
+    *, attempt_root: Path | None = None, historical_replay: bool = False,
 ) -> dict[str, Any]:
     """Validate one structural closeout without promoting it to live proof."""
     errors: list[str] = []
     progress = ledger.progress(job)
     journal = ledger.verifications(job)
     reservations = ledger.reservations(job)
-    history = driver_report.get("history")
+    if historical_replay and attempt_root is None and "attempt_sequence" not in driver_report:
+        history = driver_report.get("history")
+    elif attempt_root is None or "attempt_sequence" not in driver_report:
+        errors.append("authoritative closeout needs a durable attempt chain")
+        history = []
+    else:
+        history, chain_errors = _attempt_chain_history(
+            job, ledger, checkpoints, driver_report,
+            attempt_root, evidence_root, journal,
+        )
+        errors.extend(chain_errors)
     if (driver_report.get("job_id") != job.job_id
             or driver_report.get("status") != "complete"
             or driver_report.get("verified_marches") != 5
             or driver_report.get("closeout") != list(journal)
             or type(driver_report.get("ticks")) is not int
             or not isinstance(history, list)
-            or driver_report.get("ticks") != len(history)
+            or (historical_replay
+                and driver_report.get("ticks") != len(history))
             or not _history_matches_job(job, history)):
-        errors.append("driver attempt has no matching complete five-entry closeout")
+        errors.append("driver attempt chain has no matching complete five-entry closeout")
         history = []
     if (progress.revoked or progress.verified_marches != 5 or progress.dispatched_marches != 5
             or len(journal) != 5 or len(reservations) != 5):
@@ -252,6 +505,8 @@ def audit_first_done_job(
         "status": "OFFLINE_REPLAY_PASS" if not errors else "BLOCKED",
         "highest_proven_status": "IMPLEMENTED",
         "first_done_live_proven": False,
+        "audit_scope": "historical_replay_only" if historical_replay else "authoritative_attempt_chain",
+        "closeout_authoritative": not historical_replay and not errors,
         "job_id": job.job_id,
         "verified_marches": progress.verified_marches,
         "mining_return_estimate": None,
@@ -313,7 +568,7 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("driver report is not an object")
         verdict = audit_first_done_job(
             job, JsonGatherJobStore(args.ledger_root), JsonMissionStore(args.checkpoint_root),
-            report, args.evidence_root,
+            report, args.evidence_root, attempt_root=args.driver_report.parent,
         )
         destination = write_verdict(args.output, workspace, verdict)
         print(json.dumps({**verdict, "report_path": str(destination)}, ensure_ascii=False))

@@ -899,7 +899,7 @@ nodes:
 
   - id: gather_job_driver
     kind: adapter
-    responsibility: Calls the canonical GATHER job tick with bounded tick and idle budgets, carries one startup job across stable occurrence IDs, and emits an append-only attempt report; live arming remains disabled until job-scoped preflight.
+    responsibility: Calls canonical bounded GATHER ticks for stable slot IDs, checks the durable prior attempt chain before another tick, records append-only attempt starts/results, and automatically consumes the FIRST DONE audit verdict or recovers a completed terminal report; live arming remains disabled.
     authority: canonical
     status: implemented
     path: scripts/run_gather_job.py
@@ -920,7 +920,7 @@ nodes:
 
   - id: first_done_job_audit
     kind: verification
-    responsibility: Compares one startup job, five ordered VERIFIED journal entries, durable checkpoint proofs, one bounded driver attempt and matching per-tick frame/formation/client evidence, emitting an append-only offline closeout verdict without claiming live completion.
+    responsibility: Validates the ordered append-only attempt chain across resume, rejects unaccounted or temporally foreign VERIFIED slots before another tick, and compares five durable journal/checkpoint/per-tick proofs for one offline closeout verdict without claiming live completion.
     authority: canonical
     status: implemented
     path: scripts/audit_first_done_job.py
@@ -1132,7 +1132,8 @@ edges:
   - {from: mission_runner, to: gather_cli, relation: composed_by}
   - {from: gather_cli, to: gather_runtime_evidence, relation: emits}
   - {from: gather_cli, to: gather_job_driver, relation: supplies_canonical_one_tick_result}
-  - {from: gather_job_driver, to: first_done_job_audit, relation: supplies_bounded_job_attempt_report}
+  - {from: gather_job_driver, to: first_done_job_audit, relation: supplies_ordered_attempt_chain_for_preflight_and_closeout}
+  - {from: first_done_job_audit, to: gather_job_driver, relation: blocks_next_tick_or_returns_offline_closeout_verdict}
   - {from: gather_job_store, to: first_done_job_audit, relation: supplies_ordered_verified_journal}
   - {from: mission_store, to: first_done_job_audit, relation: supplies_durable_engine_proof}
   - {from: gather_runtime_evidence, to: first_done_job_audit, relation: supplies_frame_bound_tick_records}

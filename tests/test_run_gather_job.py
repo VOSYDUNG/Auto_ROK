@@ -17,6 +17,7 @@ from harness.mission_store import CheckpointStatus, MissionCheckpoint
 from scripts.create_gather_job import build_artifact, write_artifact, write_launch_spec
 from scripts import run_gather_job as driver
 from scripts import run_gather_tick
+from scripts import audit_first_done_job as auditor
 from scripts.run_gather_job import build_parser, drive_job, _tick_command
 
 
@@ -233,11 +234,15 @@ def test_driver_consumes_canonical_cli_waiting_result_without_game(monkeypatch):
     assert [tick["run_id"] for tick in result["history"]] == [gather_slot_run_id(job, 1)] * 2
 
 
-def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(monkeypatch, capsys):
+@pytest.mark.parametrize("crash_phase", ["none", "before_result", "after_result"])
+def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(
+    monkeypatch, capsys, crash_phase,
+):
     """Only observation and actuation are synthetic; CLI, runner and journal are real."""
     window = {"hwnd": 1001, "pid": 2001, "process_path": r"C:\Game\MASS.exe"}
     precondition = "troop/commander selection policy is valid for this mission"
     actions = []
+    tick_calls = []
     starts = datetime.now(timezone.utc).timestamp()
     with TemporaryDirectory(dir=driver.ROOT / "workspace") as folder:
         root = Path(folder)
@@ -276,6 +281,7 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(monkeyp
             def observe(self, context):
                 self.observations += 1
                 if self.observations == 1:
+                    image_hash = f"{self.sequence:064x}"
                     baseline = {
                         "predicate_id": "march_queue_used_increased",
                         "counter_fact": "march_queue_used", "counter_value": self.sequence - 1,
@@ -287,7 +293,13 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(monkeyp
                         context.mission_id, context.task_id, f"before-{self.sequence}",
                         "NEW_TROOP_SETUP",
                         facts={"completion_baseline": baseline, "character_id": job.character_id,
-                               "window": window, "precondition_evidence": {precondition: True}},
+                               "window": window, "image_sha256": image_hash,
+                               "new_troop_formation_ready": True,
+                               "new_troop_formation_source":
+                                   "same_frame_new_troop_ocr_and_pixels_1366x768",
+                               "new_troop_formation_frame_id": f"before-{self.sequence}",
+                               "new_troop_formation_image_sha256": image_hash,
+                               "precondition_evidence": {precondition: True}},
                         allowed_actions=(AllowedAction("MARCH_WITH_CURRENT_SELECTION", True,
                                                        ("TROOP_MARCH",)),),
                         target_ids=("TROOP_MARCH",), observed_at=self.start,
@@ -298,7 +310,8 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(monkeyp
                         "WORLD_MAP_VIEW",
                         facts={"march_queue_used": self.sequence, "march_queue_capacity": 5,
                                "march_queue_source": "visible_ocr_queue_anchor",
-                               "character_id": job.character_id, "window": window},
+                               "character_id": job.character_id, "window": window,
+                               "image_sha256": f"{self.sequence + 100:064x}"},
                         observed_at=self.start + 1,
                     )
                 raise AssertionError("unexpected extra observation")
@@ -327,6 +340,7 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(monkeyp
         monkeypatch.setattr(run_gather_tick, "WindowsLiveObservationProvider", lambda *a, **k: object())
 
         def canonical_tick(command):
+            tick_calls.append(tuple(command))
             output = StringIO()
             with redirect_stdout(output):
                 code = run_gather_tick.main(command[2:] + [
@@ -336,28 +350,75 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(monkeyp
             return code, json.loads(output.getvalue())
 
         monkeypatch.setattr(driver, "_subprocess_tick", canonical_tick)
-        code = driver.main([
+        first_code = driver.main([
             "--launch-spec", str(launch), "--report-root", str(root / "reports"),
-            "--max-ticks", "5", "--idle-delay-seconds", "0", "--settle-seconds", "0",
+            "--max-ticks", "2", "--idle-delay-seconds", "0", "--settle-seconds", "0",
         ])
-        result = json.loads(capsys.readouterr().out)
+        first = json.loads(capsys.readouterr().out)
+        assert first_code == 3 and first["status"] == "suspended"
+        assert first["verified_marches"] == 2 and first["ticks"] == 2
+        assert first["audit_status"] is None
+        original_write = driver._write_report
+        original_audit = driver._audit_closeout
+        if crash_phase == "before_result":
+            def interrupt_result(path, result):
+                if result.get("attempt_sequence") == 2:
+                    raise OSError("synthetic crash after fifth persisted tick")
+                return original_write(path, result)
+            monkeypatch.setattr(driver, "_write_report", interrupt_result)
+        elif crash_phase == "after_result":
+            def interrupt_audit(job, result, report):
+                if result.get("attempt_sequence") == 2:
+                    raise OSError("synthetic crash after terminal result")
+                return original_audit(job, result, report)
+            monkeypatch.setattr(driver, "_audit_closeout", interrupt_audit)
+        second_code = driver.main([
+            "--launch-spec", str(launch), "--report-root", str(root / "reports"),
+            "--max-ticks", "3", "--idle-delay-seconds", "0", "--settle-seconds", "0",
+        ])
+        second_output = capsys.readouterr()
+        if crash_phase != "none":
+            assert second_code == 2 and "synthetic crash" in second_output.err
+            if crash_phase == "after_result":
+                monkeypatch.setattr(driver, "_audit_closeout", original_audit)
+            code = driver.main([
+                "--launch-spec", str(launch), "--report-root", str(root / "reports"),
+                "--max-ticks", "1", "--idle-delay-seconds", "0", "--settle-seconds", "0",
+            ])
+            recovered_output = capsys.readouterr()
+            assert recovered_output.out, recovered_output.err
+            result = json.loads(recovered_output.out)
+            if crash_phase == "before_result":
+                assert result["reason"] == "durable five-march closeout recovered"
+                assert result["ticks"] == 1
+            else:
+                assert result["reason"] == "five VERIFIED marches closed"
+                assert result["ticks"] == 3
+                assert not (Path(result["report_path"]).parent / "attempt-000003.start.json").exists()
+        else:
+            code = second_code
+            result = json.loads(second_output.out)
+            assert result["ticks"] == 3
         assert code == 0 and result["status"] == "complete"
-        assert result["verified_marches"] == 5 and result["ticks"] == 5
-        assert [item["verified_marches"] for item in result["history"]] == [1, 2, 3, 4, 5]
+        assert result["verified_marches"] == 5
+        assert result["audit_status"] == "OFFLINE_REPLAY_PASS"
         run_ids = [gather_slot_run_id(job, sequence) for sequence in range(1, 6)]
-        assert [item["run_id"] for item in result["history"]] == run_ids
+        assert [item["run_id"] for item in first["history"]] == run_ids[:2]
+        if crash_phase == "none":
+            assert [item["run_id"] for item in result["history"]] == run_ids[2:]
         assert [item["run_id"] for item in result["closeout"]] == run_ids
         assert [item["after_count"] for item in ledger.verifications(job)] == [1, 2, 3, 4, 5]
         assert actions == [(run_id, "MARCH_WITH_CURRENT_SELECTION") for run_id in run_ids]
+        if crash_phase == "after_result":
+            assert len(tick_calls) == 5
         assert Path(result["report_path"]).is_file()
-        recovered_code = driver.main([
+        assert Path(result["verdict_path"]).is_file()
+        already_code = driver.main([
             "--launch-spec", str(launch), "--report-root", str(root / "reports"),
             "--max-ticks", "1", "--idle-delay-seconds", "0", "--settle-seconds", "0",
         ])
-        recovered = json.loads(capsys.readouterr().out)
-        assert recovered_code == 0 and recovered["status"] == "complete"
-        assert recovered["reason"] == "durable five-march closeout recovered"
-        assert recovered["verified_marches"] == 5 and recovered["ticks"] == 1
+        assert already_code == 2
+        assert "immutable FIRST DONE verdict" in capsys.readouterr().err
         assert ledger.progress(job).dispatched_marches == 5
         assert len(actions) == 5
 
@@ -400,3 +461,61 @@ def test_launch_spec_rejects_resource_change_even_with_intact_artifact(monkeypat
         launch.write_text(json.dumps(spec), encoding="utf-8")
         monkeypatch.setattr(driver, "_subprocess_tick", lambda _: pytest.fail("no tick allowed"))
         assert driver.main(["--launch-spec", str(launch)]) == 2
+
+
+def test_attempt_preflight_failure_never_launches_a_tick(monkeypatch, capsys):
+    with TemporaryDirectory(dir=driver.ROOT / "workspace") as folder:
+        root = Path(folder)
+        now = datetime.now(timezone.utc)
+        scope = build_artifact(
+            job_id="preflight-block-job", task_id="task", character_id="character",
+            resource_type="FOOD", resource_level=5,
+            starts_at=now - timedelta(minutes=1), expires_at=now + timedelta(minutes=20),
+        )
+        artifact = write_artifact(root / "job.json", driver.ROOT / "workspace", scope)
+        monkeypatch.setattr(driver, "GATHER_JOB_STORE_ROOT", root / "ledger")
+        monkeypatch.setattr(auditor, "preflight_attempt_chain",
+                            lambda *_: (_ for _ in ()).throw(ValueError("damaged prior attempt")))
+        monkeypatch.setattr(driver, "_subprocess_tick", lambda _: pytest.fail("no tick allowed"))
+        code = driver.main([
+            "--gather-job", str(artifact), "--task-id", "task",
+            "--character-id", "character", "--resource-type", "FOOD",
+            "--resource-level", "5", "--report-root", str(root / "reports"),
+        ])
+        assert code == 2
+        assert "damaged prior attempt" in capsys.readouterr().err
+
+
+def test_automatic_blocked_audit_is_non_success_and_write_once(monkeypatch, capsys):
+    with TemporaryDirectory(dir=driver.ROOT / "workspace") as folder:
+        root = Path(folder)
+        now = datetime.now(timezone.utc)
+        scope = build_artifact(
+            job_id="audit-block-job", task_id="task", character_id="character",
+            resource_type="FOOD", resource_level=5,
+            starts_at=now - timedelta(minutes=1), expires_at=now + timedelta(minutes=20),
+        )
+        artifact = write_artifact(root / "job.json", driver.ROOT / "workspace", scope)
+        monkeypatch.setattr(driver, "GATHER_JOB_STORE_ROOT", root / "ledger")
+        monkeypatch.setattr(driver, "GATHER_CHECKPOINT_ROOT", root / "checkpoints")
+        monkeypatch.setattr(driver, "GATHER_EVIDENCE_ROOT", root / "evidence")
+        monkeypatch.setattr(driver, "drive_job", lambda *_, **__: {
+            "status": "complete", "reason": "synthetic false closeout",
+            "job_id": scope["job_id"], "ticks": 0, "verified_marches": 5,
+            "history": [], "closeout": [],
+        })
+        monkeypatch.setattr(driver, "_subprocess_tick", lambda _: pytest.fail("no tick allowed"))
+        args = [
+            "--gather-job", str(artifact), "--task-id", "task",
+            "--character-id", "character", "--resource-type", "FOOD",
+            "--resource-level", "5", "--report-root", str(root / "reports"),
+        ]
+        assert driver.main(args) == 4
+        output = json.loads(capsys.readouterr().out)
+        assert output["audit_status"] == "BLOCKED"
+        verdict_path = Path(output["verdict_path"])
+        original = verdict_path.read_bytes()
+        assert json.loads(original)["status"] == "BLOCKED"
+        assert driver.main(args) == 2
+        assert "immutable FIRST DONE verdict" in capsys.readouterr().err
+        assert verdict_path.read_bytes() == original

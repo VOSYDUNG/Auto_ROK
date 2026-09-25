@@ -1,20 +1,22 @@
 """Audit a real five-slot runner replay without promoting synthetic proof live."""
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+import hashlib
 import json
 from pathlib import Path
+import shutil
 
 import pytest
 
 from harness.gather_job_authority import compiled_gather_catalog
-from harness.gather_job_coordinator import GatherJobCoordinator
+from harness.gather_job_coordinator import GatherJobCoordinator, gather_slot_run_id
 from harness.gather_job_store import JsonGatherJobStore, load_gather_job_authority
 from harness.gather_replay_evidence import build_gather_tick_evidence, save_gather_tick_evidence
 from harness.mission_loader import compile_mission
 from harness.mission_runner import MissionRunner
 from harness.mission_runtime import AllowedAction, MissionContext, ToolFeedback, ToolSnapshot
 from harness.mission_store import CheckpointStatus, JsonMissionStore
-from scripts.audit_first_done_job import audit_first_done_job, write_verdict
+from scripts.audit_first_done_job import audit_first_done_job, preflight_attempt_chain, write_verdict
 from scripts.create_gather_job import build_artifact, write_artifact
 from scripts.run_gather_job import drive_job
 
@@ -88,7 +90,7 @@ class SyntheticMarchTool:
         })
 
 
-def replay(tmp_path):
+def replay(tmp_path, *, max_ticks=5):
     workspace = tmp_path / "workspace"
     now = datetime.now(timezone.utc)
     artifact = build_artifact(
@@ -139,17 +141,271 @@ def replay(tmp_path):
             "gather_job_journaled_this_tick": True, "evidence_path": str(path),
         }
 
-    report = drive_job(synthetic_tick, job_id=job.job_id, max_ticks=5,
+    report = drive_job(synthetic_tick, job_id=job.job_id, max_ticks=max_ticks,
                        max_idle_ticks=0, idle_delay_seconds=0, settle_seconds=0,
                        sleeper=lambda _: None)
-    assert report["status"] == "complete" and report["ticks"] == 5
+    assert report["ticks"] == max_ticks
+    assert report["status"] == ("complete" if max_ticks == 5 else "suspended")
     return job, ledger, checkpoints, report, evidence_root
+
+
+def attempt_chain(tmp_path, *, orphan_second=False):
+    job, ledger, checkpoints, report, evidence_root = replay(tmp_path)
+    root = tmp_path / "workspace" / "attempts"
+    root.mkdir(parents=True)
+    instant = datetime.now(timezone.utc)
+    # The replay builds all durable slots first. Project their verification
+    # wall-times into the two synthetic attempt windows being audited below.
+    journal_path = ledger._path(job)
+    journal_record = json.loads(journal_path.read_text(encoding="utf-8"))
+    for entry, seconds in zip(journal_record["verifications"], (0.2, 0.4, 2.2, 2.4, 2.6)):
+        entry["verified_at"] = (instant + timedelta(seconds=seconds)).isoformat()
+    journal_path.write_text(json.dumps(journal_record), encoding="utf-8")
+    report["closeout"] = list(ledger.verifications(job))
+
+    def put(name, record):
+        path = root / name
+        path.write_text(json.dumps(record, sort_keys=True), encoding="utf-8")
+        return path
+
+    def digest(path):
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    def start(sequence, initial, previous_start, previous_result, second):
+        record = {
+            "schema_version": 1, "kind": "attempt_start", "job_id": job.job_id,
+            "task_id": job.task_id, "character_id": job.character_id,
+            "catalog_digest": job.catalog_digest, "attempt_sequence": sequence,
+            "initial_verified": initial, "started_at": (instant + timedelta(seconds=second)).isoformat(),
+            "previous_start_sha256": digest(previous_start) if previous_start else None,
+            "previous_result_sha256": digest(previous_result) if previous_result else None,
+        }
+        return put(f"attempt-{sequence:06d}.start.json", record)
+
+    def result(sequence, initial, first, last, status, start_path, second, *, recovered=False):
+        value = dict(report)
+        value.update({
+            "status": status, "reason": ("durable five-march closeout recovered" if recovered
+                                      else "five VERIFIED marches closed" if status == "complete"
+                                      else "GATHER job tick ceiling reached"),
+            "verified_marches": last, "history": report["history"][first:last],
+            "ticks": last - first, "closeout": report["closeout"] if status == "complete" else None,
+            "attempt_sequence": sequence, "initial_verified": initial,
+            "start_sha256": digest(start_path),
+            "recorded_at": (instant + timedelta(seconds=second)).isoformat(),
+        })
+        if recovered:
+            value["history"] = [{"status": "complete", "run_id": None,
+                                 "verified_marches": 5, "evidence_path": None}]
+            value["ticks"] = 1
+        return put(f"attempt-{sequence:06d}.result.json", value), value
+
+    start1 = start(1, 0, None, None, 0)
+    result1, _ = result(1, 0, 0, 2, "suspended", start1, 1)
+    start2 = start(2, 2, start1, result1, 2)
+    if orphan_second:
+        start3 = start(3, 5, start2, None, 4)
+        terminal_path, terminal = result(3, 5, 5, 5, "complete", start3, 5, recovered=True)
+    else:
+        terminal_path, terminal = result(2, 2, 2, 5, "complete", start2, 3)
+    return job, ledger, checkpoints, terminal, evidence_root, root, terminal_path
+
+
+def partial_chain_for_preflight(tmp_path):
+    job, ledger, checkpoints, report, evidence_root = replay(tmp_path, max_ticks=2)
+    root = tmp_path / "workspace" / "attempts"
+    root.mkdir(parents=True)
+    instant = datetime.now(timezone.utc)
+    journal_path = ledger._path(job)
+    journal_record = json.loads(journal_path.read_text(encoding="utf-8"))
+    for entry, seconds in zip(journal_record["verifications"], (0.2, 0.4)):
+        entry["verified_at"] = (instant + timedelta(seconds=seconds)).isoformat()
+    journal_path.write_text(json.dumps(journal_record), encoding="utf-8")
+
+    def put(name, value):
+        path = root / name
+        path.write_text(json.dumps(value, sort_keys=True), encoding="utf-8")
+        return path
+
+    first_start = put("attempt-000001.start.json", {
+        "schema_version": 1, "kind": "attempt_start", "job_id": job.job_id,
+        "task_id": job.task_id, "character_id": job.character_id,
+        "catalog_digest": job.catalog_digest, "attempt_sequence": 1,
+        "initial_verified": 0, "started_at": instant.isoformat(),
+        "previous_start_sha256": None, "previous_result_sha256": None,
+    })
+    first_report = dict(report)
+    first_report.update({
+        "recorded_at": (instant + timedelta(seconds=1)).isoformat(),
+        "attempt_sequence": 1, "initial_verified": 0,
+        "start_sha256": hashlib.sha256(first_start.read_bytes()).hexdigest(),
+    })
+    first_result = put("attempt-000001.result.json", first_report)
+    second_start = put("attempt-000002.start.json", {
+        "schema_version": 1, "kind": "attempt_start", "job_id": job.job_id,
+        "task_id": job.task_id, "character_id": job.character_id,
+        "catalog_digest": job.catalog_digest, "attempt_sequence": 2,
+        "initial_verified": 2,
+        "started_at": (instant + timedelta(seconds=2)).isoformat(),
+        "previous_start_sha256": hashlib.sha256(first_start.read_bytes()).hexdigest(),
+        "previous_result_sha256": hashlib.sha256(first_result.read_bytes()).hexdigest(),
+    })
+    return job, ledger, checkpoints, evidence_root, root, first_result, second_start
+
+
+@pytest.mark.parametrize("orphan_second", [False, True])
+def test_ordered_attempt_chain_and_exact_durable_bridge_pass_offline(tmp_path, orphan_second):
+    job, ledger, checkpoints, terminal, evidence_root, root, _ = attempt_chain(
+        tmp_path, orphan_second=orphan_second,
+    )
+    verdict = audit_first_done_job(
+        job, ledger, checkpoints, terminal, evidence_root, attempt_root=root,
+    )
+    assert verdict["status"] == "OFFLINE_REPLAY_PASS", verdict["errors"]
+    assert len(verdict["checked_evidence_paths"]) == 5
+
+
+@pytest.mark.parametrize("damage", [
+    "missing", "duplicate", "reordered", "foreign", "edited", "stale", "failed",
+])
+def test_attempt_chain_damage_blocks_closeout(tmp_path, damage):
+    job, ledger, checkpoints, terminal, evidence_root, root, _ = attempt_chain(tmp_path)
+    first = root / "attempt-000001.result.json"
+    second_start = root / "attempt-000002.start.json"
+    if damage == "missing":
+        first.unlink()
+    elif damage == "duplicate":
+        shutil.copyfile(first, root / "attempt-000001.result-copy.json")
+    elif damage == "reordered":
+        terminal["history"].reverse()
+        (root / "attempt-000002.result.json").write_text(json.dumps(terminal), encoding="utf-8")
+    elif damage == "foreign":
+        value = json.loads(second_start.read_text(encoding="utf-8"))
+        value["job_id"] = "foreign-job"
+        second_start.write_text(json.dumps(value), encoding="utf-8")
+    elif damage == "edited":
+        value = json.loads(first.read_text(encoding="utf-8"))
+        value["reason"] = "edited after next attempt started"
+        first.write_text(json.dumps(value), encoding="utf-8")
+    elif damage == "stale":
+        value = json.loads(second_start.read_text(encoding="utf-8"))
+        value["started_at"] = (job.starts_at - timedelta(seconds=1)).isoformat()
+        second_start.write_text(json.dumps(value), encoding="utf-8")
+    else:
+        value = json.loads(first.read_text(encoding="utf-8"))
+        value["status"] = "failed"
+        first.write_text(json.dumps(value), encoding="utf-8")
+        next_start = json.loads(second_start.read_text(encoding="utf-8"))
+        next_start["previous_result_sha256"] = hashlib.sha256(first.read_bytes()).hexdigest()
+        second_start.write_text(json.dumps(next_start), encoding="utf-8")
+    verdict = audit_first_done_job(
+        job, ledger, checkpoints, terminal, evidence_root, attempt_root=root,
+    )
+    assert verdict["status"] == "BLOCKED"
+
+
+@pytest.mark.parametrize("damage", ["missing", "ambiguous", "before_persistence"])
+def test_unreported_attempt_needs_unique_persisted_tick_artifact(tmp_path, damage):
+    job, ledger, checkpoints, terminal, evidence_root, root, _ = attempt_chain(
+        tmp_path, orphan_second=True,
+    )
+    run_id = terminal["closeout"][2]["run_id"]
+    source = next(
+        path for path in evidence_root.rglob("*.json")
+        if json.loads(path.read_text(encoding="utf-8")).get("identity", {}).get("run_id") == run_id
+    )
+    if damage == "missing":
+        source.unlink()
+    elif damage == "ambiguous":
+        shutil.copyfile(source, source.with_name("duplicate-matching-tick.json"))
+    else:
+        start = root / "attempt-000003.start.json"
+        value = json.loads(start.read_text(encoding="utf-8"))
+        value["initial_verified"] = 2
+        start.write_text(json.dumps(value), encoding="utf-8")
+    verdict = audit_first_done_job(
+        job, ledger, checkpoints, terminal, evidence_root, attempt_root=root,
+    )
+    assert verdict["status"] == "BLOCKED"
+
+
+def test_orphan_verified_time_must_belong_to_the_missing_result_attempt(tmp_path):
+    job, ledger, checkpoints, terminal, evidence_root, root, _ = attempt_chain(
+        tmp_path, orphan_second=True,
+    )
+    journal_path = ledger._path(job)
+    raw = json.loads(journal_path.read_text(encoding="utf-8"))
+    next_start = json.loads((root / "attempt-000003.start.json").read_text(encoding="utf-8"))
+    raw["verifications"][2]["verified_at"] = (
+        datetime.fromisoformat(next_start["started_at"]) + timedelta(milliseconds=1)
+    ).isoformat()
+    journal_path.write_text(json.dumps(raw), encoding="utf-8")
+    terminal["closeout"] = list(ledger.verifications(job))
+    verdict = audit_first_done_job(
+        job, ledger, checkpoints, terminal, evidence_root, attempt_root=root,
+    )
+    assert verdict["status"] == "BLOCKED"
+    assert any("outside orphan attempt" in error for error in verdict["errors"])
+
+
+def test_preflight_accepts_unique_durable_orphan_bridge(tmp_path):
+    job, ledger, checkpoints, evidence_root, root, first_result, second_start = (
+        partial_chain_for_preflight(tmp_path)
+    )
+    first_result.unlink()
+    start = json.loads(second_start.read_text(encoding="utf-8"))
+    start["previous_result_sha256"] = None
+    second_start.write_text(json.dumps(start), encoding="utf-8")
+    preflight_attempt_chain(job, ledger, checkpoints, root, evidence_root)
+
+
+@pytest.mark.parametrize("damage", ["edited", "failed", "foreign", "orphan_ambiguous", "orphan_late"])
+def test_preflight_rejects_damaged_predecessor_before_next_tick(tmp_path, damage):
+    job, ledger, checkpoints, evidence_root, root, first_result, second_start = (
+        partial_chain_for_preflight(tmp_path)
+    )
+    preflight_attempt_chain(job, ledger, checkpoints, root, evidence_root)
+    start = json.loads(second_start.read_text(encoding="utf-8"))
+    if damage in {"edited", "failed"}:
+        report = json.loads(first_result.read_text(encoding="utf-8"))
+        if damage == "edited":
+            report["reason"] = "edited after successor started"
+        else:
+            report["status"] = "failed"
+        first_result.write_text(json.dumps(report), encoding="utf-8")
+        if damage == "failed":
+            start["previous_result_sha256"] = hashlib.sha256(first_result.read_bytes()).hexdigest()
+    elif damage == "foreign":
+        start["job_id"] = "other-job"
+    else:
+        first_result.unlink()
+        start["previous_result_sha256"] = None
+        if damage == "orphan_ambiguous":
+            source = next(path for path in evidence_root.rglob("*.json") if
+                          json.loads(path.read_text(encoding="utf-8")).get("identity", {}).get("run_id")
+                          == gather_slot_run_id(job, 1))
+            shutil.copyfile(source, source.with_name("duplicate-matching-tick.json"))
+        else:
+            journal_path = ledger._path(job)
+            raw = json.loads(journal_path.read_text(encoding="utf-8"))
+            raw["verifications"][1]["verified_at"] = (
+                datetime.fromisoformat(start["started_at"]) + timedelta(milliseconds=1)
+            ).isoformat()
+            journal_path.write_text(json.dumps(raw), encoding="utf-8")
+    second_start.write_text(json.dumps(start), encoding="utf-8")
+    with pytest.raises(ValueError, match="attempt chain preflight blocked"):
+        preflight_attempt_chain(job, ledger, checkpoints, root, evidence_root)
 
 
 def test_five_verified_journal_entries_and_frame_facts_pass_only_offline(tmp_path):
     job, ledger, checkpoints, driver, evidence_root = replay(tmp_path)
-    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root)
+    closeout = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root)
+    assert closeout["status"] == "BLOCKED"
+    assert any("durable attempt chain" in error for error in closeout["errors"])
+    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root, historical_replay=True)
     assert verdict["status"] == "OFFLINE_REPLAY_PASS", verdict["errors"]
+    assert verdict["audit_scope"] == "historical_replay_only"
+    assert verdict["closeout_authoritative"] is False
     assert verdict["highest_proven_status"] == "IMPLEMENTED"
     assert verdict["first_done_live_proven"] is False
     assert verdict["mining_return_estimate"] is None
@@ -159,7 +415,7 @@ def test_five_verified_journal_entries_and_frame_facts_pass_only_offline(tmp_pat
 def test_missing_or_forged_formation_or_driver_closeout_blocks(tmp_path):
     job, ledger, checkpoints, driver, evidence_root = replay(tmp_path)
     driver["history"].pop(2)
-    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root)
+    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root, historical_replay=True)
     assert verdict["status"] == "BLOCKED"
     assert any("slot 3" in error for error in verdict["errors"])
 
@@ -168,12 +424,12 @@ def test_missing_or_forged_formation_or_driver_closeout_blocks(tmp_path):
     record = json.loads(path.read_text(encoding="utf-8"))
     record["engine"]["before_facts"]["new_troop_formation_ready"] = False
     path.write_text(json.dumps(record), encoding="utf-8")
-    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root)
+    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root, historical_replay=True)
     assert verdict["status"] == "BLOCKED"
     assert any("slot 1" in error for error in verdict["errors"])
 
     driver["closeout"] = driver["closeout"][:-1]
-    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root)
+    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root, historical_replay=True)
     assert verdict["status"] == "BLOCKED"
     assert any("driver attempt" in error for error in verdict["errors"])
 
@@ -186,7 +442,7 @@ def test_stale_baseline_or_changed_client_cannot_be_closeout_evidence(tmp_path):
         record["engine"]["before_observed_at"] - 11
     )
     path.write_text(json.dumps(record), encoding="utf-8")
-    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root)
+    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root, historical_replay=True)
     assert verdict["status"] == "BLOCKED"
     assert any("slot 2" in error for error in verdict["errors"])
 
@@ -195,7 +451,7 @@ def test_stale_baseline_or_changed_client_cannot_be_closeout_evidence(tmp_path):
     record = json.loads(path.read_text(encoding="utf-8"))
     record["engine"]["after_facts"]["window"]["pid"] += 1
     path.write_text(json.dumps(record), encoding="utf-8")
-    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root)
+    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root, historical_replay=True)
     assert verdict["status"] == "BLOCKED"
     assert any("slot 4" in error for error in verdict["errors"])
 
@@ -231,7 +487,7 @@ def test_checkpoint_proof_must_match_the_durable_journal(tmp_path, part):
         proof["before_snapshot"]["observed_at"] += 0.2
     checkpoints.save(replace(checkpoint, verified_transition=proof),
                      expected_revision=checkpoint.revision)
-    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root)
+    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root, historical_replay=True)
     assert verdict["status"] == "BLOCKED"
     assert any("slot 1 checkpoint proof" in error for error in verdict["errors"])
 
@@ -239,19 +495,19 @@ def test_checkpoint_proof_must_match_the_durable_journal(tmp_path, part):
 def test_driver_attempt_order_count_and_revocation_are_required(tmp_path):
     job, ledger, checkpoints, driver, evidence_root = replay(tmp_path)
     driver["ticks"] -= 1
-    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root)
+    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root, historical_replay=True)
     assert verdict["status"] == "BLOCKED"
     assert any("driver attempt" in error for error in verdict["errors"])
 
     driver["ticks"] += 1
     driver["history"][0], driver["history"][1] = driver["history"][1], driver["history"][0]
-    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root)
+    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root, historical_replay=True)
     assert verdict["status"] == "BLOCKED"
     assert any("driver attempt" in error for error in verdict["errors"])
 
     driver["history"].sort(key=lambda item: item["verified_marches"])
     ledger.revoke(job)
-    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root)
+    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root, historical_replay=True)
     assert verdict["status"] == "BLOCKED"
     assert any("revoked" in error for error in verdict["errors"])
 
@@ -262,6 +518,6 @@ def test_unsupported_formation_source_cannot_pass_offline_audit(tmp_path):
     record = json.loads(path.read_text(encoding="utf-8"))
     record["engine"]["before_facts"]["new_troop_formation_source"] = "untrusted_source"
     path.write_text(json.dumps(record), encoding="utf-8")
-    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root)
+    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root, historical_replay=True)
     assert verdict["status"] == "BLOCKED"
     assert any("slot 1" in error for error in verdict["errors"])
