@@ -48,7 +48,8 @@ preflight phải lưu job/nhân vật/frame/hash/client/thời điểm của xá
 FIRST DONE không đòi OCR tên nhân vật từ UI. `character_id` hiện do CLI cấu
 hình với nguồn `configured_single_character_scope`; riêng giá trị cấu hình
 chưa phải bằng chứng xác nhận khởi đầu. Để mở live, còn thiếu artifact xác
-nhận này, hàng đợi khởi đầu **0/5** và chuỗi hậu kiểm live mới. Hàng đợi 0/5 cần được
+nhận từ frame thật được driver tiêu thụ, hàng đợi khởi đầu **0/5** và chuỗi
+hậu kiểm live mới. Hàng đợi 0/5 cần được
 quan sát trước lượt đầu để chứng minh cả năm đạo của vòng này do harness điều.
 
 Trace cô lập input của đường live cũ gắn với một `run_id`; job FIRST DONE có
