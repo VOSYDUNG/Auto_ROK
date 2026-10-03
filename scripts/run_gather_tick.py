@@ -8,6 +8,7 @@ later validator can distinguish dispatch from verified live completion.
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path
@@ -45,7 +46,7 @@ from harness.mission_loader import compile_mission  # noqa: E402
 from harness.mission_runner import MissionRunner  # noqa: E402
 from harness.mission_runtime import MissionContext  # noqa: E402
 from harness.mission_store import CheckpointStatus, JsonMissionStore  # noqa: E402
-from harness.mission_tool import BoundedMissionTool, HumanInterfaceActionProvider  # noqa: E402
+from harness.mission_tool import BoundedMissionTool, HumanInterfaceActionProvider, InterferenceCheck  # noqa: E402
 from harness.ocr_semantics import OcrSemanticObservationProvider, OcrTargetSpec  # noqa: E402
 from harness.overlay_events import OverlayEventWriter  # noqa: E402
 from harness.policy_overlay import PolicyEvidenceObservationProvider  # noqa: E402
@@ -282,9 +283,175 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    try:
+class _SessionJobInputGuard(GatherJobInputGuard):
+    """Revalidate retained session inputs after any bounded decision wait."""
+
+    def __init__(self, session, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.session = session
+
+    def check(self, context, before, choice, scene, resolved):
+        try:
+            self.session._dispatch_preflight(context, self.job, self.catalog)
+        except Exception as exc:
+            return InterferenceCheck(False, "GATHER_SESSION_PREFLIGHT_FAILED",
+                                     {"error": f"{type(exc).__name__}: {exc}"})
+        return super().check(context, before, choice, scene, resolved)
+
+
+class GatherRuntimeSession:
+    """One job's canonical runtime, retained until close; no observation caching.
+
+    Only run/resource/host-trace vary per step. Configuration and authority bytes
+    are pinned on first use and rechecked before input, including after a model
+    wait. Construction is lazy so denied preflight never creates an actuator.
+    """
+
+    def __init__(self, args: argparse.Namespace):
+        self._args = deepcopy(args)
+        self._checkpoint_store = JsonMissionStore(args.checkpoint_root)
+        self._plans = {}
+        self._assets = None
+        self._loaded_profiles = None
+        self._base_observations = None
+        self._capture_provider = None
+        self._runner = None
+        self._resource_providers = {}
+        self._resource_guards = {}
+        self._host_guard = None
+        self._actuator = None
+        self._decision_provider = None
+        self._active_args = None
+        self._closed = False
+        self._stepping = False
+
+    def _assert_binding(self):
+        args = self._args
+        paths = [ROOT / "config" / name for name in (
+            "mission_flows.yaml", "ui_states.yaml", "queue_indicator_profile.json",
+        )]
+        paths += [Path(value).resolve() for value in (
+            args.gather_job, args.candidates, args.main_view_profile,
+            args.resource_level_profile, args.local_llm_config,
+            args.troop_policy_approval,
+        ) if value]
+        current = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
+        if self._assets is None:
+            self._assets = current
+        elif current != self._assets:
+            raise ValueError("GATHER session authority or runtime assets changed")
+
+    def _compiled_plan(self, args):
+        key = (args.resource_type, args.resource_level)
+        if key not in self._plans:
+            self._plans[key] = compile_mission(
+                ROOT / "config" / "mission_flows.yaml", ROOT / "config" / "ui_states.yaml",
+                "GATHER_RESOURCE",
+                {"resource_type": args.resource_type, "resource_level": args.resource_level},
+            )
+        return self._plans[key]
+
+    def _profiles(self):
+        if self._loaded_profiles is None:
+            self._loaded_profiles = (
+                _candidate_specs(self._args.candidates),
+                MainViewProfile.load(self._args.main_view_profile),
+                ResourceLevelProfile.load(self._args.resource_level_profile),
+            )
+        return self._loaded_profiles
+
+    def _base_provider(self, args, candidate_specs, main_view_profile):
+        if self._base_observations is None:
+            observations = WindowsLiveObservationProvider(
+                args.workspace_root,
+                ocr_backend=args.ocr_backend,
+            )
+            self._capture_provider = observations
+            observations = OcrSemanticObservationProvider(observations, candidate_specs)
+            # The template reader for the march queue.  Built in M3 and, until
+            # now, wired into nothing: the live tick got its queue fact only
+            # from whole-frame OCR, which is exactly the source this replaced.
+            # Completion is evidenced by the queue count RISING, so without
+            # this a successful march could never be proven and the runner
+            # kept ticking - 64 wasted ticks across today's runs, the single
+            # largest bucket.
+            observations = QueueIndicatorObservationProvider(
+                observations, ROOT / "config" / "queue_indicator_profile.json"
+            )
+            observations = FarmSearchVisualObservationProvider(observations)
+            observations = MainViewVisualObservationProvider(observations, main_view_profile)
+            # Second, independent route to WORLD_MAP_VIEW.  The visual signature
+            # above cannot carry that state - open terrain looks different
+            # everywhere you pan - so the coordinate readout carries it instead.
+            observations = MapCoordinateObservationProvider(observations)
+            self._base_observations = observations
+        return self._base_observations
+
+    def _dispatch_preflight(self, context, job, catalog):
+        self._assert_binding()
+        args = self._active_args
+        if self._closed or args is None or context.run_id != args.run_id:
+            raise ValueError("GATHER session is not bound to this active run")
+        current = load_gather_job_authority(
+            Path(args.gather_job), canonical_actions=catalog.actions,
+            expected_catalog_digest=catalog.digest,
+        )
+        if current != job:
+            raise ValueError("GATHER session job scope changed")
+        if args.input_isolation_evidence is not None:
+            host = validate_gather_job_host_trace(
+                Path(args.input_isolation_evidence), expected_run_id=context.run_id,
+                expected_client=_attested_job_client(job.job_id, args.startup_attestation_sha256),
+                workspace_root=ROOT / "workspace",
+            )
+            if host.get("ready") is not True:
+                raise ValueError("GATHER session host trace is not ready")
+
+    def step(self, *, run_id=None, resource_type=None, host_trace_path=None):
+        if self._closed:
+            raise RuntimeError("GATHER runtime session is closed")
+        if self._stepping:
+            raise RuntimeError("GATHER runtime session step is already active")
+        args = deepcopy(self._args)
+        if run_id is not None:
+            args.run_id = run_id
+        if resource_type is not None:
+            args.resource_type = resource_type
+        if host_trace_path is not None:
+            args.input_isolation_evidence = str(host_trace_path)
+        self._stepping = True
+        self._active_args = args
+        try:
+            # Preserve typed argument/preflight failures before asset binding.
+            return self._step(args)
+        except Exception as exc:
+            return 2, {"status": "failed", "error": {
+                "type": type(exc).__name__, "message": str(exc),
+            }}
+        finally:
+            self._active_args = None
+            self._stepping = False
+
+    def close(self):
+        if self._stepping:
+            raise RuntimeError("cannot close an active GATHER step")
+        if self._closed:
+            return
+        self._closed = True
+        resources = (self._capture_provider, self._decision_provider, self._actuator)
+        self._runner = self._base_observations = self._decision_provider = self._actuator = None
+        self._checkpoint_store = self._loaded_profiles = self._active_args = self._capture_provider = None
+        self._plans.clear()
+        self._resource_providers.clear()
+        self._resource_guards.clear()
+        self._host_guard = None
+        self._assets = None
+        for resource in resources:
+            close = getattr(resource, "close", None)
+            if callable(close):
+                close()
+
+    def _step(self, args):
         if not 0.0 <= args.min_target_confidence <= 1.0:
             raise ValueError("min-target-confidence must be within [0, 1]")
         if args.troop_policy_approval and args.approve_current_troop_selection:
@@ -296,9 +463,10 @@ def main(argv: list[str] | None = None) -> int:
             or args.r3_repetition
         ):
             raise ValueError("GATHER_JOB_CANNOT_MIX_LEGACY_B003_OR_R3")
-        if args.gather_job and args.arm_live and not all((
-            args.startup_attestation_sha256, args.run_id, args.input_isolation_evidence,
-        )):
+        if args.gather_job and args.arm_live and (
+            not args.startup_attestation_sha256
+            or (args.run_id is not None and not args.input_isolation_evidence)
+        ):
             raise ValueError("GATHER job live arm requires pinned startup attestation, current run ID and fresh host trace")
         if args.startup_attestation_sha256 and not args.gather_job:
             raise ValueError("startup attestation digest requires --gather-job")
@@ -313,12 +481,8 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("overlay events must be under workspace")
             overlay_writer = OverlayEventWriter(overlay_path)
 
-        compiled = compile_mission(
-            ROOT / "config" / "mission_flows.yaml",
-            ROOT / "config" / "ui_states.yaml",
-            "GATHER_RESOURCE",
-            {"resource_type": args.resource_type, "resource_level": args.resource_level},
-        )
+        self._assert_binding()
+        compiled = self._compiled_plan(args)
         if not args.gather_job and not args.run_id:
             raise ValueError("--run-id is required without --gather-job")
         context = MissionContext("GATHER_RESOURCE", args.task_id, args.run_id or "")
@@ -326,7 +490,7 @@ def main(argv: list[str] | None = None) -> int:
         gather_job_store = None
         gather_catalog = None
         job_coordinator = None
-        checkpoint_store = JsonMissionStore(args.checkpoint_root)
+        checkpoint_store = self._checkpoint_store
         if args.gather_job:
             workspace_root = (ROOT / "workspace").resolve()
             job_path = Path(args.gather_job).resolve()
@@ -369,17 +533,19 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("GATHER job run_id must match the current deterministic slot")
             if job_plan.closed:
                 closeout_path = persist_gather_job_closeout(gather_job, job_plan, args.evidence_root)
-                print(json.dumps({
+                return 0, {
                     "status": "complete", "gather_job_id": gather_job.job_id,
                     "startup_attestation_sha256": startup_attestation_sha256,
                     "gather_job_verified_marches": job_plan.progress.verified_marches,
                     "gather_job_closed_at_five": True,
-                    "gather_job_closeout": job_plan.closeout,
+                    "gather_job_closeout": list(job_plan.closeout),
                     "gather_job_closeout_path": str(closeout_path),
                     "gather_job_journaled_this_tick": False,
-                }, ensure_ascii=False))
-                return 0
+                }
+            if args.arm_live and not all((args.run_id, args.input_isolation_evidence)):
+                raise ValueError("GATHER job live arm requires pinned startup attestation, current run ID and fresh host trace")
             context = MissionContext("GATHER_RESOURCE", args.task_id, job_plan.run_id)
+            args.run_id = context.run_id
         r3_reservation: dict[str, object] | None = None
         if args.r3_repetition:
             reservation_path = Path(args.r3_reservation_ledger).resolve()
@@ -406,9 +572,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.arm_live and host_input_isolation.get("ready") is not True:
             reasons = "; ".join(str(item) for item in host_input_isolation.get("reasons", []))
             raise ValueError("LIVE_ARM_REQUIRES_READY_HOST_INPUT_ISOLATION" + (f": {reasons}" if reasons else ""))
-        candidate_specs = _candidate_specs(args.candidates)
-        main_view_profile = MainViewProfile.load(args.main_view_profile)
-        resource_level_profile = ResourceLevelProfile.load(args.resource_level_profile)
+        candidate_specs, main_view_profile, resource_level_profile = self._profiles()
 
         approval: TroopSelectionApproval | None = None
         if gather_job is None:
@@ -429,78 +593,77 @@ def main(argv: list[str] | None = None) -> int:
 
         # Provenance -> OCR semantics -> trained visual/layout evidence -> trained
         # typed controls -> visible facts -> occurrence-bound operator policy.
-        observations = WindowsLiveObservationProvider(
-            args.workspace_root,
-            ocr_backend=args.ocr_backend,
-        )
-        observations = OcrSemanticObservationProvider(observations, candidate_specs)
-        # The template reader for the march queue.  Built in M3 and, until
-        # now, wired into nothing: the live tick got its queue fact only
-        # from whole-frame OCR, which is exactly the source this replaced.
-        # Completion is evidenced by the queue count RISING, so without
-        # this a successful march could never be proven and the runner
-        # kept ticking - 64 wasted ticks across today's runs, the single
-        # largest bucket.
-        observations = QueueIndicatorObservationProvider(
-            observations, ROOT / "config" / "queue_indicator_profile.json"
-        )
-        observations = FarmSearchVisualObservationProvider(observations)
-        observations = MainViewVisualObservationProvider(observations, main_view_profile)
-        # Second, independent route to WORLD_MAP_VIEW.  The visual signature
-        # above cannot carry that state - open terrain looks different
-        # everywhere you pan - so the coordinate readout carries it instead.
-        observations = MapCoordinateObservationProvider(observations)
-        observations = ResourceLevelControlObservationProvider(
-            observations,
-            resource_level_profile,
-            # The search panel is centred under the SELECTED category, so
-            # the trained slider geometry is only correct for the category
-            # it was trained on.  Without this the level click lands on the
-            # neighbouring panel's minus button.
-            resource_type=args.resource_type,
-        )
-        observations = GatherFactObservationProvider(observations, character_id=args.character_id)
-        if gather_job is None:
-            observations = PolicyEvidenceObservationProvider(observations, approvals)
-        else:
-            observations = GatherClientBindingObservationProvider(
-                observations, gather_job, gather_job_store,
-            )
-            observations = PolicyEvidenceObservationProvider(
+        observations = self._base_provider(args, candidate_specs, main_view_profile)
+        resource_key = (args.resource_type, args.resource_level)
+        if resource_key not in self._resource_providers:
+            observations = ResourceLevelControlObservationProvider(
                 observations,
-                gather_job=gather_job,
-                job_progress=lambda: gather_job_store.progress(gather_job),
-                catalog_digest=gather_catalog.digest,
-                canonical_actions=gather_catalog.actions,
-                max_frame_age_seconds=GATHER_JOB_MAX_FRAME_AGE_SECONDS,
+                resource_level_profile,
+                # The search panel is centred under the SELECTED category, so
+                # the trained slider geometry is only correct for the category
+                # it was trained on.  Without this the level click lands on the
+                # neighbouring panel's minus button.
+                resource_type=args.resource_type,
             )
+            observations = GatherFactObservationProvider(observations, character_id=args.character_id)
+            if gather_job is None:
+                observations = PolicyEvidenceObservationProvider(observations, approvals)
+            else:
+                observations = GatherClientBindingObservationProvider(
+                    observations, gather_job, gather_job_store,
+                )
+                observations = PolicyEvidenceObservationProvider(
+                    observations,
+                    gather_job=gather_job,
+                    job_progress=lambda: gather_job_store.progress(gather_job),
+                    catalog_digest=gather_catalog.digest,
+                    canonical_actions=gather_catalog.actions,
+                    max_frame_age_seconds=GATHER_JOB_MAX_FRAME_AGE_SECONDS,
+                )
 
-        surface = GatherScreenMappedActionSurface(
-            TRAINED_NATIVE_SHORTCUTS,
-            min_target_confidence=args.min_target_confidence,
-            allow_unscored_exact_targets=any(spec.allow_unscored_exact for spec in candidate_specs),
-        )
-        input_guard = WindowsForegroundInterferenceGuard(
-            armed=args.arm_live, require_process_path=gather_job is not None,
-        )
-        if gather_job is not None:
-            input_guard = GatherJobInputGuard(
-                input_guard, gather_job, gather_job_store, gather_catalog,
-                max_frame_age_seconds=GATHER_JOB_MAX_FRAME_AGE_SECONDS,
+            if self._host_guard is None:
+                self._host_guard = WindowsForegroundInterferenceGuard(
+                    armed=args.arm_live, require_process_path=gather_job is not None,
+                )
+            input_guard = self._host_guard
+            if gather_job is not None:
+                input_guard = _SessionJobInputGuard(
+                    self, input_guard, gather_job, gather_job_store, gather_catalog,
+                    max_frame_age_seconds=GATHER_JOB_MAX_FRAME_AGE_SECONDS,
+                )
+            self._resource_providers[resource_key] = observations
+            self._resource_guards[resource_key] = input_guard
+        observations = self._resource_providers[resource_key]
+        input_guard = self._resource_guards[resource_key]
+        if self._runner is None:
+            surface = GatherScreenMappedActionSurface(
+                TRAINED_NATIVE_SHORTCUTS,
+                min_target_confidence=args.min_target_confidence,
+                allow_unscored_exact_targets=any(spec.allow_unscored_exact for spec in candidate_specs),
             )
-        action_provider = HumanInterfaceActionProvider(
-            surface,
-            WindowsHumanInputActuator(),
-            input_guard,
-        )
-        tool = BoundedMissionTool(compiled, observations, action_provider)
-        decision_provider = _local_llm_provider(args.local_llm_config)
-        runner = MissionRunner(
-            compiled,
-            tool,
-            checkpoint_store,
-            decision_provider=decision_provider,
-        )
+            self._actuator = WindowsHumanInputActuator()
+            action_provider = HumanInterfaceActionProvider(surface, self._actuator, input_guard)
+            tool = BoundedMissionTool(compiled, observations, action_provider)
+            self._decision_provider = _local_llm_provider(args.local_llm_config)
+            self._runner = MissionRunner(
+                compiled, tool, checkpoint_store, decision_provider=self._decision_provider,
+            )
+        else:
+            # The runner and executor remain job-owned. Only resource-specific
+            # compilation/policy changes; old scene handles cannot cross steps.
+            self._runner.compiled = compiled
+            self._runner.tool.compiled = compiled
+            self._runner.tool.observations = observations
+            self._runner.tool.actions.guard = input_guard
+            self._runner.tool._scenes.clear()
+        runner = self._runner
+        decision_provider = self._decision_provider
+        if decision_provider is not None:
+            # Telemetry belongs to this step even when deterministic selection
+            # makes no model call. Retain the provider, not the preceding reply.
+            for name in ("last_model_output", "last_error", "last_usage",
+                         "last_request_sha256", "last_request_bytes", "last_request_elapsed_ms"):
+                setattr(decision_provider, name, None)
         job_tick = job_coordinator.tick(runner) if job_coordinator is not None else None
         result = job_tick.result if job_tick is not None else runner.tick(context)
         assert result is not None
@@ -596,7 +759,7 @@ def main(argv: list[str] | None = None) -> int:
             payload["gather_job_verification_error"] = job_verification_error
             payload["gather_job_next_run_id"] = post_job_plan.run_id if post_job_plan is not None else None
             payload["gather_job_resume_required"] = not job_closed_at_five
-            payload["gather_job_closeout"] = post_job_plan.closeout if job_closed_at_five else None
+            payload["gather_job_closeout"] = list(post_job_plan.closeout) if job_closed_at_five else None
             payload["gather_job_closeout_path"] = str(closeout_path) if closeout_path is not None else None
         if result.selection is not None:
             payload["selection"] = result.selection.decision.value
@@ -627,28 +790,28 @@ def main(argv: list[str] | None = None) -> int:
                     "evidence_path": str(evidence_path),
                 },
             )
-        print(json.dumps(payload, ensure_ascii=False))
 
         if job_verification_error is not None:
-            return 4
+            return 4, payload
         if result.status in {CheckpointStatus.RUNNING, CheckpointStatus.COMPLETE}:
-            return 0
+            return 0, payload
         if result.status in {
             CheckpointStatus.REOBSERVE,
             CheckpointStatus.WAITING,
             CheckpointStatus.NEEDS_DECISION,
         }:
-            return 3
-        return 4
-    except Exception as exc:
-        print(
-            json.dumps(
-                {"status": "failed", "error": {"type": type(exc).__name__, "message": str(exc)}},
-                ensure_ascii=False,
-            ),
-            file=sys.stderr,
-        )
-        return 2
+            return 3, payload
+        return 4, payload
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    session = GatherRuntimeSession(args)
+    try:
+        code, payload = session.step()
+        print(json.dumps(payload, ensure_ascii=False), file=sys.stderr if code == 2 else sys.stdout)
+        return code
+    finally:
+        session.close()
 
 
 if __name__ == "__main__":

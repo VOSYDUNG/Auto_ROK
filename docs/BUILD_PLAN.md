@@ -16,10 +16,19 @@ nhân vật là thông tin người vận hành cung cấp; chưa benchmark lạ
 
 ## GATHER-CYCLE-REPAIR — gói coding kế tiếp
 
+Trước acceptance trọn chu kỳ, đã sửa **GATHER-RUNTIME-SESSION** theo
+quyết định người dùng 2026-10-03: job dùng một session trong cùng process,
+retained providers/executor/model runtime, structured step result và fresh
+per-tick scope/trace/frame. Contract ở [DESIGN_BRIEF](DESIGN_BRIEF.md). Đầu ra
+offline đã kiểm consumer default không spawn process theo từng tick,
+object identity giữ qua bước/chờ model/tài nguyên, CLI tương thích và đóng
+session rõ ràng; evidence/giới hạn ở ROOT. Không coi sửa vòng đời là tự giải
+quyết idle/journal hoặc 5/5.
+
 **Đầu ra:** một path cùng driver đi từ CITY_VIEW qua Search → loại tài nguyên
 → resource detail → Drawer → New Troop → March → hậu kiểm cho đủ năm slot;
-lịch và nghiệm thu lấy từ PRD. Source hiện tại là `main@4ea9567` cộng phần
-chuẩn hóa tài liệu, chưa có sửa runtime trong gói audit.
+lịch và nghiệm thu lấy từ PRD. Source/verification checkpoint lấy từ ROOT;
+job driver hiện dùng session giữ sống, chưa sửa VERIFIED-only idle trong gói đó.
 
 **Owned nodes:** `gather_job_driver`, `gather_cli`, `gather_job_coordinator`,
 `gather_runtime_evidence`; chỉ sửa upstream
@@ -72,9 +81,9 @@ host vẫn phải nói đúng mức đo. Chưa có evidence thì không hứa th
 ## Sau vòng trọn: đo và tối ưu, rồi mở rộng
 
 Một benchmark cùng boundary tách thời gian capture/host check/OCR/setup/dispatch/
-verify. Nếu process/provider reconstruction chiếm đáng kể, thử **một process
-sống suốt job** bằng canonical factory hiện hành, giữ fresh observation trước/
-sau hành động và guards; so baseline trên cùng route. Chỉ thay asset/OCR strategy
+verify. Một process sống suốt job là contract vòng đời đã chốt, không chờ benchmark
+mới sửa. Sau correctness, đo tác động trên cùng route, không suy speedup từ số
+process đã giảm. Chỉ thay asset/OCR strategy
 khi corpus chỉ ra loại lỗi, ưu tiên control lớn/template/bố cục cho panel ổn định.
 Không xem optimization này là lý do tiếp tục hoãn sửa liveness đơn giản.
 

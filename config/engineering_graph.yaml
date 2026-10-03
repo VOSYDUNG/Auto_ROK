@@ -925,7 +925,7 @@ nodes:
 
   - id: gather_cli
     kind: composition
-    responsibility: Composes one GATHER tick with either historical B003 or the five-march job coordinator; live job input requires an explicit arm, a schema-v2 slot, pinned startup attestation and fresh current-run host trace before canonical guarded input and VERIFIED journal progress.
+    responsibility: Owns canonical GATHER runtime composition for the historical one-tick CLI and a job-scoped in-process session; the session retains observation and action components while refreshing per-tick scope, current-run host trace, slot policy and evidence. Decision waits retain runtime objects but never extend stale-frame or job authority. Live job input requires explicit arm, schema-v2 slot and pinned startup attestation before guarded input and VERIFIED journal progress. Persistent session wiring has offline consumer evidence only, not a fresh live occurrence.
     authority: canonical
     status: implemented
     path: scripts/run_gather_tick.py
@@ -935,10 +935,11 @@ nodes:
       - workspace/evidence/gather/live-20260918-01-cpu-criterion/
       - scripts/run_gather_tick.py
       - tests/test_gather_job_cli_wiring.py
+      - tests/test_gather_runtime_session.py
 
   - id: gather_job_driver
     kind: adapter
-    responsibility: Pins canonical startup attestation and immutable schedule; derives each tick from VERIFIED progress, validates passive host trace and attempt chain, forwards live arm only for traced schema-v2 ticks, and records starts/results. Failed subprocess diagnostics preserve bounded typed errors without trusting unbound progress. A latest open start can be reused only under active authority and full chain admission with unchanged journal progress or exact pending proof; an orphan never grants input authority. Journal-write reconciliation is input-free and must bind exact durable proof and original tick through an append-only recovery receipt before another attempt can open.
+    responsibility: Pins canonical startup attestation and immutable schedule; owns one job-scoped in-process canonical runtime session instead of a child Python process per tick. Derives ticks from VERIFIED progress, refreshes host trace and admission before execution, and records starts/results. Typed failures never authorize unbound progress. A latest open start can be reused only under active authority and full chain admission with unchanged journal progress or exact pending proof; an orphan never grants input authority. Journal-write reconciliation is input-free and binds exact durable proof and original tick through an append-only recovery receipt before another attempt opens. Persistent session wiring has offline consumer evidence only, not a fresh live occurrence.
     authority: canonical
     status: implemented
     path: scripts/run_gather_job.py
@@ -1151,7 +1152,7 @@ edges:
   - {from: march_queue_indicator, to: gather_job_verification, relation: supplies_first_post_1_of_5_and_later_numeric_queue_reads}
   - {from: gather_job_store, to: startup_character_attestation, relation: supplies_revocation_and_client_binding}
   - {from: startup_character_attestation, to: gather_job_driver, relation: pins_and_revalidates_canonical_startup_record}
-  - {from: gather_job_driver, to: gather_cli, relation: supplies_next_verified_slot_resource_pinned_attestation_and_explicit_traced_live_arm}
+  - {from: gather_job_driver, to: gather_cli, relation: retains_one_in_process_job_session_and_supplies_fresh_tick_slot_attestation_trace_and_live_arm}
   - {from: mission_compiler, to: gather_cli, relation: supplies_per_slot_compiled_resource_catalog}
   - {from: startup_character_attestation, to: gather_cli, relation: preflights_direct_job_tick}
   - {from: gather_job_authority, to: gather_job_coordinator, relation: defines_five_march_scope}

@@ -6,11 +6,12 @@ offline_publication_checks:
   evidence: workspace/agents/git-main-publication/root/VALIDATION.md
   limitation: Native skips checked separately; broad audit journal fixture failed and passed once in isolation. No full-suite PASS or I/O stability claim.
 head_basis:
-  sha: 02bbff4c1f569156e1e0043e5c4639dcfb4c1261
+  sha: 76bc72a0fde1692aa10edbc8e2a301050148d3a0
   branch: main
   recorded_at: '2026-10-03'
-  context: Publication source basis 02bbff4 plus checked working-tree changes; F6W wired; stored job09
-    suspended at zero marches and now expired. No live action in Git publication.
+  context: Source basis 76bc72a plus offline retained-runtime session changes. Prior live artifacts
+    predate this session lifecycle and remain historical proof only. Stored job09 expired at zero
+    marches. No new live capture/input or model endpoint calls in the session repair.
 current_occurrence:
   job_id: f6-firstdone-20260928-09
   task_id: firstdone-onechar-20260928-09
@@ -58,9 +59,20 @@ objective:
   - fresh_1_of_5_first_postcheck
   - five_transition_job_coordinator
   - five_march_job_driver
+  - gather_runtime_session
   - first_done_job_audit
   - dispatch_queue_to_5_of_5
 capabilities:
+  gather_runtime_session:
+    status: WIRED
+    live_proof_after_commit: false
+    evidence:
+    - tests/test_gather_runtime_session.py
+    - tests/test_run_gather_job.py
+    - workspace/agents/gather-runtime-session/root/VALIDATION.md
+    limitation: Canonical in-process consumer and synthetic composition prove retained objects,
+      fresh observations, bounded mocked model waits and closed-job recovery. Not a live five-march
+      occurrence, external MCP/function tool registration, persistent app service or measured speedup.
   bounded_gather_job:
     status: LIVE_PROVEN_ONCE
     evidence:

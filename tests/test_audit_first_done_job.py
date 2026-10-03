@@ -5,7 +5,6 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
-from types import SimpleNamespace
 
 import pytest
 
@@ -21,7 +20,6 @@ from scripts.audit_first_done_job import audit_first_done_job, preflight_attempt
 from scripts.create_gather_job import build_artifact, write_artifact
 from scripts.run_gather_job import drive_job
 from scripts import audit_first_done_job as audit_module
-from scripts import run_gather_job as driver_module
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -444,9 +442,14 @@ def diagnostic_attempt_chain(tmp_path, monkeypatch, *, diagnostic_only=False, ra
     start = json.loads(second_start.read_text())
     initial = start["initial_verified"]
     if raw_output:
-        completed = SimpleNamespace(returncode=7, stdout="not JSON", stderr="traceback" + "x" * 5000)
-        monkeypatch.setattr(driver_module.subprocess, "run", lambda *_, **__: completed)
-        diagnostic = driver_module._subprocess_tick(["offline-fixture"])
+        # Historical subprocess diagnostics remain auditable after the live
+        # driver switched to a retained in-process session. Test the archived
+        # envelope, not a removed execution adapter.
+        diagnostic = (7, {
+            "status": "failed", "error": "tick emitted no JSON result",
+            "stdout": "not JSON", "stderr": ("traceback" + "x" * 5000)[-4096:],
+            "stdout_truncated": False, "stderr_truncated": True,
+        })
     else:
         diagnostic = (2, {"status": "failed", "error": {
             "type": "LiveObservationError", "message": "[WinError 5] Access is denied: OCR publication",

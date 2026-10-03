@@ -1,7 +1,7 @@
 # Auto_ROK — điều phối hiện hành
 
-Cập nhật 2026-10-03: audit cách coding/giao hàng từ source `main@4ea9567` và
-artifact đã lưu. ROOT giữ quyết định/gói kế tiếp; [runtime-status](../runtime-status.yaml)
+Cập nhật 2026-10-03: audit đã xuất bản ở `main@76bc72a`; vòng đời runtime
+đã sửa và kiểm offline theo quyết định người dùng. ROOT giữ quyết định/gói kế tiếp; [runtime-status](../runtime-status.yaml)
 sở hữu mức chứng minh. Raw evidence/hồ sơ ở workspace, lịch sử sửa ở Git.
 
 ## Đích, quyền và nguồn canonical
@@ -71,7 +71,30 @@ protocol đã gỡ thiếu-node/CI/chain mâu thuẫn; snapshot và raw measurem
 Script legacy được dùng làm đối chiếu thứ tự/knowledge layout; báo cáo 2×4 của
 người vận hành chưa benchmark lại, không chạy actuator cũ.
 
-## Một gói kế tiếp: GATHER-CYCLE-REPAIR
+## Vòng đời đã sửa: GATHER-RUNTIME-SESSION
+
+Người dùng bác bỏ subprocess-per-tick cho tool chạy nhiều bước. Contract hiện
+hành ở [DESIGN_BRIEF](DESIGN_BRIEF.md): một session trong process giữ providers,
+executor và decision provider qua các bước/chờ LLM; structured result trực tiếp,
+CLI chỉ là adapter. Khởi tạo object không phải build/sinh code; server model
+local không bị nạp lại bởi việc tạo client provider. Session giữ bộ nhớ runtime
+nhưng mỗi bước vẫn cần frame/trace/scope mới và không tái dispatch pending March.
+
+[Brief](../workspace/agents/gather-runtime-session/root/BRIEF.md): builder
+tho_dung/GPT-6.1 Sol/high/fresh/offline sở hữu driver/CLI/tests; ROOT sở hữu
+graph/docs/verification. [Source review](../workspace/agents/gather-runtime-session/kiem_luat/INTEGRATION_REVIEW.md)
+đã nhận sau sửa closed live-job recovery. Không adaptive-level/live/endpoint/MCP
+registration trong gói. [ROOT validation](../workspace/agents/gather-runtime-session/root/VALIDATION.md)
+ghi tám session regressions đạt, giữ identity qua bước/tài nguyên/chờ model,
+fresh observations, không subprocess tick, telemetry mới và pending March không
+dispatch lại. ROOT chạy 205 ca: 204 pass, một fixture gọi adapter cũ fail; sửa
+fixture lịch sử rồi ba biến thể diagnostic đạt riêng. Không gọi đây là full-suite
+PASS. Known journal_mid WinError5 được deselect, không retry/nhận I/O ổn định.
+Session nhận WIRED qua consumer/offline evidence, chưa live-proven; FIRST DONE
+tự chủ và current occurrence không được nâng. Đây chưa phải app service/MCP tool
+đã đăng ký cho LLM ngoài gọi.
+
+## Sau sửa vòng đời: GATHER-CYCLE-REPAIR
 
 Theo [BUILD_PLAN](BUILD_PLAN.md), owned `gather_job_driver`, `gather_cli`,
 `gather_job_coordinator`, `gather_runtime_evidence`; upstream scope/attestation/
@@ -90,7 +113,7 @@ availability, writer sở hữu disjoint scope; review guard/proof sau patch.
 Sau offline acceptance mới lấy fresh startup và chạy một job fixed-source theo
 quyền đã có, không brief/agent/calibration giữa các click. Năm fresh proofs và
 closeout cùng occurrence mới đủ LIVE_PROVEN_ONCE; sau đó đo same-boundary
-latency để quyết định persistent process, rồi return/refill/buff/daily/scale.
+latency của session đã giữ sống, rồi return/refill/buff/daily/scale.
 Chưa có baseline trọn vòng tự chủ nên không hứa ETA hoặc mức tăng tốc. Đội chạy
 theo completion/blocker, không polling/sleep-retry. Không mở thêm mission trước
 khi consumer FIRST DONE đã qua đường nghiệm thu.

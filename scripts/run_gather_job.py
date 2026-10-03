@@ -1,7 +1,7 @@
-"""Bounded caller of the canonical one-tick GATHER job CLI.
+"""Bounded caller of one retained canonical GATHER runtime session.
 
 This driver adds no perception, action selection or input authority. An explicit
-live arm reaches only the canonical guarded one-tick CLI after job preflight.
+live arm reaches only the canonical guarded runtime after job preflight.
 """
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ import json
 import math
 import os
 from pathlib import Path
-import subprocess
 import sys
 import time
 from typing import Any, Callable, Mapping
@@ -33,6 +32,7 @@ from harness.host_input_isolation import (  # noqa: E402
 )
 from harness.mission_loader import compile_mission  # noqa: E402
 from harness.mission_store import JsonMissionStore  # noqa: E402
+from scripts.run_gather_tick import GatherRuntimeSession, build_parser as tick_parser  # noqa: E402
 
 GATHER_JOB_STORE_ROOT = ROOT / "workspace" / "checkpoints" / "gather-jobs"
 GATHER_CHECKPOINT_ROOT = ROOT / "workspace" / "checkpoints"
@@ -92,7 +92,7 @@ def drive_job(
     for _ in range(max_ticks):
         try:
             code, payload = tick()
-        except (OSError, subprocess.TimeoutExpired, ValueError) as exc:
+        except (OSError, ValueError) as exc:
             return outcome("failed", f"tick execution failed: {type(exc).__name__}: {exc}")
         if not isinstance(payload, Mapping):
             return outcome("failed", "tick output is not a JSON object")
@@ -377,31 +377,14 @@ def _durably_closed(job: GatherJobAuthority, payload: Mapping[str, Any]) -> bool
     }
 
 
-def _subprocess_tick(command: list[str]) -> tuple[int, Mapping[str, Any]]:
-    completed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True,
-                               encoding="utf-8", errors="replace", timeout=300)
-    candidates = []
-    for output in (completed.stdout, completed.stderr):
-        for line in reversed(output.splitlines()):
-            try:
-                value = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(value, dict):
-                candidates.append(value)
-    if completed.returncode != 0:
-        for value in candidates:
-            if value.get("status") == "failed" and value.get("error"):
-                return completed.returncode, value
-    if candidates:
-        return completed.returncode, candidates[0]
-    limit = 4096
-    return completed.returncode, {
-        "status": "failed", "error": "tick emitted no JSON result",
-        "stdout": completed.stdout[-limit:], "stderr": completed.stderr[-limit:],
-        "stdout_truncated": len(completed.stdout) > limit,
-        "stderr_truncated": len(completed.stderr) > limit,
-    }
+def _runtime_session(args: argparse.Namespace, digest: str) -> GatherRuntimeSession:
+    # Reuse the CLI's canonical configuration defaults; CLI serialization is
+    # separate from structured session execution.
+    tick_args = tick_parser().parse_args(_tick_command(args, digest)[2:])
+    tick_args.arm_live = args.arm_live
+    tick_args.checkpoint_root = str(GATHER_CHECKPOINT_ROOT)
+    tick_args.evidence_root = str(GATHER_EVIDENCE_ROOT)
+    return GatherRuntimeSession(tick_args)
 
 
 def _write_report(root: Path, result: Mapping[str, Any]) -> Path:
@@ -711,6 +694,7 @@ def main(argv: list[str] | None = None) -> int:
             GATHER_EVIDENCE_ROOT,
         )
         tick_index = 0
+        session = _runtime_session(args, startup_attestation_sha256)
 
         def attested_tick() -> tuple[int, Mapping[str, Any]]:
             nonlocal tick_index
@@ -729,7 +713,7 @@ def main(argv: list[str] | None = None) -> int:
             ).plan()
             tick_index += 1
             if plan.closed:
-                command = _tick_command(args, startup_attestation_sha256)
+                return session.step()
             else:
                 if not plan.run_id:
                     raise ValueError("GATHER job plan lacks current run ID")
@@ -737,21 +721,22 @@ def main(argv: list[str] | None = None) -> int:
                     args, job, run_id=plan.run_id, client=client,
                     attempt_sequence=start["attempt_sequence"], tick_index=tick_index,
                 )
-                command = _tick_command(
-                    args, startup_attestation_sha256,
+                return session.step(
                     run_id=plan.run_id, host_trace_path=trace,
                     resource_type=job.resource_for_slot(plan.sequence)
                         if job.schema_version == 2 else None,
                 )
-            return _subprocess_tick(command)
 
-        result = drive_job(
-            attested_tick, job_id=job.job_id,
-            max_ticks=args.max_ticks, max_idle_ticks=args.max_idle_ticks,
-            idle_delay_seconds=args.idle_delay_seconds,
-            settle_seconds=args.settle_seconds,
-            validate_closed=lambda payload: _durably_closed(job, payload),
-        )
+        try:
+            result = drive_job(
+                attested_tick, job_id=job.job_id,
+                max_ticks=args.max_ticks, max_idle_ticks=args.max_idle_ticks,
+                idle_delay_seconds=args.idle_delay_seconds,
+                settle_seconds=args.settle_seconds,
+                validate_closed=lambda payload: _durably_closed(job, payload),
+            )
+        finally:
+            session.close()
         result["recorded_at"] = datetime.now(timezone.utc).isoformat()
         result["attempt_sequence"] = start["attempt_sequence"]
         result["initial_verified"] = start["initial_verified"]

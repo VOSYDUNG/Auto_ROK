@@ -19,6 +19,31 @@ công việc ban đầu; không duyệt từng march. Theo dõi quân về, nạ
 
 ---
 
+## Vòng đời runtime hiện hành — quyết định 2026-10-03
+
+Job farm giữ **một session trong cùng process**: khởi tạo capture/OCR, executor,
+decision provider và bộ chạy canonical một lần theo job. Các bước điều hướng,
+chờ lựa chọn LLM và các đạo tiếp theo dùng lại session này; không spawn Python
+hoặc gọi lại CLI `main()` cho từng tick. Khởi tạo object không phải viết/build
+lại code, nhưng lặp nó theo từng bước là vòng đời không phù hợp cho job này.
+
+Session trả structured result trực tiếp cho driver; CLI một bước là adapter
+in JSON cùng kết quả. Plan/catalog theo tài nguyên được chuẩn bị riêng trong
+session khi cần, không dựng lại capture/OCR/actuator/model environment. Session
+đóng khi job/attempt kết thúc và không cho `step` sau đóng hoặc dùng sang job khác.
+
+Giữ object sống không giữ ảnh cũ làm sự thật: mỗi bước lấy observation mới,
+slot/run và host trace mới, kiểm scope/client/focus trước input. LLM có thể chờ
+trong process với timeout hiện hành; hết hạn job hoặc stale frame không được
+kéo dài quyền do session còn sống. Pending March vẫn chỉ quan sát hậu kiểm.
+
+Contract này được triển khai bởi `GatherRuntimeSession` trong canonical
+`scripts/run_gather_tick.py`, job driver dùng trực tiếp `step` và `close`.
+[ROOT](ROOT.md) và [runtime-status](../runtime-status.yaml) giữ mức đã kiểm;
+offline session evidence không chứng minh một vòng live tự chủ.
+Biên tool cho LLM gọi từ bên ngoài cần consumer cụ thể; session này không tự
+chứng minh đã đăng ký MCP/function tool hay đã đạt FIRST DONE.
+
 ## Phần I — Research kiến trúc
 
 Đọc trực tiếp trên mã nguồn tại commit `102c6a1`. Mỗi phát hiện kèm đường dẫn để kiểm lại.

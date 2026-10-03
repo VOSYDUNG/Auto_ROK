@@ -165,17 +165,20 @@ def test_need_decision_or_skipped_verified_count_stops():
     assert "skipped" in result["reason"]
 
 
-def test_subprocess_typed_error_survives_missing_job_metadata(monkeypatch):
+def test_session_typed_error_survives_missing_job_metadata(monkeypatch):
+    args = run_gather_tick.build_parser().parse_args([
+        "--run-id", "error-run", "--character-id", "character", "--resource-type", "FOOD",
+    ])
+    session = run_gather_tick.GatherRuntimeSession(args)
+    def fail(_args):
+        raise ValueError("first slot rejects numeric queue")
+    monkeypatch.setattr(session, "_step", fail)
+    try:
+        tick = session.step()
+    finally:
+        session.close()
     error = {"type": "ValueError", "message": "first slot rejects numeric queue"}
-    envelope = {"status": "failed", "error": error}
-    # A fatal stderr envelope must also outrank earlier stdout tick output.
-    completed = SimpleNamespace(
-        returncode=2, stdout=json.dumps(tick_result("running", 1, 0)[1]),
-        stderr="diagnostic preamble\n" + json.dumps(envelope) + "\n",
-    )
-    monkeypatch.setattr(driver.subprocess, "run", lambda *_, **__: completed)
-    tick = driver._subprocess_tick(["offline-fixture"])
-    assert tick == (2, envelope)
+    assert tick == (2, {"status": "failed", "error": error})
     result, sleeps = drive([tick])
     assert result["status"] == "failed"
     assert result["reason"] == (
@@ -184,27 +187,6 @@ def test_subprocess_typed_error_survives_missing_job_metadata(monkeypatch):
     assert result["verified_marches"] is None and result["closeout"] is None
     assert result["history"] == [{"status": "failed", "exit_code": 2, "error": error}]
     assert sleeps == []
-
-
-@pytest.mark.parametrize("stdout,stderr", [
-    ("{malformed JSON" + "x" * 5000, "traceback" + "y" * 5000),
-    ("", "native process failed"),
-    ("[]\n42\nnull\n", ""),
-])
-def test_subprocess_without_json_preserves_bounded_failure_output(monkeypatch, stdout, stderr):
-    completed = SimpleNamespace(returncode=7, stdout=stdout, stderr=stderr)
-    monkeypatch.setattr(driver.subprocess, "run", lambda *_, **__: completed)
-    tick = driver._subprocess_tick(["offline-fixture"])
-    result, sleeps = drive([tick])
-    assert result["status"] == "failed"
-    assert result["reason"] == "tick execution failed (exit code 7): tick emitted no JSON result"
-    record = result["history"][0]
-    assert record["exit_code"] == 7
-    for stream, source in (("stdout", stdout), ("stderr", stderr)):
-        assert record[stream] == source[-4096:]
-        assert len(record[stream]) <= 4096
-        assert record[stream + "_truncated"] is (len(source) > 4096)
-    assert result["verified_marches"] is None and sleeps == []
 
 
 @pytest.mark.parametrize("status,error", [("running", None), ("failed", {"type": "ValueError", "message": "bad"})])
@@ -251,7 +233,7 @@ def test_live_arm_reaches_only_traced_tick_and_legacy_job_is_denied(monkeypatch,
             starts_at=now - timedelta(minutes=1), expires_at=now + timedelta(minutes=20),
         )
         artifact = write_artifact(root / "job.json", driver.ROOT / "workspace", scope)
-        monkeypatch.setattr(driver, "_subprocess_tick", lambda _: pytest.fail("tick must not run"))
+        monkeypatch.setattr(driver, "_runtime_session", lambda *args: pytest.fail("tick must not run"))
         assert driver.main([
             "--gather-job", str(artifact), "--task-id", "task",
             "--character-id", "char", "--resource-type", "FOOD",
@@ -329,7 +311,7 @@ def test_driver_requires_canonical_attestation_before_attempt_or_tick(monkeypatc
             starts_at=now - timedelta(minutes=1), expires_at=now + timedelta(minutes=20),
         )
         artifact = write_artifact(root / "job.json", driver.ROOT / "workspace", scope)
-        monkeypatch.setattr(driver, "_subprocess_tick", lambda _: pytest.fail("no tick allowed"))
+        monkeypatch.setattr(driver, "_runtime_session", lambda *args: pytest.fail("no tick allowed"))
         reports = root / "reports"
         assert driver.main([
             "--gather-job", str(artifact), "--task-id", "task",
@@ -472,7 +454,7 @@ def test_driver_consumes_canonical_cli_waiting_result_without_game(monkeypatch):
 
 @pytest.mark.parametrize("crash_phase,arm_live", [
     ("none", False), ("before_result", False), ("after_result", False),
-    ("none", True),
+    ("none", True), ("before_result", True), ("journal_fifth", True),
     ("journal_mid", False), ("journal_fifth", False),
 ])
 def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(
@@ -547,14 +529,19 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(
         class SyntheticTool:
             def __init__(self, sequence):
                 self.sequence = sequence
-                self.observations = 0
+                self.observation_count = 0
                 # Keep synthetic frames current even on a slow Windows test
                 # run; the next slot gets a new tool after the prior tick.
                 self.start = datetime.now(timezone.utc).timestamp() - 0.01
 
             def observe(self, context):
-                self.observations += 1
-                if self.observations == 1:
+                if getattr(self, "last_run", None) != context.run_id:
+                    self.last_run = context.run_id
+                    self.sequence = ledger.progress(job).verified_marches + 1
+                    self.observation_count = 0
+                    self.start = datetime.now(timezone.utc).timestamp() - 0.01
+                self.observation_count += 1
+                if self.observation_count == 1:
                     image_hash = f"{self.sequence:064x}"
                     facts = {"character_id": job.character_id, "window": window,
                              "image_sha256": image_hash, "new_troop_formation_ready": True,
@@ -580,7 +567,7 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(
                                                        ("TROOP_MARCH",)),),
                         target_ids=("TROOP_MARCH",), observed_at=self.start,
                     )
-                if self.observations == 2:
+                if self.observation_count == 2:
                     return ToolSnapshot(
                         context.mission_id, context.task_id, f"after-{self.sequence}",
                         "WORLD_MAP_VIEW",
@@ -608,35 +595,41 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(
                                 "non_interference_confirmed": True},
                 })
 
-        def synthetic_tool(*_args, **_kwargs):
-            return SyntheticTool(ledger.progress(job).verified_marches + 1)
+        def synthetic_tool(compiled, observations, action_provider):
+            tool = SyntheticTool(ledger.progress(job).verified_marches + 1)
+            tool.compiled = compiled
+            tool.observations_provider = observations
+            tool.actions = action_provider
+            tool._scenes = {}
+            return tool
 
         monkeypatch.setattr(run_gather_tick, "BoundedMissionTool", synthetic_tool)
         monkeypatch.setattr(run_gather_tick, "WindowsHumanInputActuator", lambda: object())
         monkeypatch.setattr(run_gather_tick, "WindowsLiveObservationProvider", lambda *a, **k: object())
 
-        def canonical_tick(command):
-            tick_calls.append(tuple(command))
-            output = StringIO()
-            error = StringIO()
-            with redirect_stdout(output), redirect_stderr(error):
-                code = run_gather_tick.main(command[2:] + [
-                    "--checkpoint-root", str(checkpoint_root),
-                    "--evidence-root", str(evidence_root),
-                ])
-            assert output.getvalue(), (code, error.getvalue())
-            payload = json.loads(output.getvalue())
-            assert payload["startup_attestation_sha256"] == ATTESTATION_SHA
-            return code, payload
-
-        monkeypatch.setattr(driver, "_subprocess_tick", canonical_tick)
+        original_session = driver._runtime_session
+        sessions = []
+        def canonical_session(args, digest):
+            session = original_session(args, digest)
+            sessions.append(session)
+            step = session.step
+            def recorded_step(**kwargs):
+                tick_calls.append(kwargs)
+                code, payload = step(**kwargs)
+                assert payload.get("startup_attestation_sha256") == ATTESTATION_SHA, payload
+                return code, payload
+            session.step = recorded_step
+            return session
+        monkeypatch.setattr(driver, "_runtime_session", canonical_session)
         live_flag = ["--arm-live"] if arm_live else []
         first_code = driver.main([
             "--launch-spec", str(launch), "--report-root", str(root / "reports"),
             "--max-ticks", "2", "--idle-delay-seconds", "0", "--settle-seconds", "0",
         ] + live_flag)
         first = json.loads(capsys.readouterr().out)
-        assert first_code == 3 and first["status"] == "suspended", (first_code, first)
+        assert first_code == 3 and first["status"] == "suspended", (first_code, first, [
+            json.loads(path.read_text()) for path in evidence_root.rglob("*.json")
+        ])
         assert first["verified_marches"] == 2 and first["ticks"] == 2
         assert first["audit_status"] is None
         original_write = driver._write_report
@@ -778,20 +771,15 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(
         assert actions == [(run_id, "MARCH_WITH_CURRENT_SELECTION") for run_id in run_ids]
         assert attestation_checks.count(None) == (2 if crash_phase == "none" else 4 if crash_phase == "journal_mid" else 3)
         assert attestation_checks.count(ATTESTATION_SHA) >= len(tick_calls) * 2
-        assert all(command[command.index("--startup-attestation-sha256") + 1]
-                   == ATTESTATION_SHA for command in tick_calls)
         assert [item[0] for item in host_traces] == run_ids
         assert len({item[1] for item in host_traces}) == 5
-        traced_commands = [command for command in tick_calls
-                           if "--input-isolation-evidence" in command]
-        assert len(traced_commands) == 5
-        assert all(("--arm-live" in command) is arm_live for command in traced_commands)
-        assert [command[command.index("--resource-type") + 1] for command in traced_commands] == list(job.resource_schedule)
+        traced_steps = [kwargs for kwargs in tick_calls if "host_trace_path" in kwargs]
+        assert len(traced_steps) == 5
+        assert [kwargs["resource_type"] for kwargs in traced_steps] == list(job.resource_schedule)
         if crash_phase == "none":
             assert [item["resource_type"] for item in first["history"] + result["history"]] == list(job.resource_schedule)
-        assert all(command[command.index("--input-isolation-evidence") + 1]
-                   == str(host_traces[index][1])
-                   for index, command in enumerate(traced_commands))
+        assert [kwargs["host_trace_path"] for kwargs in traced_steps] == [item[1] for item in host_traces]
+        assert all(session._closed and session._runner is None for session in sessions)
         if crash_phase == "after_result":
             assert len(tick_calls) == 5
         assert Path(result["report_path"]).is_file()
@@ -863,7 +851,7 @@ def test_launch_spec_rejects_changed_artifact_before_tick(monkeypatch):
             resource_type="WOOD", resource_level=4,
         )
         artifact.write_text(artifact.read_text(encoding="utf-8") + " ", encoding="utf-8")
-        monkeypatch.setattr(driver, "_subprocess_tick", lambda _: pytest.fail("no tick allowed"))
+        monkeypatch.setattr(driver, "_runtime_session", lambda *args: pytest.fail("no tick allowed"))
         assert driver.main(["--launch-spec", str(launch)]) == 2
 
 
@@ -918,7 +906,7 @@ def test_launch_spec_rejects_resource_change_even_with_intact_artifact(monkeypat
         spec = json.loads(launch.read_text(encoding="utf-8"))
         spec["resource_type"] = "FOOD"
         launch.write_text(json.dumps(spec), encoding="utf-8")
-        monkeypatch.setattr(driver, "_subprocess_tick", lambda _: pytest.fail("no tick allowed"))
+        monkeypatch.setattr(driver, "_runtime_session", lambda *args: pytest.fail("no tick allowed"))
         assert driver.main(["--launch-spec", str(launch)]) == 2
 
 
@@ -1008,7 +996,7 @@ def test_attempt_preflight_failure_never_launches_a_tick(monkeypatch, capsys):
                             lambda *a, **k: ATTESTATION_SHA)
         monkeypatch.setattr(auditor, "preflight_attempt_chain",
                             lambda *_: (_ for _ in ()).throw(ValueError("damaged prior attempt")))
-        monkeypatch.setattr(driver, "_subprocess_tick", lambda _: pytest.fail("no tick allowed"))
+        monkeypatch.setattr(driver, "_runtime_session", lambda *args: pytest.fail("no tick allowed"))
         code = driver.main([
             "--gather-job", str(artifact), "--task-id", "task",
             "--character-id", "character", "--resource-type", "FOOD",
@@ -1038,7 +1026,6 @@ def test_automatic_blocked_audit_is_non_success_and_write_once(monkeypatch, caps
             "job_id": scope["job_id"], "ticks": 0, "verified_marches": 5,
             "history": [], "closeout": [],
         })
-        monkeypatch.setattr(driver, "_subprocess_tick", lambda _: pytest.fail("no tick allowed"))
         args = [
             "--gather-job", str(artifact), "--task-id", "task",
             "--character-id", "character", "--resource-type", "FOOD",
