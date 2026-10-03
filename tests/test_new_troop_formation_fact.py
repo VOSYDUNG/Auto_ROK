@@ -193,3 +193,55 @@ def test_pixel_negative_fails_even_with_valid_ocr_and_rehashed_image(tmp_path, r
     source = synthetic_bundle(tmp_path)
     edited = replace_image(source, tmp_path, rect=rect, color=color)
     assert extract_new_troop_formation_ready(edited) is False
+
+
+NATIVE_NEW_TROOP = ROOT / "workspace/runtime/gather_resource-87d063bc35de06f9/observation-3c9b85d07a4c4a0a896bfca100f91b9e"
+
+
+@pytest.mark.skipif(not (NATIVE_NEW_TROOP / "current.png").exists(), reason="stored native New Troop frame unavailable")
+def test_native_new_troop_roi_reaches_classifier_and_formation_fact():
+    """The measured Units ROI and blue selected-row signature close the offline chain."""
+    from datetime import datetime
+    from harness.observation_bridge import project_observation
+    from harness.ocr_semantics import OcrSemanticObservationProvider, OcrTargetSpec
+    from harness.state_classifier import StateClassifier
+    from harness.windows_ocr_direct import WindowsOcr, recognize_with_regions
+
+    capture = json.loads((NATIVE_NEW_TROOP / "capture.json").read_text())
+    payload = recognize_with_regions(NATIVE_NEW_TROOP / "current.png", capture,
+                                     engine=WindowsOcr())
+    projected = project_observation(
+        capture, payload, NATIVE_NEW_TROOP / "current.png",
+        now=datetime.fromisoformat(capture["frame"]["captured_at"]),
+    )
+    scene = replace(projected.scene, facts={
+        **projected.scene.facts,
+        "image_path": str(NATIVE_NEW_TROOP / "current.png"),
+        "image_path_source": "current_capture_artifact",
+    })
+
+    class Stored:
+        def observe(self, context):
+            return ObservationBundle(projected.observation, scene)
+
+    inner = OcrSemanticObservationProvider(
+        Stored(), [OcrTargetSpec("TROOP_MARCH", ("MARCH",), allow_unscored_exact=True)]
+    )
+    bundle = GatherFactObservationProvider(inner, character_id="character-1").observe(CONTEXT)
+    assert StateClassifier().classify(bundle.observation, bundle.scene).state_id == "NEW_TROOP_SETUP"
+    assert bundle.scene.facts["new_troop_formation_ready"] is True
+
+
+@pytest.mark.skipif(not (NATIVE_NEW_TROOP / "current.png").exists(), reason="stored native New Troop frame unavailable")
+def test_native_empty_row_transplant_rejects_knob_only_selection(tmp_path):
+    """A real zero row transplanted over row one must not pass the pixel guard."""
+    from harness.gather_facts import _new_troop_pixels
+
+    source = cv2.imread(str(NATIVE_NEW_TROOP / "current.png"))
+    assert source is not None
+    transplanted = source.copy()
+    transplanted[233:246, 703:735] = source[297:310, 703:735]
+    path = tmp_path / "native-empty-row-transplant.png"
+    assert cv2.imwrite(str(path), transplanted)
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    assert _new_troop_pixels(str(path), digest) is False

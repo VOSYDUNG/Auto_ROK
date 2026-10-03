@@ -125,10 +125,15 @@ def _same_binding(before: dict[str, Any], after: dict[str, Any]) -> bool:
 
 
 def _capture_options(hwnd: int) -> dict[str, Any]:
-    """Keep every optional setting at OS default and bind only one HWND."""
+    """Bind one HWND and keep capture free of the visible mouse cursor.
+
+    ``windows-capture`` defaults ``cursor_capture`` to ``True``.  Leaving that
+    option implicit lets the cursor occlude game text in the canonical OCR
+    frame, so this is an explicit safety setting rather than an OS default.
+    """
     if type(hwnd) is not int or hwnd <= 0:
         raise WindowsCaptureError("capture HWND must be a positive integer")
-    return {"cursor_capture": None, "draw_border": None, "secondary_window": None,
+    return {"cursor_capture": False, "draw_border": None, "secondary_window": None,
             "minimum_update_interval": None, "dirty_region": None, "window_hwnd": hwnd}
 
 
@@ -159,7 +164,8 @@ def capture_rok_client(
 
     arrived = threading.Event()
     result: dict[str, Any] = {}
-    capture = WindowsCapture(**_capture_options(target["hwnd"]))
+    capture_options = _capture_options(target["hwnd"])
+    capture = WindowsCapture(**capture_options)
 
     @capture.event
     def on_frame_arrived(frame, capture_control) -> None:
@@ -242,7 +248,7 @@ def capture_rok_client(
         "status": "captured",
         "backend": {"name": "windows-capture", "version": package_version("windows-capture"),
                     "target_mode": "window_hwnd", "draw_border": "default",
-                    "cursor_capture": "default", "secondary_window": "default",
+                    "cursor_capture": capture_options["cursor_capture"], "secondary_window": "default",
                     "dirty_region": "default", "minimum_update_interval": "default"},
         "target": {key: after[key] for key in ("hwnd", "pid", "title", "exe", "process_path")},
         "frame": {"id": frame_id, "captured_at": captured_at.isoformat(), "width": client_width,

@@ -5,7 +5,8 @@ import json
 
 import pytest
 
-from harness.gather_job_store import load_gather_job_authority
+from harness.gather_job_store import GatherJobStoreError, load_gather_job_authority
+from harness.gather_job_authority import validate_schedule_catalog
 from scripts import create_gather_job
 from scripts.create_gather_job import build_artifact, write_artifact, write_launch_spec
 
@@ -35,6 +36,38 @@ def test_startup_artifact_loads_with_compiled_scope_and_cannot_be_overwritten(tm
     with pytest.raises(FileExistsError):
         write_artifact(destination, tmp_path / "workspace", scope)
     assert written.read_bytes() == original
+
+
+def test_default_issuer_pins_five_mixed_slots_and_catalogs(tmp_path):
+    now = datetime.now(timezone.utc)
+    scope = build_artifact(
+        job_id="mixed-job", task_id="one-character", character_id="governor",
+        resource_level=5, starts_at=now, expires_at=now + timedelta(minutes=30),
+    )
+    assert scope["schema_version"] == 2
+    assert scope["resource_schedule"] == ["GOLD", "GOLD", "WOOD", "STONE", "FOOD"]
+    assert len(set(scope["slot_catalog_digests"])) == 4
+    workspace = tmp_path / "workspace"
+    path = write_artifact(workspace / "job.json", workspace, scope)
+    job = load_gather_job_authority(
+        path, canonical_actions=frozenset(scope["allowed_actions"]),
+        expected_catalog_digest=scope["catalog_digest"],
+    )
+    validate_schedule_catalog(job, create_gather_job.ROOT / "config" / "mission_flows.yaml",
+                              create_gather_job.ROOT / "config" / "ui_states.yaml")
+    assert [job.resource_for_slot(i) for i in range(1, 6)] == scope["resource_schedule"]
+    spec_path = write_launch_spec(workspace / "job.launch.json", workspace, path,
+                                  resource_level=5)
+    spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    assert spec["resource_schedule"] == scope["resource_schedule"]
+    assert spec["schedule_digest"] == scope["schedule_digest"]
+    altered = dict(scope, resource_schedule=["FOOD"] * 5)
+    path.write_text(json.dumps(altered), encoding="utf-8")
+    with pytest.raises(GatherJobStoreError, match="schedule"):
+        load_gather_job_authority(
+            path, canonical_actions=frozenset(scope["allowed_actions"]),
+            expected_catalog_digest=scope["catalog_digest"],
+        )
 
 
 def test_startup_artifact_rejects_external_path_and_invalid_time(tmp_path):
@@ -84,6 +117,21 @@ def test_issuer_cli_outputs_one_launch_spec_for_same_startup_scope(capsys):
         assert spec["job_artifact"] == str(artifact.resolve())
         assert spec["resource_type"] == "STONE" and spec["resource_level"] == 4
         assert "resource_type" not in json.loads(artifact.read_text(encoding="utf-8"))
+
+
+def test_issuer_cli_defaults_to_mixed_schedule(capsys):
+    with TemporaryDirectory(dir=create_gather_job.ROOT / "workspace") as folder:
+        path = create_gather_job.Path(folder) / "mixed.json"
+        expires = (datetime.now(timezone.utc) + timedelta(minutes=20)).isoformat()
+        assert create_gather_job.main([
+            "--job-id", "mixed-cli", "--task-id", "task", "--character-id", "character",
+            "--resource-level", "5", "--expires-at", expires, "--output", str(path),
+        ]) == 0
+        result = json.loads(capsys.readouterr().out)
+        artifact = json.loads(path.read_text(encoding="utf-8"))
+        launch = json.loads(create_gather_job.Path(result["launch_path"]).read_text(encoding="utf-8"))
+        assert artifact["resource_schedule"] == ["GOLD", "GOLD", "WOOD", "STONE", "FOOD"]
+        assert launch["schedule_digest"] == artifact["schedule_digest"]
 
 
 @pytest.mark.parametrize("launch_failure", ["collision", "outside_workspace"])

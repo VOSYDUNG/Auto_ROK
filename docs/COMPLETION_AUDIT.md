@@ -1,6 +1,6 @@
 # Auto_ROK completion audit
 
-Updated 2026-09-25 (Asia/Ho_Chi_Minh). This audit maps the historical G1–G6
+Updated 2026-09-27 (Asia/Ho_Chi_Minh). This audit maps the historical G1–G6
 gates to their bounded evidence and identifies what FIRST DONE still requires.
 It is evidence-led: `PASS` means the named artifact
 proves the exact claim, `PARTIAL` means a promotion or scope edge remains, and
@@ -8,8 +8,8 @@ proves the exact claim, `PARTIAL` means a promotion or scope edge remains, and
 The G1–G5 pass entries below describe September 18–19 artifacts and their
 bounded occurrences. They do not establish readiness of the currently open
 game window. The offline audit computed on September 22 at HEAD `7855c616`
-still reports G6 blocked. The current FIRST DONE five-march objective remains
-`UNIMPLEMENTED` in `runtime-status.yaml`; daily continuity is a later milestone.
+still reports G6 blocked. Current capability levels and occurrences are owned
+by [runtime-status](../runtime-status.yaml); daily continuity is a later milestone.
 
 FIRST DONE now means one character autonomously dispatching five farm marches
 under one startup job authorization, preserving the commander pair auto-filled
@@ -60,10 +60,10 @@ limitations of measured capabilities remain in [runtime-status](../runtime-statu
 
 | Required edge | Evidence owner and required demonstration |
 |---|---|
-| Fresh New Troop → game-populated formation → March | [F1-C formation](../workspace/agents/f1c-formation-fact/tho_dung/HANDOFF.md) is wired offline from current-frame OCR/pixels and four positive archive frames; no real empty formation negative or live job yet. Harness must not send commander-selection input. Commander names and the game’s internal ranking are not separate acceptance gates. |
-| Startup job authorization → guarded automatic marches | PRD F06, SRS `MIS-FD-005`, and [SESSION_AUTHORITY](SESSION_AUTHORITY.md) define one local GATHER job and one operator confirmation of the open character bound to job/frame/client/time, with no approval per march. The offline `create_gather_job.py` command issues one non-overwriting artifact from the compiled catalog plus a separate non-authoritative launch spec. [F4-A1](../workspace/agents/f4a-startup-attestation/root/VALIDATION.md) implemented the artifact and [first-March correction](../workspace/agents/first-march-bootstrap/tho_dung/HANDOFF.md) removed its false pre-first queue requirement; [F4-A2](../workspace/agents/f4a-attestation-wiring/root/VALIDATION.md) wires its canonical digest into driver, attempt chain and direct tick offline. No real startup artifact has been issued. F1-B/C wired the guard and bound client offline. Historical G4/B003 only covers its named occurrence. |
-| Fresh queue observation → five verified transitions → 5/5 | [F2-A journal](../workspace/agents/f2a-verification-journal/tho_dung/HANDOFF.md) resolved the three [review](../workspace/agents/f2a-verification-journal/kiem_luat/HANDOFF.md) findings and is WIRED offline; ROOT's full suite passed. The [Q0 trainer](../workspace/agents/q0-training-safety/root/VALIDATION.md) now accepts native capture metadata and verifies an operator-labelled candidate before an atomic profile update, at IMPLEMENTED offline. Because the queue is not visible before the first March, a new autonomous job must show a fresh post-first-march 1/5, then 2/5, 3/5, 4/5 and 5/5 for the same character. |
-| One startup job → five autonomous occurrences | [F2-B coordinator](../workspace/agents/f2b-five-march/tho_dung/HANDOFF.md) and [F2-C driver](../workspace/agents/f2c-job-driver/root/HANDOFF.md) are WIRED offline with journal-validated closeout and bounded resume. [F4-B host trace](../workspace/agents/f4b-host-trace/tho_dung/HANDOFF.md) connects five distinct passive traces to the driver and canonical tick: each planned `run_id`, attested HWND/PID/process path, age and focus are checked before runner. Synthetic negatives cover missing/stale/wrong-run/foreign-client/recorder failure. One startup quiescence assertion serves the drive; no per-march reconfirmation. Recorder zero-input is self-report only, and neither live arm is open. |
+| Fresh New Troop → game-populated formation → March | [F1-C formation](../workspace/agents/f1c-formation-fact/tho_dung/HANDOFF.md) defines sourced OCR/pixel readiness; current native evidence and capability level live in [runtime-status](../runtime-status.yaml) and its linked occurrence. No real empty formation negative was surveyed. Harness must not send commander-selection input. Commander names and game internal ranking are not separate acceptance gates. |
+| Startup job authorization → guarded automatic marches | PRD F06, SRS `MIS-FD-005`, and [SESSION_AUTHORITY](SESSION_AUTHORITY.md) define one local GATHER job and one operator confirmation bound to job/frame/client/time, with no approval per march. Issuer creates a non-overwriting artifact plus a non-authoritative launch spec. F6-A pins schedule/catalogs; F6-B consumes startup/trace/guard. Current evidence and remaining limits are owned by [runtime-status](../runtime-status.yaml) and [current native occurrence](../workspace/agents/f6-live-gate/root/LIVE_OCCURRENCE.md). Historical G4/B003 only covers its named occurrence. |
+| Fresh queue observation → five verified transitions → 5/5 | [F2-A journal](../workspace/agents/f2a-verification-journal/tho_dung/HANDOFF.md) resolved the three [review](../workspace/agents/f2a-verification-journal/kiem_luat/HANDOFF.md) findings and is WIRED offline; ROOT's full suite passed. The [Q0 trainer](../workspace/agents/q0-training-safety/root/VALIDATION.md) now accepts native capture metadata and verifies an operator-labelled candidate before an atomic profile update, at IMPLEMENTED offline. No pre-first zero is required. Real Drawer zero is optional sourced evidence, never a numeric completion baseline; a new autonomous job must show a fresh post-first-march 1/5, then 2/5, 3/5, 4/5 and 5/5 for the same character. |
+| One startup job → five autonomous occurrences | [F2-B coordinator](../workspace/agents/f2b-five-march/tho_dung/HANDOFF.md) and [F2-C driver](../workspace/agents/f2c-job-driver/root/HANDOFF.md) have journal-validated closeout and bounded resume tests. [F4-B host trace](../workspace/agents/f4b-host-trace/tho_dung/HANDOFF.md) connects each planned run, client, freshness and focus before runner. Synthetic negatives cover missing/stale/wrong-run/foreign-client/recorder failure. [F6-B](../workspace/agents/f6-live-gate/root/VALIDATION.md) opens the job opt-in through those consumers; current native evidence covers navigation only. One startup quiescence assertion serves a drive; no per-march reconfirmation. Recorder zero-input remains self-report, and no five-march chain exists. |
 | Same job → write-once close report | [F3-B closeout](../workspace/agents/f3b-resumable-closeout/root/VALIDATION.md) is WIRED offline at `314fb2c`: the canonical driver checks an ordered attempt chain before another tick, accepts only a uniquely proven orphan VERIFIED slot in its own time window, recovers a terminal report without a sixth tick, and automatically writes an `OFFLINE_REPLAY_PASS`/`BLOCKED` verdict. Forty-seven focused tests and full pytest pass; no fresh live close report exists. Historical replay without an attempt chain is explicitly non-authoritative. Exclusive-create files are not protected from later edits by another local process. Estimated mining/return time remains optional sourced metadata. |
 | Daily continuity after FIRST DONE | `troops_panel_sensor`, `return_detection`, `automatic_refill`, `buff_sensor` and `buff_top_up` remain separate later capabilities. The [inventory](../workspace/agents/p1-continuity-evidence/nghien_cuu/HANDOFF.md) found no positive Returning/Home or buff-timer evidence. |
 | Local LLM benchmark | PRD F05 and SRS local-LLM contract; holdout is historical evidence of bounded selection. B003 review/training and model participation measurement do not grant farm input or add per-march approval. |
@@ -96,16 +96,23 @@ python scripts/validate_gather_replay.py workspace/evidence/gather/gather-e9f395
 
 ## Required next transition
 
-The offline G1–G6 audit correction was accepted after independent review and
-focused tests; all 10 referenced historical artifacts exist and G6 remains
-blocked. G6 is the later endurance track, not the five-march criterion.
-[ROOT](ROOT.md) links current verification. F4-A2 consumes the one-time startup
-attestation in driver and direct tick offline. F4-B job-scoped host trace is
-now wired offline as described in
-[BUILD_PLAN](BUILD_PLAN.md), alongside F3-B/F4-A2. The remaining gap is a
-fresh startup job and real host/game trace with an independently justified
-input-interference claim before live authorization. These results
-do not authorize a live run.
+The native job06 proof chain, exact closeout pins and assisted classification are
+indexed by [ROOT](ROOT.md) and owned by [runtime-status](../runtime-status.yaml).
+The canonical auditor validates the attempt chain and stored proof structure;
+its OFFLINE_REPLAY_PASS verdict explicitly does not declare live FIRST DONE.
+ROOT independently inspects native frames, source/formation/receipt/client
+provenance and quota closure. Mid-job UI recovery or source calibration cannot
+be promoted to autonomous acceptance. The next autonomous claim requires a new
+fresh startup job after slots are free, with five ordered new postchecks and no
+intervening development assistance or tuning. The closed job's quota is not reused.
+
+Native Windows journal replacement failures remain possible. Exact-proof F6-E
+reconciliation is input-free but is not a general I/O reliability claim. Failed
+navigation may change UI before returning an artifact, so an exception is not
+proof of zero input. Independent host input-event measurement remains absent;
+recorder/receipt assertions do not replace it. Tests and audit never grant input
+permission. Detailed package checks live under workspace/agents, not a second
+current progress narrative here.
 
 The existing R3 execution gate remains a separate historical contract:
 `harness/r3_endurance_authorization.py` and `scripts/run_elevated_gather.py`

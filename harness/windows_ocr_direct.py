@@ -186,6 +186,7 @@ def recognize_frame(
     png_bytes: bytes | None = None,
     roi: tuple[int, int, int, int] | None = None,
     scale: float = 1.0,
+    light_text_threshold: int | None = None,
 ) -> dict[str, Any]:
     """OCR a frame the caller already holds in memory.
 
@@ -253,18 +254,26 @@ def recognize_frame(
 
     crop_x, crop_y, crop_w, crop_h = box
     region = array[crop_y : crop_y + crop_h, crop_x : crop_x + crop_w]
+    if light_text_threshold is not None:
+        if type(light_text_threshold) is not int or not 0 <= light_text_threshold <= 255:
+            raise WindowsOcrError("light text threshold must be an integer within 0..255")
+        # The category labels have pale glyphs and dark shadows on coloured
+        # terrain. Isolate pale pixels from all three colour channels, without
+        # changing geometry or correcting any recognized token.
+        mask = np.where(region[:, :, :3].min(axis=2) > light_text_threshold, 0, 255).astype(np.uint8)
+        region = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
     if scale != 1.0:
         region = cv2.resize(
             region,
             (max(1, round(crop_w * scale)), max(1, round(crop_h * scale))),
-            interpolation=cv2.INTER_CUBIC,
+            interpolation=cv2.INTER_NEAREST if light_text_threshold is not None else cv2.INTER_CUBIC,
         )
 
     bgra = region if region.shape[2] == 4 else cv2.cvtColor(region, cv2.COLOR_BGR2BGRA)
     bgra = np.ascontiguousarray(bgra)
     ocr = engine or WindowsOcr()
     elements = ocr.recognize(bgra.tobytes(), bgra.shape[1], bgra.shape[0])
-    return build_payload(
+    payload = build_payload(
         elements,
         capture,
         image_sha256=digest,
@@ -274,6 +283,9 @@ def recognize_frame(
         crop=box,
         scale=scale,
     )
+    if light_text_threshold is not None:
+        payload["preprocessing"] = {"name": "light_text_min_bgr", "threshold": light_text_threshold}
+    return payload
 
 
 def _checked_roi(
@@ -309,14 +321,34 @@ def _checked_roi(
 #:
 #: Kept short on purpose. Each OCR call costs about 33 ms of fixed overhead
 #: regardless of area, so this list is a latency budget as much as a
-#: capability one: three regions plus the frame measures about 277 ms against
-#: the 400 ms of OCR-003.
+#: capability one. The six Search label regions add bounded calls; the F6-C
+#: stored-frame replay measured 194 ms warm and 465 ms on its first pass.
+#: The 400 ms OCR-003 budget therefore needs cold-start validation separately.
 SEMANTIC_REGIONS: tuple[str, ...] = (
+    "resource_point_header",
+    "resource_point_gather",
+    "search_execution_strip",
+    "resource_category_barbarians",
+    "resource_category_cropland",
+    "resource_category_logging_camp",
+    "resource_category_stone_deposit",
+    "resource_category_gold_deposit",
     "search_level_strip",
     "troop_drawer_queue",
     "troop_drawer_button",
     "troop_drawer_prompt",
+    "new_troop_units",
 )
+
+# Calibrated against the immutable f6-search-blocker-20260927-01 frame.
+# These thresholds transform pixels only; OCR remains the sole text authority.
+_LIGHT_TEXT_THRESHOLDS = {
+    "resource_category_barbarians": 85,
+    "resource_category_cropland": 85,
+    "resource_category_logging_camp": 85,
+    "resource_category_stone_deposit": 90,
+    "resource_category_gold_deposit": 85,
+}
 
 
 def merge_region_elements(
@@ -343,11 +375,19 @@ def merge_region_elements(
     Adjacency is part of the reading. Splitting a phrase across two passes
     destroys it, so the region wins its whole area or does not touch it.
     """
+    for key in ("frame_id", "image_sha256", "client_bounds"):
+        if not payload.get(key) or region_payload.get(key) != payload[key]:
+            raise WindowsOcrError(f"region {key} does not match the frame payload")
+    if payload.get("crop") != payload.get("client_bounds") or payload.get("scale_x") != 1.0 or payload.get("scale_y") != 1.0:
+        raise WindowsOcrError("region merge requires a whole-frame client-pixel payload")
     crop = region_payload.get("crop") or [0, 0, 0, 0]
     scale_x = float(region_payload.get("scale_x") or 1.0)
     scale_y = float(region_payload.get("scale_y") or 1.0)
+    if not 1.0 <= scale_x <= 8.0 or not 1.0 <= scale_y <= 8.0:
+        raise WindowsOcrError("region scales must be within 1..8")
     crop_x, crop_y = int(crop[0]), int(crop[1])
     crop_w, crop_h = int(crop[2]), int(crop[3])
+    _checked_roi((crop_x, crop_y, crop_w, crop_h), int(payload["crop"][2]), int(payload["crop"][3]))
 
     region_elements = region_payload.get("elements") or []
     if not region_elements:
@@ -396,13 +436,19 @@ def merge_region_elements(
         box = item.get("bbox")
         if not isinstance(box, (list, tuple)) or len(box) != 4:
             continue
+        if box[0] < 0 or box[1] < 0 or box[2] <= 0 or box[3] <= 0 or box[0] + box[2] > crop_w * scale_x or box[1] + box[3] > crop_h * scale_y:
+            raise WindowsOcrError("region word bbox lies outside its OCR crop")
+        x1, y1 = round(box[0] / scale_x), round(box[1] / scale_y)
+        x2, y2 = round((box[0] + box[2]) / scale_x), round((box[1] + box[3]) / scale_y)
+        if not 0 <= x1 < x2 <= crop_w or not 0 <= y1 < y2 <= crop_h:
+            raise WindowsOcrError("region word bbox has no valid client-pixel extent")
         kept.append(
             {
                 "bbox": [
-                    crop_x + round(box[0] / scale_x),
-                    crop_y + round(box[1] / scale_y),
-                    max(1, round(box[2] / scale_x)),
-                    max(1, round(box[3] / scale_y)),
+                    crop_x + x1,
+                    crop_y + y1,
+                    x2 - x1,
+                    y2 - y1,
                 ],
                 "word_index": int(item.get("word_index", 0)),
                 "confidence": None,
@@ -413,6 +459,7 @@ def merge_region_elements(
                 # target can require that its label was read HERE and not
                 # somewhere that merely uses the same words.
                 "acquisition": f"ocr_{region_id}" if region_id else None,
+                **({"preprocessing": region_payload["preprocessing"]} if "preprocessing" in region_payload else {}),
             }
         )
 
@@ -440,8 +487,17 @@ def recognize_with_regions(
     rather than raised: a missing region means less evidence, and the
     downstream contract already treats missing evidence as a refusal.
     """
+    import cv2  # noqa: PLC0415
+    import numpy as np  # noqa: PLC0415
+
+    # Decode once: every pass must read the same immutable pixels and digest,
+    # even if the producer replaces its current.png while OCR is in progress.
+    data = Path(image).read_bytes()
+    array = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+    if array is None:
+        raise WindowsOcrError(f"could not decode {image}")
     ocr = engine or WindowsOcr()
-    payload = recognize_path(image, capture, engine=ocr)
+    payload = recognize_frame(array, capture, engine=ocr, png_bytes=data)
     if not regions:
         return payload
 
@@ -449,19 +505,23 @@ def recognize_with_regions(
         from harness.cpu_roi import load_default_cpu_roi_profile  # noqa: PLC0415
 
         roi_profile = load_default_cpu_roi_profile()
-    size = window_size or (
+    size = (
         int(payload["crop"][2]),
         int(payload["crop"][3]),
     )
+    if window_size is not None and window_size != size:
+        raise WindowsOcrError("window size does not match captured frame dimensions")
     for roi_id in regions:
         try:
             resolved = roi_profile.resolve(roi_id, size)
-            region_payload = recognize_path(
-                image,
+            region_payload = recognize_frame(
+                array,
                 capture,
                 engine=ocr,
+                png_bytes=data,
                 roi=tuple(resolved.rect.as_list()),
                 scale=resolved.ocr_scale,
+                light_text_threshold=_LIGHT_TEXT_THRESHOLDS.get(roi_id),
             )
         except Exception:  # noqa: BLE001 - a missing region is less evidence
             continue
@@ -483,10 +543,11 @@ def recognize_path(
     ``recognize_frame`` and never touch the disk at all.
     """
     import cv2  # noqa: PLC0415
+    import numpy as np  # noqa: PLC0415
 
     path = Path(image)
     data = path.read_bytes()
-    array = cv2.imread(str(path))
+    array = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
     if array is None:
         raise WindowsOcrError(f"could not decode {path}")
     return recognize_frame(

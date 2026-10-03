@@ -74,9 +74,10 @@ regions:
     # Read through this ROI at scale 2 it separates 7/7 stored frames:
     # present on every bare world-map frame, absent in city view, absent
     # behind the troop panel, and absent when the search panel is open -
-    # the client replaces the widget with a back arrow.  That last case makes
-    # it sharper than "is this the world map": it means "world map with
-    # nothing on top of it".
+    # the client replaces the widget with a back arrow. These observations
+    # do not cover every foreground panel: the F6 resource-detail frame keeps
+    # the widget visible. Canonical foreground suppression must run before
+    # using this region as WORLD_MAP_VIEW evidence.
     #
     # Height 36 and scale 2 are both measured.  At height 24 the glyphs clip
     # and only "Y:587" survives; at scale 1 nothing reads; at scale 3 the
@@ -131,6 +132,34 @@ regions:
         Scale 3 measured. At scale 1 only the "Level:" label survives and the
         digit - the only part that matters - is lost.
 
+  search_execution_strip:
+    rect: [330, 562, 740, 50]
+    ocr_scale: 3.0
+    purpose: "Search button label across the five category panel positions"
+    calibration:
+      measured_on: "2026-09-27"
+      frames: ["f6-search-blocker-20260927-01/current.png", "../runtime/gather_resource-47aa1a0f9012e418/observation-65c9a529e01346229f8421c5da3023a6/current.png"]
+      exact_reads: "SEARCH at scale 3 on both saved Gold frames; current frame is empty at scale 2"
+      note: "Measured native stored-frame replay; ROI and acquisition authority unchanged. Other category positions require validation."
+
+  resource_point_header:
+    rect: [720, 249, 100, 25]
+    ocr_scale: 2.0
+    purpose: "Resource Point label in the visible selected resource detail card"
+    calibration:
+      measured_on: "2026-09-27"
+      frames: ["f6-detail-blocker-20260927-01/current.png"]
+      exact_reads: "Resource Point at scale 2, 3 and 4"
+      note: "One stored detail-card placement; unseen card positions remain unevidenced."
+  resource_point_gather:
+    rect: [815, 446, 160, 60]
+    ocr_scale: 2.0
+    purpose: "Gather button label in the selected resource detail card"
+    calibration:
+      measured_on: "2026-09-27"
+      frames: ["f6-detail-blocker-20260927-01/current.png"]
+      exact_reads: "GATHER at scale 2, 3 and 4"
+
   # The troop dispatch drawer, which slides in from the right.  It carries
   # its OWN queue readout - "Queue 1/5" at a different place from the bare
   # world map's "1/5" - so the world-map queue ROI reads NO_TEXT here and is
@@ -170,6 +199,21 @@ regions:
       measured_on: "2026-09-20"
       exact_reads: "Dispatch a new troop from your city, day and night"
 
+  # The summary line in the New Troop setup.  The native client renders the
+  # selected count in a blue/white strip; Windows.Media.Ocr reliably reads
+  # the semantic ``Units`` anchor only when this line is isolated from the
+  # adjacent Load field.  The count remains visual corroboration and is never
+  # fabricated from the OCR label.
+  new_troop_units:
+    rect: [660, 480, 165, 25]
+    ocr_scale: 2.0
+    purpose: "New Troop summary Units anchor for setup classification"
+    calibration:
+      measured_on: "2026-09-27"
+      frame: "gather_resource-87d063bc35de06f9/observation-3c9b85d07a4c4a0a896bfca100f91b9e/current.png"
+      exact_reads: "Units: at scales 2, 3 and 4; scales 1 reads nothing"
+      note: "Native stored-frame replay; crop excludes adjacent Load field"
+
   center_canvas:
     rect: [190, 64, 1086, 556]
     purpose: "central game scene visual processing"
@@ -181,18 +225,28 @@ regions:
   # the same profile so crop provenance cannot drift from the harness map.
   resource_category_barbarians:
     rect: [350, 732, 105, 24]
+    ocr_scale: 2.0
+    calibration: {frame: "f6-search-blocker-20260927-01/current.png", preprocessing: "light_text_min_bgr", threshold: 85, exact_read: "Barbarians"}
     purpose: "fixed CPU OCR label crop for the Barbarians search category"
   resource_category_cropland:
     rect: [500, 732, 105, 24]
+    ocr_scale: 2.0
+    calibration: {frame: "f6-search-blocker-20260927-01/current.png", preprocessing: "light_text_min_bgr", threshold: 85, exact_read: "Cropland"}
     purpose: "fixed CPU OCR label crop for the Cropland search category"
   resource_category_logging_camp:
     rect: [625, 732, 125, 24]
+    ocr_scale: 2.0
+    calibration: {frame: "f6-search-blocker-20260927-01/current.png", preprocessing: "light_text_min_bgr", threshold: 85, exact_read: "Logging Camp"}
     purpose: "fixed CPU OCR label crop for the Logging Camp search category"
   resource_category_stone_deposit:
     rect: [770, 732, 135, 24]
+    ocr_scale: 2.0
+    calibration: {frame: "f6-search-blocker-20260927-01/current.png", preprocessing: "light_text_min_bgr", threshold: 90, exact_read: "Stone Deposit"}
     purpose: "fixed CPU OCR label crop for the Stone Deposit search category"
   resource_category_gold_deposit:
     rect: [915, 732, 140, 24]
+    ocr_scale: 2.0
+    calibration: {frame: "f6-search-blocker-20260927-01/current.png", preprocessing: "light_text_min_bgr", threshold: 85, exact_read: "Gold Deposit"}
     purpose: "fixed CPU OCR label crop for the Gold Deposit search category"
   chat_log:
     rect: [0, 650, 320, 118]

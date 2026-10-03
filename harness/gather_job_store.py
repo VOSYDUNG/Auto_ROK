@@ -33,6 +33,9 @@ _JOB_FIELDS = frozenset({
     "schema_version", "job_id", "task_id", "character_id", "catalog_digest",
     "starts_at", "expires_at", "allowed_actions", "max_marches", "mission_id",
 })
+_MIXED_JOB_FIELDS = _JOB_FIELDS | frozenset({
+    "resource_schedule", "slot_catalog_digests", "resource_level", "schedule_digest",
+})
 
 
 def _pairs_no_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -66,10 +69,12 @@ def _timestamp(value: Any) -> datetime:
 def load_gather_job_authority(
     path: str | Path, *, canonical_actions: frozenset[str], expected_catalog_digest: str,
 ) -> GatherJobAuthority:
-    """Load exact schema v1 JSON; reject actions outside the compiled catalog."""
+    """Load exact legacy or mixed schema; reject actions outside the catalog."""
     raw = _read_json(Path(path))
-    if not isinstance(raw, dict) or frozenset(raw) != _JOB_FIELDS:
-        raise GatherJobStoreError("startup job must contain exactly the schema v1 fields")
+    if not isinstance(raw, dict) or frozenset(raw) != (
+        _MIXED_JOB_FIELDS if raw.get("schema_version") == 2 else _JOB_FIELDS
+    ):
+        raise GatherJobStoreError("startup job has invalid schema fields")
     actions = raw["allowed_actions"]
     if (not isinstance(actions, list) or not actions
             or any(not isinstance(item, str) or not item.strip() for item in actions)
@@ -78,7 +83,10 @@ def load_gather_job_authority(
     if (not isinstance(canonical_actions, frozenset)
             or not isinstance(expected_catalog_digest, str)
             or not expected_catalog_digest.strip()
-            or raw["catalog_digest"] != expected_catalog_digest
+            or expected_catalog_digest not in (
+                raw["slot_catalog_digests"] if raw["schema_version"] == 2
+                and isinstance(raw["slot_catalog_digests"], list) else [raw["catalog_digest"]]
+            )
             or not set(actions).issubset(canonical_actions)):
         raise GatherJobStoreError("job catalog scope does not match compiled GATHER catalog")
     if type(raw["schema_version"]) is not int or type(raw["max_marches"]) is not int:
@@ -90,6 +98,12 @@ def load_gather_job_authority(
             starts_at=_timestamp(raw["starts_at"]), expires_at=_timestamp(raw["expires_at"]),
             allowed_actions=frozenset(actions), max_marches=raw["max_marches"],
             mission_id=raw["mission_id"], schema_version=raw["schema_version"],
+            resource_schedule=tuple(raw["resource_schedule"]) if raw["schema_version"] == 2
+                and isinstance(raw["resource_schedule"], list) else (),
+            slot_catalog_digests=tuple(raw["slot_catalog_digests"]) if raw["schema_version"] == 2
+                and isinstance(raw["slot_catalog_digests"], list) else (),
+            resource_level=raw["resource_level"] if raw["schema_version"] == 2 else None,
+            schedule_digest=raw["schedule_digest"] if raw["schema_version"] == 2 else None,
         )
     except GatherJobAuthorityError as exc:
         raise GatherJobStoreError(str(exc)) from exc
@@ -126,13 +140,21 @@ class GatherClientBinding:
 
 
 def _scope(job: GatherJobAuthority) -> dict[str, Any]:
-    return {
+    scope = {
         "job_id": job.job_id, "task_id": job.task_id, "character_id": job.character_id,
         "catalog_digest": job.catalog_digest, "starts_at": job.starts_at.isoformat(),
         "expires_at": job.expires_at.isoformat(), "allowed_actions": sorted(job.allowed_actions),
         "max_marches": job.max_marches, "mission_id": job.mission_id,
         "schema_version": job.schema_version,
     }
+    if job.schema_version == 2:
+        scope.update(
+            resource_schedule=list(job.resource_schedule),
+            slot_catalog_digests=list(job.slot_catalog_digests),
+            resource_level=job.resource_level,
+            schedule_digest=job.schedule_digest,
+        )
+    return scope
 
 
 class JsonGatherJobStore:
@@ -140,6 +162,8 @@ class JsonGatherJobStore:
 
     The lock is acquired once with exclusive creation. Contention or an
     uncertain crashed writer is denied, rather than retried or auto-recovered.
+    Mixed-job ledgers lacking the complete schedule scope are historical
+    evidence only: they fail closed and are never upgraded or adopted in place.
     """
 
     def __init__(self, root: str | Path) -> None:

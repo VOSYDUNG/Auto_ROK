@@ -78,6 +78,34 @@ def test_first_slot_rejects_numeric_zero_as_an_observed_queue_baseline(tmp_path)
         record_verified_gather_tick(job(), context, result, ledger)
 
 
+@pytest.mark.parametrize("damage", [None, {"march_queue_used": 1}, {"march_queue_used": 0.0},
+    {"march_queue_used": False}, {"march_queue_capacity": 4}, {"march_queue_source": None},
+    {"image_sha256": "bad"}, {"captured_at": NOW.isoformat()}, {"window": WINDOW | {"pid": 9999}}])
+def test_first_verified_proof_optional_zero_is_strict_and_not_a_numeric_baseline(tmp_path, damage):
+    ledger = JsonGatherJobStore(tmp_path / "ledger")
+    ledger.bind_client(job(), WINDOW)
+    reserve(ledger, 1)
+    context, result = result_for(1)
+    step = result.engine_result
+    facts = dict(step.snapshot.facts) | {
+        "march_queue_used": 0, "march_queue_capacity": 5,
+        "march_queue_source": "visible_ocr_queue_anchor", "image_sha256": "a" * 64,
+        "captured_at": datetime.fromtimestamp(step.snapshot.observed_at, timezone.utc).isoformat(),
+    }
+    before = replace(step.snapshot, facts=facts | (damage or {}))
+    result = replace(result, engine_result=replace(step, snapshot=before))
+    if damage is not None:
+        with pytest.raises(GatherJobStoreError):
+            record_verified_gather_tick(job(), context, result, ledger)
+        assert ledger.progress(job()).verified_marches == 0
+    else:
+        assert record_verified_gather_tick(job(), context, result, ledger).verified_marches == 1
+        entry = ledger.verifications(job())[0]
+        assert entry["before_source"] == "job_initial_slot_ordinal"
+        assert "counter_value" not in before.facts["completion_baseline"]
+        assert before.facts["march_queue_used"] == 0
+
+
 def test_first_postcheck_must_be_one_of_five(tmp_path):
     ledger = JsonGatherJobStore(tmp_path / "ledger")
     ledger.bind_client(job(), WINDOW)

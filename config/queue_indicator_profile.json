@@ -105,18 +105,50 @@
         "...##",
         "####.",
         "###.."
+      ],
+      [
+        "####.",
+        "#....",
+        "##...",
+        "####.",
+        "...##",
+        "...##",
+        "####.",
+        ".##.."
+      ],
+      [
+        "####",
+        "#...",
+        "##..",
+        "####",
+        "...#",
+        "...#",
+        "#.##",
+        ".##."
       ]
     ],
     "2": [
-      "..#..",
-      "#####",
-      "....#",
-      "....#",
-      "...##",
-      "..##.",
-      ".###.",
-      "####.",
-      ".####"
+      [
+        "..#..",
+        "#####",
+        "....#",
+        "....#",
+        "...##",
+        "..##.",
+        ".###.",
+        "####.",
+        ".####"
+      ],
+      [
+        "####",
+        "...#",
+        "...#",
+        "..##",
+        "..#.",
+        ".##.",
+        "###.",
+        "####"
+      ]
     ],
     "3": [
       [
@@ -128,6 +160,17 @@
         "...#",
         "#.##",
         "###."
+      ],
+      [
+        "..#...",
+        "#####.",
+        "....#.",
+        "...##.",
+        "..##..",
+        "....#.",
+        "....##",
+        "##.##.",
+        ".###.."
       ]
     ],
     "4": [
@@ -139,6 +182,15 @@
         "#####.",
         ".#####",
         "....#."
+      ],
+      [
+        "..###.",
+        "..###.",
+        ".##.#.",
+        "##..#.",
+        "######",
+        ".#####",
+        "...##."
       ]
     ]
   },
@@ -151,9 +203,42 @@
     "stability_check": "at 160 and 180 the three glyphs segment identically on both the training frame and an independent live frame; at 200 and 220 they do not"
   },
   "trained_from": {
-    "2/5": "queue-2of5.png",
-    "3/5": "queue-3of5.png",
-    "4/5": "queue-4of5.png",
-    "5/5": "queue-5of5.png"
+    "2/5": "current.png",
+    "3/5": "current.png",
+    "4/5": "current.png",
+    "5/5": "queue-5of5.png",
+    "1/5": "current.png"
+  },
+  "training_sources": {
+    "1/5": {
+      "frame_id": "rok-20260927T024044381473Z-c53e3a1301ea",
+      "frame_path": "C:\\Shin\\CEO-OS\\Auto_ROK\\workspace\\runtime\\gather_resource-50ac5643a7cecd98\\current.png",
+      "frame_sha256": "c53e3a1301ea8d05ee0184025b0a3003a68a629aeaa82144b3ffe27b798aa5aa",
+      "manifest_path": "C:\\Shin\\CEO-OS\\Auto_ROK\\workspace\\runtime\\gather_resource-50ac5643a7cecd98\\capture.json",
+      "archived_frame_path": "workspace/runs/f6-first-postcheck-blocker-20260927-05/current.png",
+      "archived_manifest_path": "workspace/runs/f6-first-postcheck-blocker-20260927-05/capture.json",
+      "archive_note": "Exact native bytes retained before runtime paths are reused; archived manifest preserves original capture path.",
+      "visual_label_source": "ROOT inspection of the same native frame; 1/5 after one scoped March, not a runtime count assertion"
+    },
+    "2/5": {
+      "frame_id": "rok-20260927T032011022422Z-43cc31fec61c",
+      "frame_path": "C:\\Shin\\CEO-OS\\Auto_ROK\\workspace\\runtime\\gather_resource-65256b73ad7ed58a\\observation-a6d1372389a74a01a8f565905b659b36\\current.png",
+      "frame_sha256": "43cc31fec61cbd79016681b6878cead3bddef4ec2a22b6d535132823f6cd80d9",
+      "manifest_path": "C:\\Shin\\CEO-OS\\Auto_ROK\\workspace\\runtime\\gather_resource-65256b73ad7ed58a\\observation-a6d1372389a74a01a8f565905b659b36\\capture.json"
+    },
+    "3/5": {
+      "frame_id": "rok-20260927T080529556776Z-fd7ee1763c6e",
+      "frame_path": "C:\\Shin\\CEO-OS\\Auto_ROK\\workspace\\runtime\\gather_resource-08997d0c79631279\\observation-7cd2684846734f60bf6677952cdf7a31\\current.png",
+      "frame_sha256": "fd7ee1763c6e87ccf025d59de4f3fed986646433334601049118825b2c6d55c7",
+      "manifest_path": "C:\\Shin\\CEO-OS\\Auto_ROK\\workspace\\runtime\\gather_resource-08997d0c79631279\\observation-7cd2684846734f60bf6677952cdf7a31\\capture.json",
+      "visual_label_source": "ROOT inspection of the immutable native frame; visible March queue label 3/5, not an expected-count assertion"
+    },
+    "4/5": {
+      "frame_id": "rok-20260927T081135834446Z-e068105fe527",
+      "frame_path": "C:\\Shin\\CEO-OS\\Auto_ROK\\workspace\\runtime\\gather_resource-d445aecd201f29bc\\observation-9dfd764b29e64036a168684562d8e570\\current.png",
+      "frame_sha256": "e068105fe5274166fa6a55afbf3aa6f63b61d2b1501055afb0ac66bd03c4efb4",
+      "manifest_path": "C:\\Shin\\CEO-OS\\Auto_ROK\\workspace\\runtime\\gather_resource-d445aecd201f29bc\\observation-9dfd764b29e64036a168684562d8e570\\capture.json",
+      "visual_label_source": "ROOT inspection of the immutable native frame; visible March queue label 4/5, not an expected-count assertion"
+    }
   }
 }

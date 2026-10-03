@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 from typing import Any, Mapping
@@ -17,8 +18,9 @@ from harness.gather_job_authority import GatherJobAuthority, GatherJobProgress
 from harness.gather_job_store import GatherClientBinding, JsonGatherJobStore
 from harness.gather_job_verification import (
     record_verified_gather_tick, recover_verified_gather_checkpoint,
+    first_slot_queue_is_absent_or_measured_zero,
 )
-from harness.mission_runner import MissionRunner, MissionTickResult
+from harness.mission_runner import MissionRunner, MissionTickResult, gather_queue_completion_baseline
 from harness.mission_runtime import MissionContext, ToolSnapshot
 from harness.mission_store import CheckpointStatus, JsonMissionStore, MissionCheckpoint
 
@@ -64,7 +66,7 @@ class _FreshObservationTool:
                  prior_frame_ids: frozenset[str], minimum_observed_at: float | None,
                  previous_checkpoint_frame: str | None,
                  persisted_baseline: Mapping[str, Any] | None,
-                 client: GatherClientBinding | None) -> None:
+                 client: GatherClientBinding | None, client_provider=None) -> None:
         self.inner = inner
         self.job = job
         self.prior_frame_ids = prior_frame_ids
@@ -72,9 +74,15 @@ class _FreshObservationTool:
         self.previous_checkpoint_frame = previous_checkpoint_frame
         self.persisted_baseline = persisted_baseline
         self.client = client
+        self.client_provider = client_provider
 
     def observe(self, context: MissionContext) -> ToolSnapshot:
         snapshot = self.inner.observe(context)
+        # The canonical capture provider binds an unused job during its first
+        # observation. Read that durable binding after observation, rather than
+        # retaining the pre-capture None. A prior binding still cannot change.
+        if self.client is None and self.client_provider is not None:
+            self.client = self.client_provider()
         if (snapshot.mission_id != self.job.mission_id or snapshot.task_id != self.job.task_id
                 or not snapshot.frame_id
                 or snapshot.frame_id in self.prior_frame_ids
@@ -86,18 +94,33 @@ class _FreshObservationTool:
             raise GatherJobCoordinationError("GATHER observation character changed")
         if self.client is not None and GatherClientBinding.from_window(snapshot.facts.get("window")) != self.client:
             raise GatherJobCoordinationError("GATHER observation client changed")
-        if (self.expected_count == 0 and snapshot.state == "TROOP_DISPATCH_DRAWER"
-                and type(snapshot.facts.get("march_queue_used")) is int):
-            raise GatherJobCoordinationError("first GATHER slot cannot adopt a numeric pre-March queue")
-        if (self.expected_count > 0 and snapshot.state == "TROOP_DISPATCH_DRAWER" and
-                (type(snapshot.facts.get("march_queue_used")) is not int or
-                 snapshot.facts["march_queue_used"] != self.expected_count)):
-            raise GatherJobCoordinationError("GATHER queue baseline diverges from verified journal")
+        if self.expected_count == 0 and snapshot.state == "TROOP_DISPATCH_DRAWER":
+            if not first_slot_queue_is_absent_or_measured_zero(snapshot, self.job, self.client):
+                raise GatherJobCoordinationError("first GATHER slot has ineligible pre-March queue evidence")
+            # Retain actual optional zero facts while preventing MissionRunner
+            # from adopting them as a required numeric completion baseline.
+            snapshot = replace(snapshot, facts=dict(snapshot.facts) | {"gather_job_first_slot_queue_optional": True})
+        if self.expected_count > 0 and snapshot.state == "TROOP_DISPATCH_DRAWER":
+            facts = snapshot.facts
+            measured = gather_queue_completion_baseline(snapshot)
+            if (type(facts.get("march_queue_used")) is not int
+                    or facts["march_queue_used"] != self.expected_count
+                    or type(facts.get("march_queue_capacity")) is not int
+                    or facts["march_queue_capacity"] != self.job.max_marches
+                    or measured is None):
+                raise GatherJobCoordinationError("GATHER queue baseline diverges from verified journal")
+            # CREATE_NEW_TROOP's post-observation passes through this same
+            # wrapper before MissionRunner can persist its new checkpoint.
+            # Carry the actual Drawer reading into that post-observation;
+            # otherwise a first Drawer tick has no pre-existing baseline.
+            self.persisted_baseline = measured
+            snapshot = replace(snapshot, facts=dict(facts) | {"completion_baseline": self.persisted_baseline})
         if any(item.action_id == "MARCH_WITH_CURRENT_SELECTION" for item in snapshot.allowed_actions):
             baseline = snapshot.facts.get("completion_baseline") or self.persisted_baseline
             if self.expected_count == 0:
-                if (snapshot.state != "NEW_TROOP_SETUP" or baseline is not None
-                        or type(snapshot.facts.get("march_queue_used")) is int
+                if (snapshot.state != "NEW_TROOP_SETUP" or (
+                        baseline is not None and not self._prior_initial_marker_matches(baseline, snapshot))
+                        or not first_slot_queue_is_absent_or_measured_zero(snapshot, self.job, self.client)
                         or snapshot.facts.get("gather_job_id") != self.job.job_id
                         or snapshot.facts.get("new_troop_formation_ready") is not True
                         or not isinstance(snapshot.observed_at, (int, float))
@@ -123,7 +146,32 @@ class _FreshObservationTool:
                         "visible_ocr_queue_anchor", "visible_ocr_march_queue_region"
                     }):
                 raise GatherJobCoordinationError("March baseline does not match durable job progress")
+            else:
+                snapshot = replace(snapshot, facts=dict(snapshot.facts) | {"completion_baseline": dict(baseline)})
         return snapshot
+
+    def _prior_initial_marker_matches(self, baseline, snapshot) -> bool:
+        """An earlier navigation postcheck marker carries no dispatch quota.
+
+        Only the exact stored first-slot ordinal may be refreshed. Numeric or
+        foreign baselines never become first-slot authority by being discarded.
+        """
+        at = baseline.get("source_timestamp") if isinstance(baseline, Mapping) else None
+        return (
+            isinstance(baseline, Mapping)
+            and baseline.get("predicate_id") == "first_march_queue_appeared_at_one"
+            and baseline.get("source") == "job_initial_slot_ordinal"
+            and baseline.get("counter_fact") == "march_queue_used"
+            and "counter_value" not in baseline
+            and baseline.get("job_id") == self.job.job_id
+            and baseline.get("character_id") == self.job.character_id
+            and type(baseline.get("capacity")) is int and baseline["capacity"] == self.job.max_marches
+            and self.previous_checkpoint_frame is not None
+            and baseline.get("source_frame_id") == self.previous_checkpoint_frame
+            and isinstance(at, (int, float)) and not isinstance(at, bool) and math.isfinite(at)
+            and isinstance(snapshot.observed_at, (int, float)) and not isinstance(snapshot.observed_at, bool)
+            and math.isfinite(snapshot.observed_at) and at < snapshot.observed_at
+        )
 
     @property
     def expected_count(self) -> int:
@@ -227,6 +275,7 @@ class GatherJobCoordinator:
             previous_checkpoint_frame=checkpoint.last_frame_id if checkpoint else None,
             persisted_baseline=checkpoint.completion_baseline if checkpoint else None,
             client=self.ledger.client_binding(self.job),
+            client_provider=lambda: self.ledger.client_binding(self.job),
         )
         fresh.expected_count = plan.progress.verified_marches
         original_tool = runner.tool

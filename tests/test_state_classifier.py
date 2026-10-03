@@ -20,7 +20,7 @@ def test_classifies_each_supported_gather_state() -> None:
     cases = {
         "CITY_VIEW": ("city buildings occupy central world canvas", "resource counters across top", "primary circular navigation/actions at bottom-right", "quest/task list at left"),
         "WORLD_MAP_VIEW": ("map terrain and world objects occupy central canvas", "resource counters across top", "bottom-right primary navigation is visible"),
-        "RESOURCE_SEARCH_PANEL": ("SEARCH", "Barbarians", "Cropland"),
+        "RESOURCE_SEARCH_PANEL": ("SEARCH", "Stone Deposit", "Cropland"),
         "RESOURCE_POINT_DETAIL": ("Resource Point", "GATHER"),
         "TROOP_DISPATCH_DRAWER": ("Dispatch a new troop from your city", "New Troop"),
         "NEW_TROOP_SETUP": ("New Troop", "MARCH", "Units", "Total Power"),
@@ -57,10 +57,14 @@ def test_missing_evidence_is_unknown() -> None:
 
 def test_competing_complete_states_are_ambiguous() -> None:
     result = StateClassifier().classify(observed(
-        "Resource Point", "GATHER", "SEARCH", "Barbarians", "Cropland"
+        "Resource Point", "GATHER", "SEARCH", "Stone Deposit", "Cropland"
     ))
     assert result.state_id == AMBIGUOUS_STATE
     assert result.ambiguity["candidate_states"] == ("RESOURCE_SEARCH_PANEL", "RESOURCE_POINT_DETAIL")
+
+def test_unrelated_barbarians_label_is_neither_required_nor_sufficient():
+    assert StateClassifier().classify(observed('SEARCH','Barbarians','Cropland')).state_id==UNKNOWN_STATE
+    assert StateClassifier().classify(observed('SEARCH','Stone Deposit','Gold Deposit')).state_id=='RESOURCE_SEARCH_PANEL'
 
 
 def test_stale_or_mismatched_frame_evidence_cannot_match() -> None:

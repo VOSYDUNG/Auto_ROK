@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import subprocess
 from typing import Sequence
+from uuid import uuid4
 
 from harness.mission_runtime import MissionContext
 from harness.mission_tool import ObservationBundle
@@ -93,13 +94,17 @@ class WindowsLiveObservationProvider:
             raise LiveObservationError(f"Windows capture backend unavailable: {exc}") from exc
 
         run_dir = self._run_dir(context)
-        run_dir.mkdir(parents=True, exist_ok=True)
-        image = run_dir / "current.png"
-        capture_path = run_dir / "capture.json"
-        ocr_path = run_dir / "ocr.json"
-        projection_path = run_dir / "projection.json"
 
         try:
+            run_dir.mkdir(parents=True, exist_ok=True)
+            # One exclusive allocation per observation. Never overwrite an older
+            # frame or retry a collision/denial under another name.
+            artifact_dir = run_dir / f"observation-{uuid4().hex}"
+            artifact_dir.mkdir()
+            image = artifact_dir / "current.png"
+            capture_path = artifact_dir / "capture.json"
+            ocr_path = artifact_dir / "ocr.json"
+            projection_path = artifact_dir / "projection.json"
             capture = capture_rok_client(image, timeout_seconds=self.timeout_seconds)
             self._write_json(capture_path, capture)
             if self.ocr_backend == "windows_direct":
@@ -158,6 +163,9 @@ class WindowsLiveObservationProvider:
         # it is execution provenance, not persistent game-state memory.
         post = capture.get("post_capture")
         facts = dict(projected.scene.facts)
+        # Preserve full native process identity for downstream visual sensors.
+        facts["window"] = {**facts.get("window", {}),
+            "process_path": capture.get("target", {}).get("process_path")}
         facts["image_path"] = str(image)
         facts["image_path_source"] = "current_capture_artifact"
         if isinstance(post, dict):
@@ -173,17 +181,20 @@ class WindowsLiveObservationProvider:
                 facts["client_screen_rect_source"] = "capture_post_binding"
 
         scene = replace(projected.scene, facts=facts)
+        try:
+            self._write_json(
+                projection_path,
+                {
+                    "status": projected.status,
+                    "reason": projected.reason,
+                    "frame_id": projected.observation.frame_id,
+                    "decisions": list(projected.decisions),
+                    "scene_facts": facts,
+                },
+            )
+        except OSError as exc:
+            raise LiveObservationError(str(exc)) from exc
         self._previous_timestamp = projected.observation.timestamp
-        self._write_json(
-            projection_path,
-            {
-                "status": projected.status,
-                "reason": projected.reason,
-                "frame_id": projected.observation.frame_id,
-                "decisions": list(projected.decisions),
-                "scene_facts": facts,
-            },
-        )
         return ObservationBundle(projected.observation, scene)
 
     def _overlay_rapidocr(self, capture: dict, image: Path, original: object) -> object:

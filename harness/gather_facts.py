@@ -206,9 +206,19 @@ def _new_troop_pixels(image_path: str, image_hash: str) -> bool:
         slider = region(703, 233, 735, 246)
         blue, green, red = (slider[:, :, channel].astype(np.float32)
                             for channel in range(3))
-        selected_troops = (green > 100) & (green > red * 1.3) & (green > blue * 1.3)
+        # Archived positives used a green selected-row fill.  The current
+        # client renders a blue/white fill extending to the right of the
+        # slider knob.  Empty rows have only the left knob highlight, so use
+        # row-local right-side fill as the distinguishing signal; colour alone
+        # is deliberately insufficient.
+        selected_green = (green > 100) & (green > red * 1.3) & (green > blue * 1.3)
+        blue_pixels = ((blue > 150) & (green > 120)
+                       & (blue > green * 1.05) & (blue > red * 1.3))
+        selected_blue = (float(np.mean(blue_pixels)) >= .10
+                         and float(np.mean(blue_pixels[:, 10:])) >= .05)
         return (float(np.mean(orange)) >= .70
-                and float(np.mean(selected_troops)) >= .50
+                and (float(np.mean(selected_green)) >= .50
+                     or selected_blue)
                 and portrait_occupied((380, 245, 500, 465), .25)
                 and portrait_occupied((520, 295, 595, 465), .20))
     except (ImportError, OSError, ValueError):

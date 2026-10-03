@@ -12,6 +12,7 @@ from typing import Callable, Mapping, Protocol
 from harness.action_surface import InputKind, ResolvedInput
 from harness.gather_job_authority import GatherCatalogIdentity, GatherJobAuthority, GatherJobProgress
 from harness.gather_job_store import GatherJobRevokedError
+from harness.gather_job_verification import first_slot_queue_is_absent_or_measured_zero
 from harness.mission_runtime import ActionChoice, MissionContext, ToolSnapshot
 from harness.mission_tool import InterferenceCheck, InterferenceGuard
 from harness.scene_graph import SceneGraph
@@ -303,7 +304,6 @@ class GatherJobInputGuard:
                 or scene.facts.get("character_id") != self.job.character_id):
             return InterferenceCheck(False, "GATHER_JOB_SCOPE_OR_FRAME_MISMATCH")
         if (not self.job.starts_at <= now < self.job.expires_at
-                or self.job.catalog_digest != self.catalog.digest
                 or not self.job.allowed_actions.issubset(self.catalog.actions)
                 or choice.action_id not in self.job.allowed_actions
                 or choice.action_id not in self.catalog.actions
@@ -342,6 +342,10 @@ class GatherJobInputGuard:
         if (progress.job_id != self.job.job_id or progress.revoked
                 or progress.dispatched_marches >= self.job.max_marches):
             return InterferenceCheck(False, "GATHER_JOB_STOPPED_OR_FULL")
+        expected_catalog = (self.job.catalog_for_slot(progress.verified_marches + 1)
+                            if self.job.schema_version == 2 else self.job.catalog_digest)
+        if self.catalog.digest != expected_catalog:
+            return InterferenceCheck(False, "GATHER_JOB_ACTION_NOT_AUTHORIZED")
 
         facts = dict(host.facts)
         facts.update({"gather_job_id": self.job.job_id,
@@ -365,15 +369,17 @@ class GatherJobInputGuard:
                 or not self._baseline_fresh(baseline, now, observed_at)):
             return InterferenceCheck(False, "GATHER_JOB_QUEUE_BASELINE_INVALID")
         if progress.verified_marches == 0:
-            # The right-side queue UI first appears after this March. A job
-            # ordinal of zero is not a sourced observation of queue 0/5.
+            # A first-slot job ordinal is not a numeric completion baseline.
+            # Optional real zero is allowed only with same-frame provenance;
+            # frame age was checked above and is checked again before input.
             if (baseline.get("predicate_id") != "first_march_queue_appeared_at_one"
                     or baseline.get("source") != "job_initial_slot_ordinal"
                     or baseline.get("job_id") != self.job.job_id
                     or "counter_value" in baseline
                     or baseline["source_frame_id"] != before.frame_id
                     or baseline.get("source_timestamp") != observed_at
-                    or type(before.facts.get("march_queue_used")) is int):
+                    or not first_slot_queue_is_absent_or_measured_zero(
+                        before, self.job, self.ledger.client_binding(self.job))):
                 return InterferenceCheck(False, "GATHER_JOB_QUEUE_BASELINE_INVALID")
         elif (baseline.get("predicate_id") != "march_queue_used_increased"
               or type(baseline.get("counter_value")) is not int

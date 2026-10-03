@@ -3,6 +3,8 @@
 `harness/windows_capture_backend.py` captures one frame from the uniquely
 rediscovered `Rise of Kingdoms` / `MASS.exe` HWND. It never selects a monitor,
 desktop, window-name substring, or DXGI duplication fallback. All optional
+Cursor capture is explicitly `False` so the pointer cannot occlude text in
+perception frames; metadata records the actual constructor option. Other
 Windows Graphics Capture settings remain `None`, meaning OS default; in
 particular `draw_border=None` does not claim borderless capture and avoids
 calling the unsupported `IsBorderRequired` setter on this Windows 10 host.
@@ -19,6 +21,17 @@ Windows.Media.Ocr. It emits raw text plus client-pixel bboxes with confidence
 `null`, engine version and language. `scripts/observe_rok_live.py` feeds those
 records directly into the accepted G004 bridge. Without explicit candidate
 definitions, OCR evidence is useful but no semantic `VisualTarget` is invented.
+
+The canonical mission provider, `WindowsLiveObservationProvider`, allocates one
+exclusive `observation-<uuid>` directory below its run directory for each
+observation. `current.png`, `capture.json`, `ocr.json` and `projection.json`
+belong to that directory; downstream readers use the returned scene's exact
+`image_path`. Earlier frame artifacts stay unchanged. Allocation or publication
+failure returns no bundle and does not advance the accepted timestamp. A partial
+directory is diagnostic evidence, not a successful observation; there is no
+latest pointer, collision retry or fallback to older files. This avoids replacing
+an earlier OCR destination but does not identify or eliminate every native
+Windows I/O failure, including separate checkpoint/journal writes.
 
 Install into an isolated environment and run:
 
@@ -54,7 +67,7 @@ For the bounded CPU OCR experiment, `run_gather_tick.py` accepts
 `--ocr-backend rapidocr_fixed_roi_experiment`.  This keeps the Windows OCR
 payload as the base, overlays only the fixed resource-category row, verifies
 the same frame hash, and records `CPUExecutionProvider`; the default backend
-remains `windows`, and the optional path is fail-closed and not an armed-live
+remains `windows_direct`, and the optional path is fail-closed and not an armed-live
 promotion.
 
 Primary sources:

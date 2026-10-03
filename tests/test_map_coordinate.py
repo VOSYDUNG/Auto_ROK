@@ -201,7 +201,7 @@ class TestClassifierRoutes:
     def test_the_coordinate_route_does_not_leak_into_other_states(self):
         """It must not turn a search panel into a world map."""
         result = StateClassifier().classify(
-            _observation("SEARCH", "Barbarians", "Cropland")
+            _observation("SEARCH", "Stone Deposit", "Cropland")
         )
         assert result.state_id == "RESOURCE_SEARCH_PANEL"
 

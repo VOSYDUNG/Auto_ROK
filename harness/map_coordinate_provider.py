@@ -6,10 +6,9 @@ saying what it saw. It never adds the visual detector's HUD phrases: it did
 not look at the HUD.
 
 Foreground suppression is repeated here rather than inherited. The coordinate
-widget is already hidden behind every open panel, so in practice the two
-agree - but STA-004 says a foreground surface suppresses background state,
-and a sensor that relies on the client happening to hide its own widget is
-relying on the client, not on a rule.
+widget can remain visible behind a resource-detail card. STA-004 says a
+foreground surface suppresses background state; reading an exact foreground
+marker must therefore prevent this background sensor from adding evidence.
 """
 from __future__ import annotations
 

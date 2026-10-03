@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import math
 from typing import Mapping
 
 from harness.gather_job_authority import GatherJobAuthority, GatherJobProgress
@@ -13,6 +14,32 @@ from harness.mission_store import CheckpointStatus, MissionCheckpoint
 
 
 _QUEUE_SOURCES = {"visible_ocr_queue_anchor", "visible_ocr_march_queue_region"}
+
+
+def first_slot_queue_is_absent_or_measured_zero(snapshot, job, client) -> bool:
+    """Optional real zero is evidence, never the initial completion baseline."""
+    facts = snapshot.facts
+    if "march_queue_used" not in facts:
+        return True
+    try:
+        captured = datetime.fromisoformat(facts["captured_at"])
+        image_hash = facts.get("image_sha256")
+        return (
+            type(facts["march_queue_used"]) is int and facts["march_queue_used"] == 0
+            and type(facts.get("march_queue_capacity")) is int and facts["march_queue_capacity"] == job.max_marches
+            and facts.get("march_queue_source") in _QUEUE_SOURCES
+            and snapshot.state in {"TROOP_DISPATCH_DRAWER", "NEW_TROOP_SETUP"}
+            and isinstance(snapshot.frame_id, str) and bool(snapshot.frame_id)
+            and isinstance(snapshot.observed_at, (int, float)) and not isinstance(snapshot.observed_at, bool)
+            and math.isfinite(snapshot.observed_at)
+            and captured.tzinfo is not None and captured.timestamp() == snapshot.observed_at
+            and isinstance(image_hash, str) and len(image_hash) == 64
+            and all(ch in "0123456789abcdef" for ch in image_hash)
+            and facts.get("character_id") == job.character_id
+            and client is not None and GatherClientBinding.from_window(facts.get("window")) == client
+        )
+    except (KeyError, TypeError, ValueError, GatherJobStoreError):
+        return False
 
 
 def record_verified_gather_tick(
@@ -51,6 +78,7 @@ def record_verified_gather_tick(
     sequence = feedback.facts.get("gather_job_dispatch_sequence")
     after_count = after.facts.get("march_queue_used")
     first_slot = sequence == 1
+    bound = ledger.require_client(job, before.facts.get("window"))
     # before_count is a durable job ordinal. On the first slot it is not an
     # observed queue value; before_source states that distinction explicitly.
     before_count = 0 if first_slot else baseline.get("counter_value")
@@ -65,7 +93,7 @@ def record_verified_gather_tick(
                 or baseline.get("source_frame_id") != before.frame_id
                 or baseline.get("source_timestamp") != before.observed_at
                 or before.state != "NEW_TROOP_SETUP"
-                or type(before.facts.get("march_queue_used")) is int
+                or not first_slot_queue_is_absent_or_measured_zero(before, job, bound)
             ))
             or (not first_slot and (
                 baseline.get("predicate_id") != "march_queue_used_increased"
@@ -90,7 +118,6 @@ def record_verified_gather_tick(
             or receipt.get("character_id") != job.character_id
             or receipt.get("non_interference_confirmed") is not True):
         raise GatherJobStoreError("verified GATHER transition has inconsistent queue or receipt")
-    bound = ledger.require_client(job, before.facts.get("window"))
     if GatherClientBinding.from_window(after.facts.get("window")) != bound:
         raise GatherJobStoreError("verified GATHER post-frame changed client")
     entry = {

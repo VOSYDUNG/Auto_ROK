@@ -461,8 +461,9 @@ def _completion_matches(
     if not isinstance(baseline, Mapping) or baseline.get("counter_fact") != counter:
         return False
     if feedback.facts.get("gather_job_dispatch_sequence") == 1:
-        # The first queue counter is only visible in the fresh post-March
-        # frame. No numeric pre-dispatch queue reading exists for this job.
+        # The first completion baseline is a job ordinal, never a numeric
+        # queue reading. A real optional zero in Drawer/New Troop does not
+        # replace the mandatory fresh post-March 1/5.
         return (
             baseline.get("predicate_id") == "first_march_queue_appeared_at_one"
             and baseline.get("source") == "job_initial_slot_ordinal"

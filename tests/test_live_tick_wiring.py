@@ -31,6 +31,7 @@ TICK = ROOT / "scripts" / "run_gather_tick.py"
 #: Providers that must appear in the live observation chain, with the reason
 #: each one is load-bearing rather than optional.
 REQUIRED_PROVIDERS = {
+    "FarmSearchVisualObservationProvider": "farm search surface without unrelated OCR text",
     "OcrSemanticObservationProvider": "assembles phrases; targets ground from them",
     "QueueIndicatorObservationProvider": "the queue fact completion is proven by",
     "MainViewVisualObservationProvider": "CITY_VIEW",

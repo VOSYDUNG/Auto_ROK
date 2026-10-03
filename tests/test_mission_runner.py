@@ -1,9 +1,14 @@
+from dataclasses import replace
+from datetime import datetime
+import json
 from pathlib import Path
 
+import pytest
+
 from harness.mission_loader import compile_mission
-from harness.mission_runner import MissionRunner
+from harness.mission_runner import MissionRunner, _reversible_navigation_recovery_reason
 from harness.mission_runtime import AllowedAction, MissionContext, ToolFeedback, ToolSnapshot
-from harness.mission_store import CheckpointStatus, JsonMissionStore
+from harness.mission_store import CheckpointStatus, JsonMissionStore, MissionCheckpoint
 
 
 ROOT = Path(__file__).parents[1]
@@ -249,3 +254,152 @@ def test_runner_resumes_delayed_completion_without_second_dispatch(tmp_path):
     assert second_tool.executions == []
     assert second.engine_result.snapshot.observed_at == 101.0
     assert second.checkpoint.verified_transition["before_snapshot"]["observed_at"] == 101.0
+
+
+def _stale_create_pending(context):
+    return {
+        "schema_version": 1,
+        "action": {"action_id": "CREATE_NEW_TROOP", "target_id": "NEW_TROOP", "arguments": {}},
+        "before_snapshot": {
+            "mission_id": context.mission_id, "task_id": context.task_id,
+            "frame_id": "drawer-old", "state": "TROOP_DISPATCH_DRAWER",
+            "facts": {"character_id": "char-a", "client_bounds": [0, 0, 1366, 768],
+                      "window": {"hwnd": 1001, "pid": 2001, "process_path": r"C:\Game\MASS.exe"}},
+            "observed_at": 10.0,
+        },
+        "feedback": {
+            "success": True, "code": "DISPATCHED", "state": None,
+            "facts": {"receipt": {"before_frame_id": "drawer-old",
+                                    "action_id": "CREATE_NEW_TROOP",
+                                    "target_id": "NEW_TROOP", "bounded_arguments": {}, "after_frame_id": "settling-old",
+                                    "character_id": "char-a", "non_interference_confirmed": True}},
+            "completed": False, "reobserve_required": True,
+        },
+        "last_observed_frame_id": "settling-old",
+    }
+
+
+def _seed_pending(store, context, pending):
+    return store.save(MissionCheckpoint(
+        mission_id=context.mission_id, task_id=context.task_id, run_id=context.run_id,
+        attempt=context.attempt, parameters=dict(compiled().parameters),
+        status=CheckpointStatus.REOBSERVE, revision=0, last_frame_id="settling-old",
+        last_state="UNKNOWN_STATE", last_decision="reobserve",
+        pending_verification=pending,
+    ), expected_revision=0)
+
+
+def test_runner_retires_stale_create_navigation_without_actuation(tmp_path):
+    context = MissionContext("GATHER_RESOURCE", "one-character", "run-reconcile")
+    store = JsonMissionStore(tmp_path)
+    _seed_pending(store, context, _stale_create_pending(context))
+    tool = FakeTool((snapshot("fresh-map", "WORLD_MAP_VIEW", observed_at=11.0,
+                               facts={"character_id": "char-a", "client_bounds": [0, 0, 1366, 768],
+                                      "window": {"hwnd": 1001, "pid": 2001, "process_path": r"C:\Game\MASS.exe"}}),))
+
+    result = MissionRunner(compiled(), tool, store).tick(context)
+
+    assert result.status is CheckpointStatus.REOBSERVE
+    assert tool.executions == []
+    assert result.checkpoint.pending_verification is None
+    assert "receipt preserved" in (result.reason or "")
+    next_tool = FakeTool((
+        snapshot("next-map", "WORLD_MAP_VIEW", observed_at=12.0,
+                 actions=(AllowedAction("OPEN_SEARCH"),)),
+        snapshot("search", "RESOURCE_SEARCH_PANEL", observed_at=13.0),
+    ))
+    resumed = MissionRunner(compiled(), next_tool, store).tick(context)
+    assert resumed.status is CheckpointStatus.RUNNING
+    assert [item.action_id for item in next_tool.executions] == ["OPEN_SEARCH"]
+
+
+@pytest.mark.parametrize("change", [
+    {"action_id": "MARCH_WITH_CURRENT_SELECTION", "target_id": "TROOP_MARCH"},
+    {"state": "UNKNOWN_STATE"},
+    {"character_id": "other"},
+    {"client_bounds": [0, 0, 1280, 720]},
+    {"window_hwnd": 9999},
+    {"window_pid": 9999},
+    {"window_path": r"C:\Other\MASS.exe"},
+    {"after_mission": "CITY_VIEW"},
+    {"after_task": "other-task"},
+    {"after_time_none": True},
+    {"after_time_nan": True},
+    {"after_time_equal": True},
+    {"replay_last_frame": True},
+    {"missing_frame": True},
+    {"noninterference": False},
+    {"bounded_args": {"x": 1}},
+    {"malformed": True},
+])
+def test_runner_does_not_retire_unsafe_pending_navigation(change):
+    context = MissionContext("GATHER_RESOURCE", "one-character", "run-negative")
+    pending = _stale_create_pending(context)
+    after = snapshot("fresh-map", "WORLD_MAP_VIEW",
+                     observed_at=11.0,
+                     facts={"character_id": "char-a", "client_bounds": [0, 0, 1366, 768],
+                            "window": {"hwnd": 1001, "pid": 2001, "process_path": r"C:\Game\MASS.exe"}})
+    if change.get("malformed"):
+        pending["feedback"] = {"success": True, "code": "DISPATCHED", "facts": {}}
+    else:
+        if "action_id" in change:
+            pending["action"]["action_id"] = change["action_id"]
+            pending["action"]["target_id"] = change["target_id"]
+        if "state" in change:
+            pending["before_snapshot"]["state"] = change["state"]
+        if "character_id" in change:
+            after = replace(after, facts={"character_id": change["character_id"],
+                                           "client_bounds": [0, 0, 1366, 768]})
+        if "client_bounds" in change:
+            after = replace(after, facts={"character_id": "char-a",
+                                           "client_bounds": change["client_bounds"]})
+        if any(key in change for key in ("window_hwnd", "window_pid", "window_path")):
+            window = dict(after.facts["window"])
+            window.update({"hwnd": change.get("window_hwnd", window["hwnd"]),
+                           "pid": change.get("window_pid", window["pid"]),
+                           "process_path": change.get("window_path", window["process_path"])})
+            after = replace(after, facts=dict(after.facts) | {"window": window})
+        if "after_mission" in change:
+            after = replace(after, mission_id=change["after_mission"])
+        if "after_task" in change:
+            after = replace(after, task_id=change["after_task"])
+        if change.get("after_time_none"):
+            after = replace(after, observed_at=None)
+        if change.get("after_time_nan"):
+            after = replace(after, observed_at=float("nan"))
+        if change.get("after_time_equal"):
+            after = replace(after, observed_at=10.0)
+        if change.get("replay_last_frame"):
+            after = replace(after, frame_id=pending["last_observed_frame_id"])
+        if change.get("missing_frame"):
+            after = replace(after, frame_id=None)
+        if "noninterference" in change:
+            pending["feedback"]["facts"]["receipt"]["non_interference_confirmed"] = change["noninterference"]
+        if "bounded_args" in change:
+            pending["feedback"]["facts"]["receipt"]["bounded_arguments"] = change["bounded_args"]
+    assert _reversible_navigation_recovery_reason(context, pending, after) is None
+
+
+@pytest.mark.skipif(
+    not (ROOT / "workspace/agents/f6v-navigation-recovery/root/job07-pending-checkpoint.json").exists()
+    or not (ROOT / "workspace/runs/f6u-after-dismiss-20260927-01/capture.json").exists(),
+    reason="stored job07 pending and post-dismiss capture unavailable",
+)
+def test_job07_pending_and_post_dismiss_capture_reconcile_offline():
+    checkpoint = json.loads((ROOT / "workspace/agents/f6v-navigation-recovery/root/job07-pending-checkpoint.json").read_text())
+    pending = checkpoint["checkpoint"]["pending_verification"]
+    capture = json.loads((ROOT / "workspace/runs/f6u-after-dismiss-20260927-01/capture.json").read_text())
+    frame = capture["frame"]
+    window = capture["target"]
+    context = MissionContext("GATHER_RESOURCE", checkpoint["checkpoint"]["task_id"],
+                             "gather-9777df6dd29fd857b44c-march-4")
+    after = snapshot(
+        frame["id"], "WORLD_MAP_VIEW",
+        observed_at=datetime.fromisoformat(frame["captured_at"]).timestamp(),
+        facts={"character_id": "one-character", "client_bounds": frame["client_bounds"],
+               "window": window},
+    )
+    after = replace(after, task_id=context.task_id)
+    reason = _reversible_navigation_recovery_reason(context, pending, after)
+    assert reason is not None
+    assert '"after_frame_id": "rok-20260927T084547279608Z-2f6295878cf6"' in reason

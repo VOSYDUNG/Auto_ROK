@@ -317,12 +317,12 @@ states:
 
   - id: RESOURCE_SEARCH_PANEL
     status: trained
-    description: "World-map search panel opened by the native Search action."
+    description: "Search surface opened by the native Search action; farm recognition uses current control images/layout or Search plus two farm category anchors. Unrelated category text is not required."
     positive_evidence:
       - kind: button
         value: "SEARCH"
-      - kind: category
-        value: "Barbarians"
+      - kind: visual
+        value: "farm resource search controls"
       - kind: category
         value: "Cropland"
       - kind: category

@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+from types import SimpleNamespace
 
 import pytest
 
@@ -19,6 +20,8 @@ from harness.mission_store import CheckpointStatus, JsonMissionStore
 from scripts.audit_first_done_job import audit_first_done_job, preflight_attempt_chain, write_verdict
 from scripts.create_gather_job import build_artifact, write_artifact
 from scripts.run_gather_job import drive_job
+from scripts import audit_first_done_job as audit_module
+from scripts import run_gather_job as driver_module
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,8 +30,9 @@ PRECONDITION = "troop/commander selection policy is valid for this mission"
 
 
 class SyntheticMarchTool:
-    def __init__(self, job, ledger, sequence):
+    def __init__(self, job, ledger, sequence, *, first_measured_zero=False):
         self.job, self.ledger, self.sequence = job, ledger, sequence
+        self.first_measured_zero = first_measured_zero
         self.observations = 0
         self.start = datetime.now(timezone.utc).timestamp() + sequence * 3
 
@@ -46,6 +50,10 @@ class SyntheticMarchTool:
                 "precondition_evidence": {PRECONDITION: True},
                 "gather_job_id": self.job.job_id,
             }
+            if self.sequence == 1 and self.first_measured_zero:
+                facts.update(march_queue_used=0, march_queue_capacity=5,
+                             march_queue_source="visible_ocr_queue_anchor",
+                             captured_at=datetime.fromtimestamp(self.start, timezone.utc).isoformat())
             if self.sequence > 1:
                 facts["completion_baseline"] = {
                     "predicate_id": "march_queue_used_increased", "counter_fact": "march_queue_used",
@@ -91,7 +99,7 @@ class SyntheticMarchTool:
         })
 
 
-def replay(tmp_path, *, max_ticks=5):
+def replay(tmp_path, *, max_ticks=5, first_measured_zero=False):
     workspace = tmp_path / "workspace"
     now = datetime.now(timezone.utc)
     artifact = build_artifact(
@@ -120,7 +128,7 @@ def replay(tmp_path, *, max_ticks=5):
         run_id = coord.plan().run_id
         context = MissionContext(job.mission_id, job.task_id, run_id)
         result = coord.tick(MissionRunner(
-            compiled, SyntheticMarchTool(job, ledger, sequence), checkpoints,
+            compiled, SyntheticMarchTool(job, ledger, sequence, first_measured_zero=first_measured_zero), checkpoints,
         ))
         assert result.result.status is CheckpointStatus.COMPLETE
         assert result.journaled_this_tick and result.error is None
@@ -213,6 +221,155 @@ def attempt_chain(tmp_path, *, orphan_second=False):
     return job, ledger, checkpoints, terminal, evidence_root, root, terminal_path
 
 
+def pending_chain_for_preflight(tmp_path):
+    """A real offline runner dispatch with no numeric postcondition yet."""
+    workspace = tmp_path / "workspace"
+    now = datetime.now(timezone.utc)
+    artifact = build_artifact(
+        job_id="pending-audit", task_id="pending-task", character_id="pending-char",
+        resource_type="FOOD", resource_level=5,
+        starts_at=now - timedelta(minutes=1), expires_at=now + timedelta(minutes=30),
+    )
+    path = write_artifact(workspace / "jobs" / "job.json", workspace, artifact)
+    compiled = compile_mission(ROOT / "config" / "mission_flows.yaml", ROOT / "config" / "ui_states.yaml",
+                               "GATHER_RESOURCE", {"resource_type": "FOOD", "resource_level": 5})
+    catalog = compiled_gather_catalog(compiled)
+    job = load_gather_job_authority(path, canonical_actions=catalog.actions, expected_catalog_digest=catalog.digest)
+    ledger, checkpoints = JsonGatherJobStore(workspace / "ledger"), JsonMissionStore(workspace / "checkpoints")
+    ledger.bind_client(job, WINDOW)
+    context = MissionContext(job.mission_id, job.task_id, gather_slot_run_id(job, 1))
+
+    class PendingTool(SyntheticMarchTool):
+        def observe(self, context):
+            snapshot = super().observe(context)
+            if self.observations == 2:
+                facts = {key: value for key, value in snapshot.facts.items() if not key.startswith("march_queue")}
+                return replace(snapshot, facts=facts)
+            return snapshot
+
+    tool = PendingTool(job, ledger, 1)
+    tool.start = datetime.now(timezone.utc).timestamp()
+    result = GatherJobCoordinator(job, ledger, checkpoints).tick(MissionRunner(compiled, tool, checkpoints))
+    assert result.result.status is CheckpointStatus.REOBSERVE and not result.journaled_this_tick
+    record = build_gather_tick_evidence(context=context, character_id=job.character_id, result=result.result,
+                                       live_armed=False, policy_approval=None, main_view_profile_trained=True,
+                                       resource_level_profile_trained=True)
+    record["runtime"]["gather_job"] = {"job_id": job.job_id, "verified_marches": 0,
+                                            "reserved_marches": 1, "journaled_this_tick": False}
+    evidence_root = workspace / "evidence"
+    evidence_path = save_gather_tick_evidence(evidence_root, record)
+    root = workspace / "attempts"
+    root.mkdir()
+    start = {"schema_version": 1, "kind": "attempt_start", "job_id": job.job_id,
+             "task_id": job.task_id, "character_id": job.character_id, "catalog_digest": job.catalog_digest,
+             "attempt_sequence": 1, "startup_attestation_sha256": "a" * 64, "initial_verified": 0,
+             "started_at": now.isoformat(), "previous_start_sha256": None, "previous_result_sha256": None}
+    first_start = root / "attempt-000001.start.json"
+    first_start.write_text(json.dumps(start), encoding="utf-8")
+    tick = {"status": "reobserve", "run_id": context.run_id, "verified_marches": 0,
+            "evidence_path": str(evidence_path)}
+    report = {"job_id": job.job_id, "attempt_sequence": 1, "initial_verified": 0,
+              "start_sha256": hashlib.sha256(first_start.read_bytes()).hexdigest(),
+              "status": "suspended", "reason": "tick ceiling", "ticks": 1,
+              "history": [tick], "verified_marches": 0,
+              "recorded_at": (datetime.now(timezone.utc) + timedelta(seconds=1)).isoformat()}
+    first_result = root / "attempt-000001.result.json"
+    first_result.write_text(json.dumps(report), encoding="utf-8")
+    latest = {**start, "attempt_sequence": 2, "started_at": (datetime.now(timezone.utc) + timedelta(seconds=2)).isoformat(),
+              "previous_start_sha256": hashlib.sha256(first_start.read_bytes()).hexdigest(),
+              "previous_result_sha256": hashlib.sha256(first_result.read_bytes()).hexdigest()}
+    (root / "attempt-000002.start.json").write_text(json.dumps(latest), encoding="utf-8")
+    return job, ledger, checkpoints, context, evidence_root, root, evidence_path
+
+
+def test_preflight_accepts_exact_pending_march_without_mutation(tmp_path):
+    job, ledger, checkpoints, context, evidence_root, root, evidence_path = pending_chain_for_preflight(tmp_path)
+    paths = [ledger._path(job), checkpoints._path(context), evidence_path, *root.glob("*.json")]
+    before = {path: path.read_bytes() for path in paths}
+    preflight_attempt_chain(job, ledger, checkpoints, root, evidence_root)
+    assert before == {path: path.read_bytes() for path in paths}
+    assert ledger.progress(job).dispatched_marches == 1
+    assert ledger.progress(job).verified_marches == 0
+    assert not (root / "attempt-000002.result.json").exists()
+
+
+@pytest.mark.parametrize("damage", [
+    "missing_pending", "complete", "foreign_run", "foreign_client", "foreign_character",
+    "bad_receipt", "before_frame", "dispatch_sequence", "duplicate_reservation", "skipped_reservation",
+    "revoked", "expired", "original_tick", "missing_tick", "duplicate_tick", "changed_action",
+    "tampered_baseline", "tampered_hash", "original_attempt_time", "missing_reservation", "last_frame",
+])
+def test_preflight_rejects_unproven_pending_march(tmp_path, monkeypatch, damage):
+    job, ledger, checkpoints, context, evidence_root, root, evidence_path = pending_chain_for_preflight(tmp_path)
+    checkpoint_path, ledger_path = checkpoints._path(context), ledger._path(job)
+    cp = json.loads(checkpoint_path.read_text())
+    pending = cp["checkpoint"]["pending_verification"]
+    raw = json.loads(ledger_path.read_text())
+    evidence = json.loads(evidence_path.read_text())
+    if damage == "missing_pending":
+        cp["checkpoint"]["pending_verification"] = None
+    elif damage == "complete":
+        cp["checkpoint"]["status"] = "complete"
+    elif damage == "foreign_run":
+        cp["checkpoint"]["run_id"] = "foreign-run"
+    elif damage == "foreign_client":
+        pending["before_snapshot"]["facts"]["window"]["pid"] += 1
+    elif damage == "foreign_character":
+        pending["before_snapshot"]["facts"]["character_id"] = "foreign"
+    elif damage == "bad_receipt":
+        pending["feedback"]["facts"]["receipt"]["target_id"] = "NEW_TROOP"
+    elif damage == "before_frame":
+        pending["before_snapshot"]["frame_id"] = "foreign-frame"
+    elif damage == "dispatch_sequence":
+        pending["feedback"]["facts"]["gather_job_dispatch_sequence"] = 2
+    elif damage == "duplicate_reservation":
+        raw["reservations"].append(dict(raw["reservations"][0]))
+    elif damage == "skipped_reservation":
+        raw["reservations"][0]["sequence"] = 2
+    elif damage == "missing_reservation":
+        raw["reservations"] = []
+    elif damage == "revoked":
+        raw["revoked"] = True
+    elif damage == "expired":
+        class ExpiredClock(datetime):
+            @staticmethod
+            def now(_):
+                return job.expires_at
+        monkeypatch.setattr(audit_module, "datetime", ExpiredClock)
+    elif damage == "original_tick":
+        evidence["engine"]["feedback"]["facts"]["receipt"]["before_frame_id"] = "other-frame"
+    elif damage == "missing_tick":
+        evidence_path.unlink()
+    elif damage in {"duplicate_tick", "original_attempt_time"}:
+        result_path = root / "attempt-000001.result.json"
+        report = json.loads(result_path.read_text())
+        if damage == "duplicate_tick":
+            report["history"].append(dict(report["history"][0]))
+            report["ticks"] = 2
+        else:
+            report["recorded_at"] = (job.starts_at + timedelta(seconds=1)).isoformat()
+        result_path.write_text(json.dumps(report), encoding="utf-8")
+        start_path = root / "attempt-000002.start.json"
+        start = json.loads(start_path.read_text())
+        start["previous_result_sha256"] = hashlib.sha256(result_path.read_bytes()).hexdigest()
+        start_path.write_text(json.dumps(start), encoding="utf-8")
+    elif damage == "changed_action":
+        pending["action"]["action_id"] = "CREATE_NEW_TROOP"
+    elif damage == "tampered_baseline":
+        pending["before_snapshot"]["facts"]["completion_baseline"]["capacity"] = 6
+    elif damage == "tampered_hash":
+        pending["before_snapshot"]["facts"]["image_sha256"] = "0" * 64
+    elif damage == "last_frame":
+        pending["last_observed_frame_id"] = "foreign-after-frame"
+        cp["checkpoint"]["last_frame_id"] = "foreign-after-frame"
+    checkpoint_path.write_text(json.dumps(cp), encoding="utf-8")
+    ledger_path.write_text(json.dumps(raw), encoding="utf-8")
+    if damage != "missing_tick":
+        evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+    with pytest.raises((ValueError, RuntimeError)):
+        preflight_attempt_chain(job, ledger, checkpoints, root, evidence_root)
+
+
 def partial_chain_for_preflight(tmp_path):
     job, ledger, checkpoints, report, evidence_root = replay(tmp_path, max_ticks=2)
     root = tmp_path / "workspace" / "attempts"
@@ -255,6 +412,187 @@ def partial_chain_for_preflight(tmp_path):
         "previous_result_sha256": hashlib.sha256(first_result.read_bytes()).hexdigest(),
     })
     return job, ledger, checkpoints, evidence_root, root, first_result, second_start
+
+
+def diagnostic_attempt_chain(tmp_path, monkeypatch, *, diagnostic_only=False, raw_output=False, zero_progress=False,
+                             execution_exception=False):
+    if zero_progress:
+        # These negative cases test admission shape/order, not journal writes.
+        # Keep their fixture free of synthetic March publication side effects.
+        now = datetime.now(timezone.utc)
+        workspace = tmp_path / "workspace"
+        artifact = build_artifact(job_id="diagnostic-zero", task_id="diagnostic-task", character_id="diagnostic-char",
+                                  resource_type="FOOD", resource_level=5, starts_at=now - timedelta(minutes=1),
+                                  expires_at=now + timedelta(minutes=30))
+        path = write_artifact(workspace / "jobs" / "job.json", workspace, artifact)
+        compiled = compile_mission(ROOT / "config" / "mission_flows.yaml", ROOT / "config" / "ui_states.yaml",
+                                   "GATHER_RESOURCE", {"resource_type": "FOOD", "resource_level": 5})
+        catalog = compiled_gather_catalog(compiled)
+        job = load_gather_job_authority(path, canonical_actions=catalog.actions, expected_catalog_digest=catalog.digest)
+        ledger, checkpoints = JsonGatherJobStore(workspace / "ledger"), JsonMissionStore(workspace / "checkpoints")
+        evidence_root, root = workspace / "evidence", workspace / "attempts"
+        root.mkdir()
+        second_start = root / "attempt-000001.start.json"
+        second_start.write_text(json.dumps({
+            "schema_version": 1, "kind": "attempt_start", "job_id": job.job_id,
+            "task_id": job.task_id, "character_id": job.character_id, "catalog_digest": job.catalog_digest,
+            "attempt_sequence": 1, "startup_attestation_sha256": "a" * 64, "initial_verified": 0,
+            "started_at": now.isoformat(), "previous_start_sha256": None, "previous_result_sha256": None,
+        }), encoding="utf-8")
+    else:
+        job, ledger, checkpoints, evidence_root, root, _, second_start = partial_chain_for_preflight(tmp_path)
+    start = json.loads(second_start.read_text())
+    initial = start["initial_verified"]
+    if raw_output:
+        completed = SimpleNamespace(returncode=7, stdout="not JSON", stderr="traceback" + "x" * 5000)
+        monkeypatch.setattr(driver_module.subprocess, "run", lambda *_, **__: completed)
+        diagnostic = driver_module._subprocess_tick(["offline-fixture"])
+    else:
+        diagnostic = (2, {"status": "failed", "error": {
+            "type": "LiveObservationError", "message": "[WinError 5] Access is denied: OCR publication",
+        }})
+    ticks = [] if diagnostic_only else [(0, {
+        "status": "running", "gather_job_id": job.job_id,
+        "run_id": gather_slot_run_id(job, initial + 1), "gather_job_verified_marches": initial,
+    })]
+    stream = iter(ticks + [diagnostic])
+    def returned_tick():
+        if execution_exception:
+            raise ValueError("job host preflight needs recovery evidence")
+        return next(stream)
+    report = drive_job(returned_tick, job_id=job.job_id, max_ticks=3, max_idle_ticks=0,
+                       idle_delay_seconds=0, settle_seconds=0, sleeper=lambda _: None)
+    assert report["status"] == "failed"
+    recorded = datetime.fromisoformat(start["started_at"]) + timedelta(seconds=1)
+    report.update(attempt_sequence=start["attempt_sequence"], initial_verified=initial,
+                  start_sha256=hashlib.sha256(second_start.read_bytes()).hexdigest(),
+                  recorded_at=recorded.isoformat())
+    result_path = second_start.with_name(second_start.name.replace(".start.json", ".result.json"))
+    result_path.write_text(json.dumps(report), encoding="utf-8")
+    latest_path = root / f"attempt-{start['attempt_sequence'] + 1:06d}.start.json"
+    latest = {**start, "attempt_sequence": start["attempt_sequence"] + 1, "started_at": (recorded + timedelta(seconds=1)).isoformat(),
+              "previous_start_sha256": hashlib.sha256(second_start.read_bytes()).hexdigest(),
+              "previous_result_sha256": hashlib.sha256(result_path.read_bytes()).hexdigest()}
+    latest_path.write_text(json.dumps(latest), encoding="utf-8")
+    return job, ledger, checkpoints, evidence_root, root, result_path, latest_path
+
+
+def test_empty_driver_exception_preserves_chain_without_granting_progress(tmp_path, monkeypatch):
+    job, ledger, checkpoints, evidence_root, root, result_path, _ = diagnostic_attempt_chain(
+        tmp_path, monkeypatch, diagnostic_only=True, zero_progress=True, execution_exception=True)
+    before = {path: path.read_bytes() for path in root.glob("*.json")}
+    history, errors = audit_module._attempt_chain_history(
+        job, ledger, checkpoints, None, root, evidence_root, [], allow_open_tail=True)
+    assert history == [] and errors == []
+    preflight_attempt_chain(job, ledger, checkpoints, root, evidence_root)
+    assert ledger.progress(job).dispatched_marches == ledger.progress(job).verified_marches == 0
+    assert before == {path: path.read_bytes() for path in before}
+    assert json.loads(result_path.read_text())["verified_marches"] is None
+
+
+@pytest.mark.parametrize("damage", ["progress", "closeout", "tick_count", "status", "reason",
+                                    "extra_action", "extra_evidence", "initial", "start_hash"])
+def test_empty_driver_exception_rejects_added_authority(tmp_path, monkeypatch, damage):
+    job, ledger, checkpoints, evidence_root, root, result_path, latest_path = diagnostic_attempt_chain(
+        tmp_path, monkeypatch, diagnostic_only=True, zero_progress=True, execution_exception=True)
+    report = json.loads(result_path.read_text())
+    if damage == "progress": report["verified_marches"] = 1
+    elif damage == "closeout": report["closeout"] = [{"sequence": 1}]
+    elif damage == "tick_count": report["ticks"] = True
+    elif damage == "status": report["status"] = "suspended"
+    elif damage == "reason": report["reason"] = "arbitrary failure"
+    elif damage == "extra_action": report["action"] = "MARCH_WITH_CURRENT_SELECTION"
+    elif damage == "extra_evidence": report["evidence_path"] = "invented.json"
+    elif damage == "initial": report["initial_verified"] = 1
+    elif damage == "start_hash": report["start_sha256"] = "b" * 64
+    result_path.write_text(json.dumps(report), encoding="utf-8")
+    latest = json.loads(latest_path.read_text())
+    latest["previous_result_sha256"] = hashlib.sha256(result_path.read_bytes()).hexdigest()
+    latest_path.write_text(json.dumps(latest), encoding="utf-8")
+    with pytest.raises(ValueError, match="preflight blocked"):
+        preflight_attempt_chain(job, ledger, checkpoints, root, evidence_root)
+
+
+@pytest.mark.parametrize("diagnostic_only,raw_output", [(False, False), (True, False), (True, True)])
+def test_preflight_accepts_exact_driver_failure_diagnostic_without_progress(tmp_path, monkeypatch, diagnostic_only, raw_output):
+    job, ledger, checkpoints, evidence_root, root, result_path, latest_path = diagnostic_attempt_chain(
+        tmp_path, monkeypatch, diagnostic_only=diagnostic_only, raw_output=raw_output)
+    before = {path: path.read_bytes() for path in root.glob("*.json")}
+    ledger_before = ledger._path(job).read_bytes()
+    report = json.loads(result_path.read_text())
+    assert report["verified_marches"] == (None if diagnostic_only else 2)
+    history, errors = audit_module._attempt_chain_history(
+        job, ledger, checkpoints, None, root, evidence_root, list(ledger.verifications(job)), allow_open_tail=True)
+    assert errors == []
+    assert all(tick["status"] != "failed" for tick in history)
+    assert len([tick for tick in history if tick["status"] == "complete"]) == 2
+    preflight_attempt_chain(job, ledger, checkpoints, root, evidence_root)
+    assert before == {path: path.read_bytes() for path in before}
+    assert ledger._path(job).read_bytes() == ledger_before
+    assert not latest_path.with_name("attempt-000003.result.json").exists()
+
+
+@pytest.mark.parametrize("damage", [
+    "middle", "suspended", "complete", "code_zero", "code_bool", "missing_error", "error_not_object",
+    "error_type", "error_message", "error_extra", "duplicate", "reason", "forged_progress",
+    "diagnostic_run", "diagnostic_job", "diagnostic_count", "diagnostic_evidence", "diagnostic_choice",
+    "stdout_oversized", "stdout_flag", "initial_verified", "only_forged_progress", "bound_foreign_run",
+])
+def test_preflight_rejects_forged_driver_failure_diagnostic(tmp_path, monkeypatch, damage):
+    job, ledger, checkpoints, evidence_root, root, result_path, latest_path = diagnostic_attempt_chain(
+        tmp_path, monkeypatch, diagnostic_only=damage == "only_forged_progress", zero_progress=True)
+    report = json.loads(result_path.read_text())
+    diagnostic = report["history"][-1]
+    if damage == "middle":
+        report["history"].reverse()
+    elif damage in {"suspended", "complete"}:
+        report["status"] = damage
+    elif damage == "code_zero":
+        diagnostic["exit_code"] = 0
+    elif damage == "code_bool":
+        diagnostic["exit_code"] = True
+    elif damage == "missing_error":
+        diagnostic.pop("error")
+    elif damage == "error_not_object":
+        diagnostic["error"] = "arbitrary error"
+    elif damage == "error_type":
+        diagnostic["error"]["type"] = None
+    elif damage == "error_message":
+        diagnostic["error"]["message"] = {"invented": True}
+    elif damage == "error_extra":
+        diagnostic["error"]["job_id"] = job.job_id
+    elif damage == "duplicate":
+        report["history"].append(dict(diagnostic))
+        report["ticks"] += 1
+    elif damage == "reason":
+        report["reason"] = "tick execution failed: unrelated error"
+    elif damage == "forged_progress":
+        report["verified_marches"] = 3
+    elif damage == "only_forged_progress":
+        report["verified_marches"] = 2
+    elif damage.startswith("diagnostic_"):
+        key, value = {
+            "diagnostic_run": ("run_id", gather_slot_run_id(job, 3)),
+            "diagnostic_job": ("job_id", job.job_id),
+            "diagnostic_count": ("verified_marches", 2),
+            "diagnostic_evidence": ("evidence_path", "somewhere.json"),
+            "diagnostic_choice": ("choice", {"action_id": "MARCH_WITH_CURRENT_SELECTION"}),
+        }[damage]
+        diagnostic[key] = value
+    elif damage == "stdout_oversized":
+        diagnostic.update(stdout="x" * 4097, stdout_truncated=True)
+    elif damage == "stdout_flag":
+        diagnostic.update(stdout="short", stdout_truncated="true")
+    elif damage == "initial_verified":
+        report["initial_verified"] = 3
+    elif damage == "bound_foreign_run":
+        report["history"][0]["run_id"] = "foreign"
+    result_path.write_text(json.dumps(report), encoding="utf-8")
+    latest = json.loads(latest_path.read_text())
+    latest["previous_result_sha256"] = hashlib.sha256(result_path.read_bytes()).hexdigest()
+    latest_path.write_text(json.dumps(latest), encoding="utf-8")
+    with pytest.raises(ValueError, match="preflight blocked"):
+        preflight_attempt_chain(job, ledger, checkpoints, root, evidence_root)
 
 
 @pytest.mark.parametrize("orphan_second", [False, True])
@@ -419,6 +757,18 @@ def test_five_verified_journal_entries_and_frame_facts_pass_only_offline(tmp_pat
     assert verdict["first_done_live_proven"] is False
     assert verdict["mining_return_estimate"] is None
     assert len(verdict["checked_evidence_paths"]) == 5
+
+
+def test_first_measured_zero_uses_ordinal_and_passes_offline_audit(tmp_path):
+    job, ledger, checkpoints, driver, evidence_root = replay(tmp_path, first_measured_zero=True)
+    entry = ledger.verifications(job)[0]
+    record = json.loads(Path(driver["history"][0]["evidence_path"]).read_text(encoding="utf-8"))
+    assert record["engine"]["before_facts"]["march_queue_used"] == 0
+    assert "counter_value" not in record["engine"]["before_facts"]["completion_baseline"]
+    assert entry["before_source"] == "job_initial_slot_ordinal"
+    verdict = audit_first_done_job(job, ledger, checkpoints, driver, evidence_root, historical_replay=True)
+    assert verdict["status"] == "OFFLINE_REPLAY_PASS", verdict["errors"]
+    assert verdict["first_done_live_proven"] is False
 
 
 def test_missing_or_forged_formation_or_driver_closeout_blocks(tmp_path):

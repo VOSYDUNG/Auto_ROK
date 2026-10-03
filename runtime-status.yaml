@@ -1,260 +1,255 @@
-# Current runtime truth for Auto_ROK.
-#
-# This file is committed so the real state is visible on GitHub while heavy
-# raw evidence (frames, recon dumps, isolation traces) stays under the
-# gitignored workspace/. It is not a framework and not a database.
-#
-# It records what has been VERIFIED, never what is intended. Intent lives in
-# docs/GOAL.md, docs/PRD.md, docs/BUILD_PLAN.md and
-# config/engineering_graph.yaml, none of which are evidence of runtime
-# behaviour. The status vocabulary and its invariants are defined in
-# AGENTS.md under "Completion status levels".
-#
-# Evidence paths below are LOCAL ONLY - workspace/ is gitignored, so a clone
-# will not contain them. Hashes are recorded so a local copy can be checked
-# against what was actually observed.
 schema_version: 1
-
+offline_publication_checks:
+  recorded_at: '2026-10-03'
+  focused_tests: {passed: 49, failed: 0, errors: 0, skipped: 0}
+  broad_tests: {passed: 1021, failed: 1, errors: 0, skipped: 13}
+  evidence: workspace/agents/git-main-publication/root/VALIDATION.md
+  limitation: Native skips checked separately; broad audit journal fixture failed and passed once in isolation. No full-suite PASS or I/O stability claim.
 head_basis:
-  sha: 1e17d618011fffb24de2bf9ad0f675465733da6d
-  branch: master
-  recorded_at: "2026-09-25"
-  context: F4-B host-trace preflight verified offline on the working tree based on this commit; no autonomous live job proof
-
+  sha: 02bbff4c1f569156e1e0043e5c4639dcfb4c1261
+  branch: main
+  recorded_at: '2026-10-03'
+  context: Publication source basis 02bbff4 plus checked working-tree changes; F6W wired; stored job09
+    suspended at zero marches and now expired. No live action in Git publication.
+current_occurrence:
+  job_id: f6-firstdone-20260928-09
+  task_id: firstdone-onechar-20260928-09
+  reserved_marches: 0
+  verified_marches: 0
+  pending_verification: false
+  execution_authority: expired_incomplete_preserved_input_stopped
+  original_expires_at: '2026-09-28T07:42:29.729207+00:00'
+  startup_attestation_sha256: e6974a2334e06ec8c221af83715576dfb41ce7d8d1a967622c9d992db6726f2b
+  evidence: workspace/checkpoints/gather-jobs/gather-job-28b1097c4dfd0fcd138323509be03ee590418be7ed797220ea9cdaaf9bdc338d.json
+  driver_report: workspace/evidence/gather/job-drives/28b1097c4dfd0fcd1383/attempt-000002.result.json
+  blocker_evidence: workspace/evidence/gather/gather-07ed0e83c69b3ae96d94/revision-000006-1790580771145916300.json
+  progress_snapshot_at: '2026-09-28T07:32:51.212342+00:00'
+  driver_status: suspended
+  ticks: 6
+  last_observed_state: TROOP_DISPATCH_DRAWER
+  limitation: Driver idle bound counts unchanged VERIFIED totals during navigation; stored final tick
+    reached Drawer but no March reservation/proof or closeout exists. Counts are job ledger totals, not
+    a current game occupancy observation. First attempt failed focus preflight, ROOT refocused the window
+    before attempt2. Historical job cannot resume after expiry.
+prior_occurrence:
+  job_id: f6-firstdone-20260927-05
+  task_id: firstdone-onechar-20260927-05
+  reserved_marches: 2
+  verified_marches: 2
+  pending_verification: false
+  execution_authority: expired_incomplete_preserved
+  original_expires_at: '2026-09-27T03:25:25.323474+00:00'
+  last_verified_frame: rok-20260927T032518970197Z-30efd0a37248
+  evidence: workspace/agents/f6p-fresh-round/root/prior-job-pins.json
+  limitation: Historical proofs are not current occupancy or progress of job06; all38 pinned bytes remain
+    unchanged
 objective:
   id: FIRST_DONE_GATHER_FIVE_MARCHES
-  statement: >
-    One startup-authorized GATHER job autonomously dispatches five farm marches
-    for one visible character/client, preserving each fresh New Troop screen's
-    game-filled pair and verifying a fresh post-first-march 1/5, followed by
-    numeric queue transitions 1/5 through 5/5 after each later march.
+  statement: One startup-authorized job autonomously sends five game-filled marches for one character/client
+    with fresh ordered1/5 through5/5 postchecks
+  overall_status: WIRED
   required_capabilities:
-    - bounded_gather_job
-    - startup_job_issuance
-    - client_binding
-    - new_troop_formation_fact
-    - startup_character_attestation
-    - fresh_1_of_5_first_postcheck
-    - five_transition_job_coordinator
-    - five_march_job_driver
-    - first_done_job_audit
-    - dispatch_queue_to_5_of_5
-  # Historical operator-assisted 5/5 does not prove this autonomous job.
-  overall_status: UNIMPLEMENTED
-
+  - bounded_gather_job
+  - startup_job_issuance
+  - mixed_resource_schedule
+  - client_binding
+  - new_troop_formation_fact
+  - startup_character_attestation
+  - fresh_1_of_5_first_postcheck
+  - five_transition_job_coordinator
+  - five_march_job_driver
+  - first_done_job_audit
+  - dispatch_queue_to_5_of_5
 capabilities:
-
+  bounded_gather_job:
+    status: LIVE_PROVEN_ONCE
+    evidence:
+    - workspace/agents/f1b-job-wiring/root/HANDOFF.md
+    - workspace/agents/f6-live-gate/root/LIVE_OCCURRENCE.md
+    - workspace/agents/f6p-fresh-round/root/current-result.json
+    limitation: Assisted native five-slot chain with mid-job recovery/calibration; not autonomous FIRST
+      DONE, repeatable or stable
+    live_proof_basis: current_working_tree_assisted_occurrence
+  startup_job_issuance:
+    status: LIVE_PROVEN_ONCE
+    live_proof_basis: current_working_tree
+    evidence:
+    - workspace/agents/f6p-fresh-round/root/startup.json
+    - tests/test_create_gather_job.py
+    limitation: Issued and consumed on native job06; not repeatable or stable
+  mixed_resource_schedule:
+    status: LIVE_PROVEN_ONCE
+    evidence:
+    - workspace/agents/f6-resource-schedule/root/VALIDATION.md
+    - tests/test_run_gather_job.py
+    - workspace/agents/f6p-fresh-round/root/current-result.json
+    limitation: Assisted native five-slot chain with mid-job recovery/calibration; not autonomous FIRST
+      DONE, repeatable or stable
+    live_proof_basis: current_working_tree_assisted_occurrence
+  client_binding:
+    status: LIVE_PROVEN_ONCE
+    live_proof_basis: current_working_tree
+    evidence:
+    - workspace/agents/f6p-fresh-round/root/current-result.json
+    limitation: Same HWND/PID/path in native proofs; identity assertion is not OCR character recognition
+  new_troop_formation_fact:
+    status: LIVE_PROVEN_ONCE
+    live_proof_basis: current_working_tree
+    evidence:
+    - workspace/agents/f6p-fresh-round/root/current-result.json
+    - tests/test_gather_job_cli_wiring.py
+    limitation: Fresh game-filled formation consumed before native Marches; no live empty/disabled negative
+      frame
+  startup_character_attestation:
+    status: LIVE_PROVEN_ONCE
+    live_proof_basis: current_working_tree
+    evidence:
+    - workspace/agents/f6p-fresh-round/root/startup.json
+    - workspace/agents/f4a-attestation-wiring/root/VALIDATION.md
+    limitation: One operator assertion bound to startup frame/client/job/time; no independent OCR identity
+      or tamper-proof local host claim
+  fresh_1_of_5_first_postcheck:
+    status: LIVE_PROVEN_ONCE
+    live_proof_basis: current_working_tree
+    evidence:
+    - workspace/agents/f6p-fresh-round/root/current-result.json
+    limitation: Job ordinal is not a measured pre-first0/5; fresh native1/5 proves first postcondition
+      only
+  five_transition_job_coordinator:
+    status: LIVE_PROVEN_ONCE
+    evidence:
+    - tests/test_gather_job_coordinator.py
+    - workspace/agents/f6p-fresh-round/root/VALIDATION.md
+    - workspace/agents/f6p-fresh-round/root/current-result.json
+    limitation: Assisted native five-slot chain with mid-job recovery/calibration; not autonomous FIRST
+      DONE, repeatable or stable
+    live_proof_basis: current_working_tree_assisted_occurrence
+  five_march_job_driver:
+    status: LIVE_PROVEN_ONCE
+    evidence:
+    - tests/test_run_gather_job.py
+    - workspace/agents/f6-live-gate/root/LIVE_OCCURRENCE.md
+    - workspace/agents/f6p-fresh-round/root/current-result.json
+    limitation: Assisted native five-slot chain with mid-job recovery/calibration; not autonomous FIRST
+      DONE, repeatable or stable
+    live_proof_basis: current_working_tree_assisted_occurrence
+  first_done_job_audit:
+    status: LIVE_PROVEN_ONCE
+    evidence:
+    - tests/test_audit_first_done_job.py
+    - workspace/agents/f6m-diagnostic-chain/root/VALIDATION.md
+    - workspace/agents/f6p-fresh-round/root/current-result.json
+    limitation: Canonical authoritative attempt-chain closeout OFFLINE_REPLAY_PASS checks native proof
+      artifacts structurally; verdict itself sets first_done_live_proven=false and is not independent
+      input telemetry
+    live_proof_basis: current_working_tree_assisted_occurrence
+  job_scoped_host_preflight:
+    status: LIVE_PROVEN_ONCE
+    live_proof_basis: current_working_tree
+    evidence:
+    - workspace/agents/f6-live-gate/root/LIVE_OCCURRENCE.md
+    - tests/test_host_input_isolation.py
+    limitation: Recorder self-report only; foreground sampled before/after capture; no independent host
+      event stream
+  queue_indicator_provider:
+    status: LIVE_PROVEN_ONCE
+    live_proof_basis: current_working_tree
+    evidence:
+    - workspace/agents/f6p-fresh-round/root/current-result.json
+    - tests/test_live_tick_wiring.py
+    limitation: Fresh native ordered1/5 through5/5 consumed after measured glyph calibration; repeatability
+      unproven
+  cursor_excluded_capture:
+    status: LIVE_PROVEN_ONCE
+    live_proof_basis: current_working_tree
+    evidence:
+    - workspace/agents/f6q-cursor-capture/root/VALIDATION.md
+    - workspace/runs/f6q-cursor-excluded-20260927-01/capture.json
+    limitation: One passive cursor-free Search capture and native pending transition; stability unproven
+  numeric_drawer_baseline_handoff:
+    status: LIVE_PROVEN_ONCE
+    live_proof_basis: current_working_tree
+    evidence:
+    - workspace/agents/f6p-fresh-round/root/current-result.json
+    - workspace/agents/f6p-fresh-round/root/baseline-critical-tests.xml
+    limitation: Exact Drawer measurement carried through immediate New Troop; no timestamp refresh or
+      generic OCR ratio
+  windows_direct_default:
+    status: LIVE_PROVEN_ONCE
+    live_proof_basis: current_working_tree
+    evidence:
+    - workspace/runs/f6q-cursor-excluded-20260927-01/ocr.json
+    - tests/test_live_tick_wiring.py
+    limitation: Current native entrypoint consumes direct OCR; throughput/endurance not established
+  settle_after_action:
+    status: LIVE_PROVEN_ONCE
+    live_proof_basis: current_working_tree
+    evidence:
+    - workspace/evidence/gather/job-drives/a788f54e4d8488fcf9c0/attempt-000007.start.json
+    limitation: Current configured0.8s delay ran; no optimal-latency or1.2s claim
+  stop_when_queue:
+    status: LIVE_PROVEN_ONCE
+    evidence:
+    - tests/test_gather_job_coordinator.py
+    - workspace/agents/f6p-fresh-round/root/current-result.json
+    limitation: Assisted native five-slot chain with mid-job recovery/calibration; not autonomous FIRST
+      DONE, repeatable or stable
+    live_proof_basis: current_working_tree_assisted_occurrence
   dispatch_queue_to_5_of_5:
     status: LIVE_PROVEN_ONCE
     evidence:
-      - path: workspace/runs/m7-live-20260920/ACCEPTANCE.png
-        sha256_prefix: d91751c2e5f630b3
-        note: fresh capture reading 5/5 with zero free slots
-      - path: workspace/runs/m7-live-20260920/queue-5of5.png
-        sha256_prefix: 72a81b12302b3018
-      - path: workspace/runs/m7-full-04/recon.json
-        sha256_prefix: 9ec6ef6ac4131e02
-        note: per-tick trace of the occurrence that dispatched the fifth march
-    limitations:
-      - operator approved each troop-selection occurrence individually
-      - manual intervention occurred (window focus, occurrence retries)
-      - no provenance-safe first post-march 1/5 or autonomous five-transition chain
-      - achieved with the gathering buff OFF for the entire run
-      - not repeated; a second batch has never been attempted
-
-  bounded_gather_job:
-    status: WIRED
-    live_proof_after_commit: false
-    evidence:
-      - workspace/agents/f1a-job-scope/root/HANDOFF.md
-      - workspace/agents/f1b-job-wiring/root/HANDOFF.md
-    limitations:
-      - synthetic MissionRunner and guarded input only; job live arming remains blocked
-      - F1 reservation and F2 verified journal/recovery are wired offline
-
-  startup_job_issuance:
-    status: WIRED
-    live_proof_after_commit: false
-    evidence:
-      - tests/test_create_gather_job.py
-      - scripts/create_gather_job.py
-      - tests/test_run_gather_job.py
-    limitations:
-      - offline artifact issuance only; no game observation, model call or input authority
-      - reviewed launch spec is consumed by the driver; no live job has been issued or run
-
-  client_binding:
-    status: WIRED
-    live_proof_after_commit: false
-    evidence:
-      - workspace/agents/f1c-client-binding/tho_dung/HANDOFF.md
-      - workspace/agents/f1c-evidence/root/HANDOFF.md
-    limitations:
-      - binds capture HWND/PID/process path in the offline canonical fixture
-      - does not itself prove the operator's startup character attestation
-
-  new_troop_formation_fact:
-    status: WIRED
-    live_proof_after_commit: false
-    evidence:
-      - workspace/agents/f1c-formation-fact/tho_dung/HANDOFF.md
-      - workspace/agents/f1c-evidence/root/HANDOFF.md
-    limitations:
-      - four archived positive frames and synthetic negative cases; no fresh live job
-      - no real empty or disabled New Troop negative frame in the surveyed archive
-
-  startup_character_attestation:
-    status: WIRED
-    live_proof_after_commit: false
-    evidence:
-      - harness/gather_job_startup_attestation.py
-      - scripts/attest_gather_job.py
-      - tests/test_gather_job_startup_attestation.py
-      - workspace/agents/f4a-startup-attestation/root/VALIDATION.md
-      - tests/test_run_gather_job.py
-      - tests/test_gather_job_cli_wiring.py
-      - workspace/agents/f4a-attestation-wiring/root/VALIDATION.md
-    limitations:
-      - canonical driver and direct job tick consume and revalidate the canonical record; evidence is offline synthetic only
-      - one digest is pinned across resumed attempts; local external edits are not claimed tamper-proof
-      - no real first post-march 1/5 frame in the current profile
-      - one operator assertion is bound to job/frame/client/time, not independently OCR-proven UI identity
-      - both gather-job live-arm switches remain blocked
-
-  fresh_1_of_5_first_postcheck:
-    status: WIRED
-    live_proof_after_commit: false
-    evidence:
-      - tests/test_gather_job_coordinator.py
-      - tests/test_gather_job_verification.py
-      - tests/test_gather_job_cli_wiring.py
-      - tests/test_audit_first_done_job.py
-    note: >
-      The march queue is not visible before the first March. The first valid
-      queue observation for a new job must therefore be a fresh, provenance-safe
-      1/5 postcheck after that first dispatch; later postchecks must prove 2/5,
-      3/5, 4/5 and 5/5 in order. The canonical synthetic runner, journal and
-      audit consume this nonnumeric first-slot marker offline; no fresh live
-      1/5 occurrence has proven it. A quest-panel ratio is not queue evidence.
-
-  five_transition_job_coordinator:
-    status: WIRED
-    live_proof_after_commit: false
-    evidence:
-      - tests/test_gather_job_coordinator.py
-      - tests/test_gather_job_cli_wiring.py
-    note: >
-      Caller-driven F2-B is consumed by canonical gather CLI. F2-A recovery,
-      durable journal and F2-B closeout pass offline synthetic tests and ROOT's
-      full suite. Job-scoped live preflight and a fresh game occurrence remain
-      unevidenced.
-
-  five_march_job_driver:
-    status: WIRED
-    live_proof_after_commit: false
-    evidence:
-      - tests/test_run_gather_job.py
-      - scripts/run_gather_job.py
-      - workspace/agents/f2c-driver-review/kiem_luat/HANDOFF.md
-    limitations:
-      - synthetic five-run cross-CLI replay now carries five distinct current-run host traces; no game observation or input
-      - one drive-start operator quiescence assertion and recovery artifact feed passive per-tick recording; no per-march prompt
-      - live arm remains deliberately blocked after the offline preflight wiring
-
-  job_scoped_host_preflight:
-    status: WIRED
-    live_proof_after_commit: false
-    evidence:
-      - harness/host_input_isolation.py
-      - scripts/record_host_input_isolation.py
-      - scripts/run_gather_job.py
-      - scripts/run_gather_tick.py
-      - tests/test_host_input_isolation.py
-      - tests/test_run_gather_job.py
-      - tests/test_gather_job_cli_wiring.py
-      - workspace/agents/f4b-host-trace/tho_dung/HANDOFF.md
-    limitations:
-      - synthetic traces prove canonical driver and CLI consume exact run/client/freshness preflight before runner; no fresh job trace from game
-      - recorder's unexpected_input_events zero is self-report without independent host event telemetry
-      - foreground is sampled before and after capture, not monitored continuously through the interval
-      - a 10-second trace age check occurs before the tick; the existing input guard separately checks foreground and frame at actuation
-      - both job live-arm switches stay blocked
-
-  first_done_job_audit:
-    status: WIRED
-    live_proof_after_commit: false
-    evidence:
-      - tests/test_audit_first_done_job.py
-      - tests/test_run_gather_job.py
-      - scripts/audit_first_done_job.py
-      - scripts/run_gather_job.py
-    limitations:
-      - the canonical driver invokes attempt-chain preflight before another tick and writes an offline verdict after five VERIFIED slots, including resumed attempts
-      - a terminal report left before verdict creation is audited on restart without another tick; only synthetic replay establishes this behavior
-      - historical replay without an attempt chain is explicitly non-authoritative and cannot pass the default closeout path
-      - reports and verdicts use exclusive creation; this does not detect edits to a verdict by another local process
-      - no native live autonomous closeout evidence
-
-  queue_indicator_provider:
-    status: WIRED
-    implementation_commit: fe33d912ca5dbb30e68c84ade8b2090122994f1d
-    live_proof_after_commit: false
-    evidence:
-      - tests/test_live_tick_wiring.py
-      - note: >
-          Chain order extracted from the run_gather_tick AST places the
-          provider at line 318, ahead of GatherFactObservationProvider at 335,
-          which consumes its evidence. Replaying live-captured frames through
-          that real pair yields march_queue_used=5, march_queue_capacity=5,
-          march_queue_source=visible_ocr_march_queue_region - a value the
-          completion predicate accepts.
-    limitations:
-      - consumption shown on replayed frames, not on a fresh runtime pass
-
-  windows_direct_default:
-    status: WIRED
-    implementation_commit: fe33d912ca5dbb30e68c84ade8b2090122994f1d
-    live_proof_after_commit: false
-    evidence:
-      - tests/test_live_tick_wiring.py::test_the_live_ocr_backend_is_the_in_process_one
-
-  settle_after_action:
-    status: WIRED
-    implementation_commit: fe33d912ca5dbb30e68c84ade8b2090122994f1d
-    live_proof_after_commit: false
-    limitations:
-      - the 1.2s pause has never run against a live occurrence
-
-  stop_when_queue:
-    status: WIRED
-    implementation_commit: fe33d912ca5dbb30e68c84ade8b2090122994f1d
-    live_proof_after_commit: false
-    limitations:
-      - the early-stop branch has never been reached on a live occurrence
-
+    - path: workspace/runs/m7-live-20260920/ACCEPTANCE.png
+      sha256_prefix: d91751c2e5f630b3
+    - path: workspace/runs/m7-live-20260920/queue-5of5.png
+      sha256_prefix: 72a81b12302b3018
+    - workspace/agents/f6p-fresh-round/root/current-result.json
+    limitation: Assisted native five-slot chain with mid-job recovery/calibration; not autonomous FIRST
+      DONE, repeatable or stable
+    live_proof_basis: current_working_tree_assisted_occurrence
   troops_panel_sensor:
     status: IMPLEMENTED
-    live_proof_after_commit: false
-    note: >
-      Offline projection exists for one 1366x768 Troops layout, but return/home
-      and canonical live consumption are not proven.
     evidence:
-      - workspace/agents/p1-observation-projection/root/validation.json
-
+    - workspace/agents/p1-observation-projection/root/validation.json
+    limitation: Offline1366x768 layout; live return/home consumption unproven
   return_detection:
     status: UNIMPLEMENTED
-
   automatic_refill:
     status: UNIMPLEMENTED
-
   buff_sensor:
     status: UNIMPLEMENTED
-
   buff_top_up:
     status: UNIMPLEMENTED
-
-# These gates belong to FIRST DONE only. Each requires one new job occurrence;
-# historical 5/5 and offline replay do not pass them.
+  new_troop_units_roi:
+    status: WIRED
+    evidence:
+    - workspace/agents/f6u-new-troop-roi/root/native-replay.json
+    - workspace/agents/f6u-new-troop-roi/root/tests/focused.xml
+    limitation: Six stored1366x768 native cases and66focusedtests, not new live dispatch/repeatability
+  low_fill_selected_control:
+    status: WIRED
+    evidence:
+    - workspace/agents/f6u-new-troop-roi/tho_dung/measurements.md
+    - tests/test_new_troop_formation_fact.py
+    limitation: Measured row-local selection location supports this native variant; empty-row transplanted
+      negative; untrained positions remain unsupported
+  reversible_navigation_recovery:
+    status: LIVE_PROVEN_ONCE
+    evidence:
+    - workspace/agents/f6v-navigation-recovery/root/VALIDATION.md
+    - workspace/evidence/gather/gather-853310b75fd37b4b05b1/revision-000014-1790501419290992400.json
+    limitation: One no-execute CREATE_NEW_TROOP wait retirement, unchanged3/3; never retires pending March;
+      not full FIRST DONE or repeatability
+  farm_search_visual:
+    status: WIRED
+    evidence:
+    - tests/test_farm_search_visual.py
+    - tests/test_template_anchors.py
+    - tests/test_live_tick_wiring.py
+    - config/assets/farm_search/README.md
+    - workspace/agents/f6w-farm-visual/root/native-visual-replay.json
+    - workspace/agents/f6w-farm-visual/root/IMPLEMENTATION_REVIEW.md
+    limitation: Six measured control crops packaged with hashes; eight stored native cases and synthetic/path-boundary
+      tests. State evidence only, fixed calibrated layout; no autonomous five-march live acceptance.
 acceptance:
   one_startup_authorized_job_without_per_march_approval:
     passed: false
@@ -264,50 +259,106 @@ acceptance:
     passed: false
   five_fresh_verified_queue_increments_1_to_5_of_5:
     passed: false
-    note: >
-      Requires same job/client/character, five dispatch receipts, a fresh 1/5
-      postcheck after the first March, and fresh 2/5 through 5/5 postchecks in
-      order; the archived queue frames are independent snapshots.
   immutable_job_close_report:
     passed: false
-
 later_milestones:
   daily_farm:
     overall_status: UNIMPLEMENTED
     required_capabilities:
-      - troops_panel_sensor
-      - return_detection
-      - automatic_refill
-      - buff_sensor
-      - buff_top_up
+    - troops_panel_sensor
+    - return_detection
+    - automatic_refill
+    - buff_sensor
+    - buff_top_up
     acceptance:
-      two_consecutive_unattended_5_of_5_batches: {passed: false}
+      two_consecutive_unattended_5_of_5_batches:
+        passed: false
       buff_never_reaches_zero:
         passed: false
-        note: operator confirmed the gathering buff was off for the observed run
-      returns_detected_and_refilled: {passed: false}
+        note: Historical observed batch had gathering buff off
+      returns_detected_and_refilled:
+        passed: false
       buffed_cycle_between_2h00_and_2h30:
         passed: false
-        note: >
-          observed batch time 3:44:36 without buff, which sits in the
-          operator's weak band; both operator baselines assume the 50% buff
-
+        note: Historical unbuffed3h44m36s is not current ETA
 known_blockers:
-  - no provenance-safe fresh 1/5 post-march queue observation for a new job
-  - startup attestation is wired offline but no real startup job attestation has been issued
-  - job-scoped host trace is wired offline but no fresh game trace or independent host input-event telemetry exists
-  - no autonomous live job occurrence
-  - job live arming remains blocked; this status file grants no input authority
-
+- Historical schema-v2 mixed ledgers lacking schedule fields are preserved evidence only; current store refuses adoption without changing their bytes. New jobs require complete schedule scope.
+- Native Windows journal os.replace denial remains possible; broad fixture runs have failures; no full-suite
+  or I/O reliability claim
+- F6-O execution continuation deferred after builder quota failure; no receipt or TTL edit
+- Host input telemetry is self-reported; Computer Use graphics capture times out, but one ROOT Escape
+  was delivered through current accessibility focus with native before/after; no ROOT March
+- Operator modal recovery and development calibration inside job06 exclude autonomous FIRST DONE acceptance
+- Earlier failed navigation PNG can show a changed screen before returning a receipt; error is not proof
+  of zero input
+- Job09 suspended after six ticks at zero reserved/verified marches despite navigating to Drawer. Driver
+  idle budget treats unchanged march totals as no progress. Fix and offline regression required before
+  a new live occurrence.
 next_live_falsification:
-  hypothesis: >
-    Once separately authorized, one GATHER job for a startup-attested character
-    begins with the first March and proves a fresh 1/5 postcheck, then completes
-    four independent +1 postchecks through 5/5.
-  expected_observation: >
-    Append-only evidence binds job/client/character, each New Troop formation
-    and dispatch receipt, each newer verified queue frame from 1/5 through 5/5,
-    then closeout at 5/5.
-  prohibited_shortcut: >
-    Do not treat a quest-panel ratio, independent archive frames, dispatch receipts, or
-    the operator-assisted historical 5/5 as this job's verification.
+  hypothesis: After accepting a bounded navigation-aware driver progress fix offline, a new source-fixed
+    startup job can complete five ordered verified marches.
+  expected_observation: One new startup/job/client with measured farm controls, game-filled formations,
+    native1/5 through5/5 and quota closeout
+  prohibited_shortcut: No expired job continuation, pending March replay, fabricated OCR/state/count,
+    source tuning during a round, or proof splicing
+assisted_occurrence_acceptance:
+  highest_status: LIVE_PROVEN_ONCE
+  same_job_five_reservations_five_verifications: true
+  native_ordered_postchecks_1_through_5: true
+  schedule:
+  - GOLD
+  - GOLD
+  - WOOD
+  - STONE
+  - FOOD
+  formation_preserved_in_all_five_proofs: true
+  canonical_closeout_audit: OFFLINE_REPLAY_PASS
+  proofs: workspace/agents/f6p-fresh-round/root/current-result.json
+  autonomous_first_done: false
+  mining_return_estimate: null
+  estimate_limitation: No sourced live gather/return timer in five-proof path; historical unbuffed timing
+    is not a current ETA
+assisted_occurrence:
+  job_id: f6-firstdone-20260927-06
+  task_id: firstdone-onechar-20260927-06
+  reserved_marches: 5
+  verified_marches: 5
+  pending_verification: false
+  execution_authority: quota_closed_at_five_input_stopped
+  original_expires_at: '2026-09-27T09:00:29.459888+00:00'
+  last_verified_frame: rok-20260927T082003637348Z-232069ec7248
+  evidence: workspace/agents/f6p-fresh-round/root/current-result.json
+  intervention: workspace/agents/f6p-fresh-round/root/intervention.json
+  limitation: Operator modal recovery and mid-occurrence calibration make this assisted development evidence,
+    not autonomous FIRST DONE
+  closed_at: '2026-09-27T08:20:04.405435+00:00'
+previous_autonomous_occurrence:
+  job_id: f6-firstdone-20260927-07
+  task_id: firstdone-onechar-20260927-07
+  reserved_marches: 3
+  verified_marches: 3
+  pending_verification: false
+  execution_authority: expired_incomplete_preserved_input_stopped
+  original_expires_at: '2026-09-27T10:12:12.005553+00:00'
+  last_verified_frame: rok-20260927T084439909465Z-e9ce32c8dcf0
+  startup_attestation_sha256: a62e28cb1d0dbd982299c529e360a704ad6d1f338f19cbbcfb909132d04ad4eb
+  evidence: workspace/agents/f6t-autonomous-round/root/progress.json
+  limitation: Original frozen phase proved3/3; assisted source repair/recovery did not send fourth March.
+    Stored OPEN_SEARCH wait is historical, not current UI. Job expired; no continuation or ETA claim.
+  progress_snapshot_at: '2026-09-27T09:31:20.621821+00:00'
+  driver_report: workspace/evidence/gather/job-drives/859d535e58586298d6b9/attempt-000003.result.json
+  blocker_evidence: workspace/evidence/gather/gather-853310b75fd37b4b05b1/revision-000020-1790501480559473600.json
+  pending_navigation_verification: true
+  navigation_pending_action: OPEN_SEARCH
+  intervention: workspace/agents/f6u-new-troop-roi/root/intervention.json
+acceptance_limitation: All gates require the same complete autonomous occurrence; assisted development
+  evidence remains separate
+last_passive_observation:
+  state: CITY_VIEW
+  frame_id: rok-20260927T131148291541Z-2b56a2b8bbf1
+  evidence: workspace/agents/f6w-farm-visual/root/current-city-replay.json
+  capture: workspace/runs/f6w-city-20260927-01/capture.json
+  input_sent: false
+  model_endpoint_called: false
+  limitation: One passive city frame; not an observation of zero marches or a completed round; historical
+    snapshot, not current UI as of 2026-10-03

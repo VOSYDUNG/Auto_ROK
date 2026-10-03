@@ -1,7 +1,7 @@
 """Bounded caller of the canonical one-tick GATHER job CLI.
 
-This driver adds no perception, action selection or input authority. Its
-job-scoped passive preflight is wired offline; live job arming remains disabled.
+This driver adds no perception, action selection or input authority. An explicit
+live arm reaches only the canonical guarded one-tick CLI after job preflight.
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from typing import Any, Callable, Mapping
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from harness.gather_job_authority import GatherJobAuthority, compiled_gather_catalog  # noqa: E402
+from harness.gather_job_authority import GatherJobAuthority, compiled_gather_catalog, validate_schedule_catalog  # noqa: E402
 from harness.gather_job_coordinator import GatherJobCoordinator  # noqa: E402
 from harness.gather_job_startup_attestation import (  # noqa: E402
     canonical_startup_attestation_path, validate_canonical_startup_attestation,
@@ -96,12 +96,28 @@ def drive_job(
             return outcome("failed", f"tick execution failed: {type(exc).__name__}: {exc}")
         if not isinstance(payload, Mapping):
             return outcome("failed", "tick output is not a JSON object")
+        # CLI exceptions are diagnostic envelopes, not job-bound tick evidence.
+        # Preserve the cause without trusting any progress or run fields in them.
+        error = payload.get("error")
+        if (payload.get("gather_job_id") is None
+                and payload.get("status") == "failed" and error):
+            diagnostic = {"status": "failed", "exit_code": code, "error": error}
+            for key in ("stdout", "stderr", "stdout_truncated", "stderr_truncated"):
+                if key in payload:
+                    diagnostic[key] = payload[key]
+            history.append(diagnostic)
+            detail = (f"{error.get('type', 'Error')}: {error.get('message', '')}"
+                      if isinstance(error, Mapping) else str(error))
+            return outcome("failed", f"tick execution failed (exit code {code}): {detail}")
         status = payload.get("status")
         verified = payload.get("gather_job_verified_marches")
         run_id = payload.get("run_id")
         history.append({
-            "status": status, "run_id": run_id, "verified_marches": verified,
+            "status": status, "exit_code": code, "error": error,
+            "run_id": run_id, "verified_marches": verified,
             "evidence_path": payload.get("evidence_path"),
+            "resource_type": payload.get("gather_job_resource_type"),
+            "slot_catalog_digest": payload.get("gather_job_slot_catalog_digest"),
         })
         if payload.get("gather_job_id") != job_id:
             return outcome("failed", "tick job identity changed")
@@ -164,6 +180,7 @@ def drive_job(
 def _tick_command(
     args: argparse.Namespace, startup_attestation_sha256: str, *,
     run_id: str | None = None, host_trace_path: Path | None = None,
+    resource_type: str | None = None,
 ) -> list[str]:
     if (run_id is None) != (host_trace_path is None):
         raise ValueError("GATHER run ID and host trace must be supplied together")
@@ -172,13 +189,15 @@ def _tick_command(
         "--gather-job", str(args.gather_job),
         "--task-id", args.task_id,
         "--character-id", args.character_id,
-        "--resource-type", args.resource_type,
+        "--resource-type", resource_type or args.resource_type,
         "--startup-attestation-sha256", startup_attestation_sha256,
     ]
     if args.resource_level is not None:
         command.extend(("--resource-level", str(args.resource_level)))
     if run_id is not None:
         command.extend(("--run-id", run_id, "--input-isolation-evidence", str(host_trace_path)))
+        if args.arm_live:
+            command.append("--arm-live")
     return command
 
 
@@ -245,6 +264,9 @@ _LAUNCH_FIELDS = frozenset({
     "schema_version", "job_artifact", "job_artifact_sha256", "job_id",
     "task_id", "character_id", "catalog_digest", "resource_type", "resource_level",
 })
+_MIXED_LAUNCH_FIELDS = (_LAUNCH_FIELDS - {"resource_type"}) | {
+    "resource_schedule", "schedule_digest",
+}
 
 
 def _launch_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -266,12 +288,14 @@ def _validated_launch(args: argparse.Namespace) -> tuple[argparse.Namespace, Gat
         if not spec_path.is_relative_to(workspace):
             raise ValueError("GATHER launch spec must be under workspace")
         spec = json.loads(spec_path.read_text(encoding="utf-8"), object_pairs_hook=_launch_pairs)
-        if (not isinstance(spec, dict) or frozenset(spec) != _LAUNCH_FIELDS
-                or type(spec["schema_version"]) is not int or spec["schema_version"] != 1
+        if (not isinstance(spec, dict) or frozenset(spec) != (
+                _MIXED_LAUNCH_FIELDS if spec.get("schema_version") == 2 else _LAUNCH_FIELDS)
+                or type(spec["schema_version"]) is not int or spec["schema_version"] not in (1, 2)
                 or any(not isinstance(spec[key], str) or not spec[key].strip()
                        for key in ("job_artifact", "job_artifact_sha256", "job_id",
                                    "task_id", "character_id", "catalog_digest"))
-                or spec["resource_type"] not in ("FOOD", "WOOD", "STONE", "GOLD")
+                or (spec["schema_version"] == 1 and spec["resource_type"] not in
+                    ("FOOD", "WOOD", "STONE", "GOLD"))
                 or (spec["resource_level"] is not None
                     and type(spec["resource_level"]) is not int)):
             raise ValueError("invalid GATHER launch spec")
@@ -280,11 +304,13 @@ def _validated_launch(args: argparse.Namespace) -> tuple[argparse.Namespace, Gat
         args.gather_job = job_path
         args.task_id = spec["task_id"]
         args.character_id = spec["character_id"]
-        args.resource_type = spec["resource_type"]
+        args.resource_type = (spec["resource_schedule"][0]
+                              if spec["schema_version"] == 2 and isinstance(spec["resource_schedule"], list)
+                              and len(spec["resource_schedule"]) == 5 else spec.get("resource_type"))
         args.resource_level = spec["resource_level"]
     else:
-        if not all((args.gather_job, args.task_id, args.character_id, args.resource_type)):
-            raise ValueError("supply --launch-spec or all job and resource parameters")
+        if not all((args.gather_job, args.task_id, args.character_id)):
+            raise ValueError("supply --launch-spec or job, task and character parameters")
         spec = None
         job_path = args.gather_job.resolve()
     if not job_path.is_relative_to(workspace):
@@ -292,6 +318,20 @@ def _validated_launch(args: argparse.Namespace) -> tuple[argparse.Namespace, Gat
     raw_bytes = job_path.read_bytes()
     if spec is not None and hashlib.sha256(raw_bytes).hexdigest() != spec["job_artifact_sha256"]:
         raise ValueError("GATHER launch artifact hash changed")
+    artifact = json.loads(raw_bytes, object_pairs_hook=_launch_pairs)
+    if artifact.get("schema_version") == 2:
+        if spec is None:
+            if args.resource_type is not None or args.resource_level is not None:
+                raise ValueError("mixed GATHER job parameters come from authority artifact")
+            args = argparse.Namespace(**vars(args))
+            args.resource_type = artifact["resource_schedule"][0]
+            args.resource_level = artifact["resource_level"]
+        elif (spec["resource_schedule"] != artifact["resource_schedule"]
+              or spec["schedule_digest"] != artifact["schedule_digest"]
+              or spec["resource_level"] != artifact["resource_level"]):
+            raise ValueError("GATHER launch schedule differs from authority artifact")
+    elif not args.resource_type:
+        raise ValueError("legacy GATHER job requires a resource type")
     compiled = compile_mission(
         ROOT / "config" / "mission_flows.yaml", ROOT / "config" / "ui_states.yaml",
         "GATHER_RESOURCE", {"resource_type": args.resource_type,
@@ -302,6 +342,8 @@ def _validated_launch(args: argparse.Namespace) -> tuple[argparse.Namespace, Gat
         job_path, canonical_actions=catalog.actions,
         expected_catalog_digest=catalog.digest,
     )
+    validate_schedule_catalog(job, ROOT / "config" / "mission_flows.yaml",
+                              ROOT / "config" / "ui_states.yaml")
     if job.task_id != args.task_id or job.character_id != args.character_id:
         raise ValueError("GATHER launch identity differs from authority artifact")
     if spec is not None and any((
@@ -338,6 +380,7 @@ def _durably_closed(job: GatherJobAuthority, payload: Mapping[str, Any]) -> bool
 def _subprocess_tick(command: list[str]) -> tuple[int, Mapping[str, Any]]:
     completed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True,
                                encoding="utf-8", errors="replace", timeout=300)
+    candidates = []
     for output in (completed.stdout, completed.stderr):
         for line in reversed(output.splitlines()):
             try:
@@ -345,8 +388,20 @@ def _subprocess_tick(command: list[str]) -> tuple[int, Mapping[str, Any]]:
             except json.JSONDecodeError:
                 continue
             if isinstance(value, dict):
+                candidates.append(value)
+    if completed.returncode != 0:
+        for value in candidates:
+            if value.get("status") == "failed" and value.get("error"):
                 return completed.returncode, value
-    return completed.returncode, {"status": "failed", "error": "tick emitted no JSON result"}
+    if candidates:
+        return completed.returncode, candidates[0]
+    limit = 4096
+    return completed.returncode, {
+        "status": "failed", "error": "tick emitted no JSON result",
+        "stdout": completed.stdout[-limit:], "stderr": completed.stderr[-limit:],
+        "stdout_truncated": len(completed.stdout) > limit,
+        "stderr_truncated": len(completed.stderr) > limit,
+    }
 
 
 def _write_report(root: Path, result: Mapping[str, Any]) -> Path:
@@ -389,6 +444,27 @@ def _write_attempt_start(
                                  object_pairs_hook=_launch_pairs)
         if predecessor.get("startup_attestation_sha256") != startup_attestation_sha256:
             raise ValueError("GATHER startup attestation differs across attempts")
+    progress = JsonGatherJobStore(GATHER_JOB_STORE_ROOT).progress(job)
+    open_unchanged = (
+        previous_start is not None and not previous_result.exists()
+        and predecessor.get("initial_verified") == progress.verified_marches
+        and progress.dispatched_marches == progress.verified_marches
+        and progress.verified_marches < job.max_marches
+    )
+    if progress.dispatched_marches == progress.verified_marches + 1 or open_unchanged:
+        # Admission comes from the ledger/checkpoint/validated chain, never
+        # from the orphan start itself. Advanced COMPLETE-orphan recovery
+        # retains its original next-start bridge path.
+        if progress.revoked or not job.starts_at <= datetime.now(timezone.utc) < job.expires_at:
+            raise ValueError("GATHER open attempt outside active job authority")
+        from scripts.audit_first_done_job import preflight_attempt_chain
+        preflight_attempt_chain(job, JsonGatherJobStore(GATHER_JOB_STORE_ROOT),
+                                JsonMissionStore(GATHER_CHECKPOINT_ROOT), directory,
+                                GATHER_EVIDENCE_ROOT)
+        if previous_start is not None and not previous_result.exists():
+            # Preserve an already open tail without manufacturing another
+            # attempt. The canonical runner/guard owns subsequent eligibility.
+            return previous_start, predecessor
     record: dict[str, Any] = {
         "schema_version": 1, "kind": "attempt_start", "job_id": job.job_id,
         "task_id": job.task_id, "character_id": job.character_id,
@@ -409,6 +485,133 @@ def _write_attempt_start(
         handle.flush()
         os.fsync(handle.fileno())
     return destination, record
+
+
+def _write_recovery_record(path: Path, record: Mapping[str, Any]) -> None:
+    """Atomically publish one write-once record; a partial temp grants nothing."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        if json.loads(path.read_text()) != record:
+            raise ValueError("journal recovery record changed")
+        return
+    temporary = path.with_name(path.name + ".pending")
+    with temporary.open("x", encoding="utf-8") as stream:
+        json.dump(record, stream, sort_keys=True, indent=2)
+        stream.flush()
+        os.fsync(stream.fileno())
+    try:
+        # link publishes without overwriting an existing immutable receipt.
+        os.link(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _reconcile_verified_journal(job: GatherJobAuthority, report_root: Path,
+                                attestation_sha256: str) -> None:
+    """Adopt exact persisted proof without observation, input, or backdating."""
+    if not report_root.resolve().is_relative_to((ROOT / "workspace").resolve()):
+        raise ValueError("journal recovery report root must be under workspace")
+    from scripts.audit_first_done_job import (
+        _ProofJournalProjection, _evidence_matches, _load_evidence,
+        _record_time, _recovery_path, _recovery_matches, _recovery_origin,
+    )
+    from harness.gather_job_coordinator import gather_slot_run_id
+    from harness.gather_job_verification import record_verified_gather_tick
+    from harness.gather_replay_evidence import _run_directory, build_gather_tick_evidence
+    from harness.mission_runner import MissionTickResult, restore_verified_transition
+    from harness.mission_runtime import MissionContext
+    from harness.mission_store import CheckpointStatus
+
+    ledger = JsonGatherJobStore(GATHER_JOB_STORE_ROOT)
+    checkpoints = JsonMissionStore(GATHER_CHECKPOINT_ROOT)
+    progress = ledger.progress(job)
+    if progress.revoked:
+        raise ValueError("journal recovery job revoked")
+    # A committed ledger write with an uncommitted receipt must finish before
+    # any subsequent action, even when dispatch and verification counts match.
+    pending = progress.dispatched_marches == progress.verified_marches + 1
+    sequence = progress.dispatched_marches
+    if not sequence:
+        return
+    commit_path = _recovery_path(GATHER_EVIDENCE_ROOT, job, sequence)
+    intent_path = commit_path.with_name(f"slot-{sequence}.intent.json")
+    if not pending and not intent_path.exists():
+        return
+    if not job.starts_at <= datetime.now(timezone.utc) < job.expires_at:
+        raise ValueError("journal recovery outside job time scope")
+    context = MissionContext(job.mission_id, job.task_id, gather_slot_run_id(job, sequence))
+    checkpoint = checkpoints.load(context)
+    if checkpoint is None or checkpoint.status is not CheckpointStatus.COMPLETE:
+        if pending:
+            return  # Ordinary pending postcheck remains fail closed in preflight.
+        raise ValueError("journal recovery lacks COMPLETE checkpoint")
+    proof = restore_verified_transition(checkpoint, context)
+    projection = _ProofJournalProjection(ledger)
+    record_verified_gather_tick(job, context, MissionTickResult(
+        CheckpointStatus.COMPLETE, checkpoint, proof.snapshot, engine_result=proof), projection)
+    projected = projection.entry
+    if projected is None:
+        raise ValueError("journal recovery lacks exact VERIFIED proof")
+    client = _attested_client(job, attestation_sha256)
+    if ledger.client_binding(job) != client:
+        raise ValueError("journal recovery attested client mismatch")
+    reservation = ledger.reservations(job)[sequence - 1]
+    if (reservation.run_id != context.run_id or reservation.frame_id != proof.snapshot.frame_id
+            or reservation.action != "MARCH_WITH_CURRENT_SELECTION"):
+        raise ValueError("journal recovery reservation mismatch")
+    expected_engine = build_gather_tick_evidence(
+        context=context, character_id=job.character_id,
+        result=MissionTickResult(CheckpointStatus.COMPLETE, checkpoint, proof.snapshot, engine_result=proof),
+        live_armed=False, policy_approval=None, main_view_profile_trained=False,
+        resource_level_profile_trained=False)["engine"]
+    directory = GATHER_EVIDENCE_ROOT / _run_directory({
+        "mission_id": job.mission_id, "task_id": job.task_id, "run_id": context.run_id,
+        "attempt": context.attempt, "character_id": job.character_id})
+    sources = []
+    for path in directory.glob("*.json"):
+        record = _load_evidence(str(path), GATHER_EVIDENCE_ROOT)
+        if record is not None and _evidence_matches(projected, record, job, expected_engine, recovery=True):
+            sources.append((path.resolve(), record))
+    if len(sources) != 1:
+        raise ValueError("journal recovery needs one exact failed-write tick")
+    source, record = sources[0]
+    recorded = _record_time(record.get("recorded_at"))
+    attempts = report_root / hashlib.sha256(job.job_id.encode()).hexdigest()[:20]
+    start_path, start, result_digest = _recovery_origin(attempts, record, job, source, sequence)
+    if (start.get("startup_attestation_sha256") != attestation_sha256
+            or record["runtime"]["gather_job"].get("startup_attestation_sha256") != attestation_sha256
+            or start.get("job_id") != job.job_id or start.get("task_id") != job.task_id
+            or start.get("character_id") != job.character_id or start.get("catalog_digest") != job.catalog_digest
+            or recorded is None or not job.starts_at <= recorded < job.expires_at):
+        raise ValueError("journal recovery attempt/attestation scope mismatch")
+    common = {"schema_version": 1, "job_id": job.job_id, "sequence": sequence,
+              "source_path": str(source), "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+              "checkpoint_sha256": hashlib.sha256(checkpoints._path(context).read_bytes()).hexdigest(),
+              "reservation": {"run_id": reservation.run_id, "frame_id": reservation.frame_id,
+                              "sequence": reservation.sequence, "action": reservation.action},
+              "attempt_start_path": str(start_path.resolve()),
+              "attempt_start_sha256": hashlib.sha256(start_path.read_bytes()).hexdigest(),
+              "attempt_result_sha256": result_digest,
+              "startup_attestation_sha256": attestation_sha256}
+    intent = {**common, "kind": "journal_recovery_intent",
+              "proof_entry": {k: v for k, v in projected.items() if k != "verified_at"},
+              "created_at": datetime.now(timezone.utc).isoformat()}
+    if intent_path.exists():
+        existing = json.loads(intent_path.read_text())
+        intent["created_at"] = existing.get("created_at")
+    _write_recovery_record(intent_path, intent)
+    if pending:
+        record_verified_gather_tick(job, context, MissionTickResult(
+            CheckpointStatus.COMPLETE, checkpoint, proof.snapshot, engine_result=proof), ledger)
+    entry = ledger.verifications(job)[sequence - 1]
+    commit = {**common, "kind": "journal_recovery_commit", "journal_entry": entry,
+              "intent_sha256": hashlib.sha256(intent_path.read_bytes()).hexdigest(),
+              "committed_at": datetime.now(timezone.utc).isoformat()}
+    if commit_path.exists():
+        commit["committed_at"] = json.loads(commit_path.read_text()).get("committed_at")
+    _write_recovery_record(commit_path, commit)
+    if not _recovery_matches(entry, source, job, expected_engine, ledger, checkpoints, GATHER_EVIDENCE_ROOT, attempts):
+        raise ValueError("journal recovery receipt failed readback")
 
 
 def _unverdict_terminal_result(root: Path, job: GatherJobAuthority) -> tuple[Path, dict[str, Any]] | None:
@@ -471,9 +674,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        if args.arm_live:
-            raise ValueError("GATHER job live arm is blocked pending live evidence and separate authorization")
         args, job = _validated_launch(args)
+        if args.arm_live and job.schema_version != 2:
+            raise ValueError("GATHER job live arm requires a schema-v2 five-slot schedule")
         startup_attestation_sha256 = validate_canonical_startup_attestation(
             args.gather_job, job.job_id,
             resource_type=args.resource_type, resource_level=args.resource_level,
@@ -481,6 +684,7 @@ def main(argv: list[str] | None = None) -> int:
             mission_flows=ROOT / "config" / "mission_flows.yaml",
             ui_states=ROOT / "config" / "ui_states.yaml",
         )
+        _reconcile_verified_journal(job, args.report_root, startup_attestation_sha256)
         prior_terminal = _unverdict_terminal_result(args.report_root, job)
         if prior_terminal is not None:
             report, result = prior_terminal
@@ -536,6 +740,8 @@ def main(argv: list[str] | None = None) -> int:
                 command = _tick_command(
                     args, startup_attestation_sha256,
                     run_id=plan.run_id, host_trace_path=trace,
+                    resource_type=job.resource_for_slot(plan.sequence)
+                        if job.schema_version == 2 else None,
                 )
             return _subprocess_tick(command)
 

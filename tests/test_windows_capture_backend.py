@@ -13,9 +13,9 @@ def binding() -> dict:
             "dpi": 96, "dpi_scale": 1.0}
 
 
-def test_capture_options_are_hwnd_only_with_os_defaults() -> None:
+def test_capture_options_bind_hwnd_and_exclude_cursor() -> None:
     assert _capture_options(101) == {
-        "cursor_capture": None,
+        "cursor_capture": False,
         "draw_border": None,
         "secondary_window": None,
         "minimum_update_interval": None,

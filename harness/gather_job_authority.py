@@ -13,13 +13,31 @@ import json
 import math
 from typing import Mapping
 
-from harness.mission_loader import CompiledMission
+from harness.mission_loader import CompiledMission, compile_mission
 from harness.mission_runtime import MissionContext
 from harness.troop_policy import TROOP_SELECTION_PRECONDITION
 
 
 class GatherJobAuthorityError(ValueError):
     """The proposed startup authorization is malformed."""
+
+
+def schedule_digest(resources: tuple[str, ...], catalogs: tuple[str, ...],
+                    level: int | None) -> str:
+    payload = {"resources": resources, "catalogs": catalogs, "resource_level": level}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def validate_schedule_catalog(job: "GatherJobAuthority", mission_flows: object,
+                              ui_states: object) -> None:
+    """Recompile every pinned slot before trusting a mixed job."""
+    if job.schema_version != 2:
+        return
+    for resource, digest in zip(job.resource_schedule, job.slot_catalog_digests):
+        compiled = compile_mission(mission_flows, ui_states, job.mission_id,
+                                   {"resource_type": resource, "resource_level": job.resource_level})
+        if compiled_gather_catalog(compiled).digest != digest:
+            raise GatherJobAuthorityError("GATHER schedule catalog differs from compiled mission")
 
 
 @dataclass(frozen=True)
@@ -92,9 +110,13 @@ class GatherJobAuthority:
     max_marches: int = 5
     mission_id: str = "GATHER_RESOURCE"
     schema_version: int = 1
+    resource_schedule: tuple[str, ...] = ()
+    slot_catalog_digests: tuple[str, ...] = ()
+    resource_level: int | None = None
+    schedule_digest: str | None = None
 
     def __post_init__(self) -> None:
-        if self.schema_version != 1 or self.mission_id != "GATHER_RESOURCE":
+        if self.schema_version not in (1, 2) or self.mission_id != "GATHER_RESOURCE":
             raise GatherJobAuthorityError("unsupported GATHER job schema or mission")
         for name in ("job_id", "task_id", "character_id", "catalog_digest"):
             value = getattr(self, name)
@@ -116,6 +138,27 @@ class GatherJobAuthority:
                        for action in self.allowed_actions)
                 or "MARCH_WITH_CURRENT_SELECTION" not in self.allowed_actions):
             raise GatherJobAuthorityError("allowed_actions must include the GATHER march")
+        if self.schema_version == 2:
+            from autorok.mission.allocation import allocate_by_ratio
+            expected = tuple(kind.value for kind in allocate_by_ratio(5))
+            if (self.resource_schedule != expected
+                    or len(self.slot_catalog_digests) != 5
+                    or any(not isinstance(item, str) or not item for item in self.slot_catalog_digests)
+                    or self.catalog_digest != self.slot_catalog_digests[0]
+                    or (self.resource_level is not None and type(self.resource_level) is not int)
+                    or self.schedule_digest != schedule_digest(
+                        self.resource_schedule, self.slot_catalog_digests, self.resource_level)):
+                raise GatherJobAuthorityError("invalid immutable five-slot GATHER schedule")
+
+    def resource_for_slot(self, sequence: int) -> str:
+        if self.schema_version != 2 or type(sequence) is not int or not 1 <= sequence <= 5:
+            raise GatherJobAuthorityError("job has no mixed-resource slot")
+        return self.resource_schedule[sequence - 1]
+
+    def catalog_for_slot(self, sequence: int) -> str:
+        if self.schema_version != 2 or type(sequence) is not int or not 1 <= sequence <= 5:
+            raise GatherJobAuthorityError("job has no mixed-resource slot")
+        return self.slot_catalog_digests[sequence - 1]
 
     def march_precondition(
         self,
@@ -152,7 +195,8 @@ class GatherJobAuthority:
             return {}
         if (context.mission_id != self.mission_id or context.task_id != self.task_id
                 or current_character_id != self.character_id
-                or current_catalog_digest != self.catalog_digest
+                or current_catalog_digest != (self.catalog_for_slot(progress.verified_marches + 1)
+                    if self.schema_version == 2 and progress.verified_marches < 5 else self.catalog_digest)
                 or not self.allowed_actions.issubset(canonical_actions)
                 or progress.job_id != self.job_id or progress.revoked
                 or type(progress.dispatched_marches) is not int

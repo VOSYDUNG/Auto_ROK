@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 import pytest
 
-from harness.template_anchors import TemplateAnchorError, calibrate_template, resolve_template
+from harness.template_anchors import TemplateAnchorError, calibrate_template, resolve_template, _template_artifact_path
 
 
 NOW = datetime(2026, 9, 14, 7, 0, tzinfo=timezone.utc)
@@ -18,6 +18,17 @@ SPEC = {"id": "WORLD_MAP_BUTTON", "label": "World map button (Space)",
         "representation": "grayscale_laplacian_abs_v1",
         "minimum_runner_up_margin": 0.12}
 CONFIG_HASH = "c" * 64
+
+
+def test_published_template_allowlist_rejects_sibling_and_traversal_paths():
+    root = Path(__file__).resolve().parents[1]
+    asset = root / "config/assets/farm_search/food.png"
+    assert _template_artifact_path(asset) == asset.resolve()
+    for path in (root / "config/assets/other/food.png",
+                 root / "config/assets/farm_search/../other/food.png",
+                 root / "config/assets/farm_search"):
+        with pytest.raises(TemplateAnchorError, match="template path"):
+            _template_artifact_path(path)
 
 
 def write_png(path: Path, image: np.ndarray) -> None:

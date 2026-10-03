@@ -25,6 +25,7 @@ required_runtime_path:
   - windows_ocr
   - observation_projection
   - ocr_semantics
+  - farm_search_visual
   - city_world_visual_detector
   - resource_level_control
   - state_classifier
@@ -47,6 +48,30 @@ required_runtime_path:
   - gather_runtime_evidence
 
 nodes:
+  - id: farm_search_visual
+    kind: perception
+    responsibility: Identify the farm resource-search surface from calibrated current-frame control images and layout without requiring unrelated Barbarians text; emit panel evidence without authorizing an ungrounded input.
+    authority: canonical
+    status: implemented
+    path: harness/farm_search_visual.py
+    evidence:
+      - workspace/agents/f6w-farm-visual/root/BRIEF.md
+      - tests/test_farm_search_visual.py
+      - tests/test_live_tick_wiring.py
+      - workspace/agents/f6w-farm-visual/root/native-visual-replay.json
+
+  - id: farm_search_visual_profile
+    kind: evidence
+    responsibility: Preserve measured farm-control templates, thresholds, native frame hashes and client layout for the farm search surface.
+    authority: evidence
+    status: implemented
+    path: config/farm_search_visual.json
+    evidence:
+      - config/assets/farm_search/README.md
+      - tests/test_template_anchors.py
+      - workspace/agents/f6w-farm-visual/root/calibrate.py
+      - workspace/agents/f6w-farm-visual/root/native-visual-replay.json
+
   - id: autorok_mission_layer
     kind: mission_policy
     responsibility: Model the farm work process as pure domain logic - order quota with tax gross-up, fleet rotation with batch amortisation, ratio allocation with scarcity fallback, and transport capacity - with no capture, OCR or input dependency.
@@ -122,7 +147,7 @@ nodes:
 
   - id: map_coordinate_detector
     kind: perception
-    responsibility: Decide from one calibrated corner of the frame whether the client is on the bare world map, by reading the coordinate widget the client draws only there, and refusing rather than guessing when it is partly read.
+    responsibility: Read the calibrated world-map coordinate widget only after canonical foreground-marker suppression; widget presence alone does not prove that no panel is open. Refuse uncertain readings.
     authority: canonical
     status: implemented
     path: harness/map_coordinate.py
@@ -166,7 +191,7 @@ nodes:
 
   - id: windows_ocr_direct
     kind: perception
-    responsibility: Call Windows.Media.Ocr in process on pixels the capture backend already holds, instead of spawning PowerShell to re-hash and re-decode the same frame.
+    responsibility: Call Windows.Media.Ocr in process on captured pixels and measured semantic processing ROIs, including the New Troop Units anchor, preserving native frame/hash/client/crop provenance without fabricated tokens.
     authority: canonical
     status: implemented
     path: harness/windows_ocr_direct.py
@@ -177,7 +202,7 @@ nodes:
 
   - id: march_queue_indicator
     kind: perception
-    responsibility: Read the world-map march queue from a calibrated ROI by template matching, returning a value or a classified refusal but never a guess.
+    responsibility: Read the world-map march queue from a calibrated ROI by template matching with native-frame-bound measured glyph variants, returning a value or a classified refusal but never a guess; missing glyphs require offline evidence calibration before fresh runtime verification.
     authority: canonical
     status: implemented
     path: harness/queue_indicator.py
@@ -366,6 +391,20 @@ nodes:
     evidence:
       - tests/test_observation_bridge.py
 
+  - id: windows_live_observation
+    kind: composition
+    responsibility: Passively captures and recognizes one current client frame in a fresh exclusively created observation directory, preserving prior image/capture/OCR/projection bytes and returning only frame-bound projected facts; publication failure returns no usable observation and never emits input or retries writes.
+    authority: canonical
+    status: implemented
+    path: harness/windows_live_observation.py
+    evidence:
+      - tests/test_windows_live_observation.py
+      - config/cpu_rois.yaml
+      - tests/test_cpu_roi.py
+      - tests/test_new_troop_formation_fact.py
+      - workspace/runs/f6-observation-write-blocker-20260927-05/archive-note.json
+      - workspace/agents/f6l-observation-artifacts/root/VALIDATION.md
+
   - id: ocr_semantics
     kind: code
     responsibility: Assembles OCR phrases and explicitly grounds exact targets without fabricating detector confidence.
@@ -487,7 +526,7 @@ nodes:
 
   - id: gather_fact_extractor
     kind: code
-    responsibility: Extracts bounded GATHER queue, resource-level and configured-character facts plus same-frame New Troop readiness from hashed OCR/image evidence.
+    responsibility: Extracts bounded GATHER queue, resource-level and configured-character facts plus same-frame New Troop readiness from hashed OCR/image evidence, positive troop/power text, active March, occupied portraits and measured selected-control pixels.
     authority: canonical
     status: implemented
     path: harness/gather_facts.py
@@ -507,7 +546,7 @@ nodes:
 
   - id: gather_job_authority
     kind: policy
-    responsibility: Fingerprints the compiled GATHER catalog and validates the bounded startup job and current-frame March precondition for up to five reservations without choosing commanders or granting host input.
+    responsibility: Pins the default ratio's immutable five-resource schedule and each slot's compiled GATHER catalog; validates the bounded startup job and current-frame March precondition without choosing commanders or granting host input.
     authority: canonical
     status: implemented
     path: harness/gather_job_authority.py
@@ -517,7 +556,7 @@ nodes:
 
   - id: gather_job_issuance
     kind: composition
-    responsibility: Creates one non-overwriting offline startup job artifact from operator-supplied scope and the compiled GATHER action catalog plus a non-authoritative launch spec for the driver; it grants no live input authority.
+    responsibility: Creates one non-overwriting offline startup job artifact with the default 1:1:1:2 five-slot resource schedule, per-slot compiled catalog digests and a matching launch spec; it grants no live input authority.
     authority: canonical
     status: implemented
     path: scripts/create_gather_job.py
@@ -526,7 +565,7 @@ nodes:
 
   - id: startup_character_attestation
     kind: verification
-    responsibility: Records and revalidates one operator assertion of the open character against the exact startup job and native first-frame client at a deterministic per-job path; the queue UI is not present before the first March, so this record makes no numeric queue claim and grants no input authority.
+    responsibility: Records and revalidates one operator assertion of the open character against the exact startup job, immutable resource schedule and native first-frame client at a deterministic per-job path; this record makes no numeric pre-first queue claim and grants no input authority.
     authority: canonical
     status: implemented
     path: harness/gather_job_startup_attestation.py
@@ -536,7 +575,7 @@ nodes:
 
   - id: gather_job_store
     kind: persistence
-    responsibility: Loads the exact GATHER job, binds its first captured client, and atomically records up to five distinct March reservations and their ordered VERIFIED queue transitions; an unverified reservation bars the next March.
+    responsibility: Loads the exact GATHER job including all mixed-resource schedule fields, binds its first captured client, and atomically records up to five distinct March reservations and their ordered VERIFIED queue transitions; an unverified reservation bars the next March. Historical mixed ledgers missing schedule identity are never adopted or migrated in place.
     authority: canonical
     status: implemented
     path: harness/gather_job_store.py
@@ -547,7 +586,7 @@ nodes:
 
   - id: gather_job_verification
     kind: verification
-    responsibility: Adopts only a matching MissionEngine COMPLETE and VERIFIED March result with fresh same-client and same-character post-dispatch queue evidence; the first slot requires newly visible 1/5 without claiming an observed 0/5, then slots two through five require numeric n to n+1.
+    responsibility: Adopts only a matching MissionEngine COMPLETE and VERIFIED March result with fresh same-client and same-character post-dispatch queue evidence; the first slot uses a nonnumeric job ordinal and requires fresh 1/5. Optional same-frame measured zero in Drawer or New Troop is validated but never adopted as a completion baseline; later slots require numeric n to n+1.
     authority: canonical
     status: implemented
     path: harness/gather_job_verification.py
@@ -729,7 +768,7 @@ nodes:
 
   - id: gather_job_input_guard
     kind: safety
-    responsibility: Rechecks the bound client, job, same-frame New Troop readiness, compiled action, character and prior VERIFIED progress before input; the first slot uses a nonnumeric bootstrap state, later slots require a fresh numeric queue baseline before reserving one March attempt.
+    responsibility: Rechecks the bound client, job, same-frame New Troop readiness, compiled action, character and prior VERIFIED progress before input; the first slot uses a nonnumeric bootstrap and validates optional measured zero while enforcing frame age, later slots require a fresh numeric queue baseline before reserving one March attempt.
     authority: canonical
     status: implemented
     path: harness/windows_interference_guard.py
@@ -864,7 +903,7 @@ nodes:
 
   - id: mission_runner
     kind: orchestration
-    responsibility: Runs one caller-driven deterministic mission tick and resumes from durable checkpoint state.
+    responsibility: Runs one caller-driven deterministic mission tick and resumes durable checkpoints; exact reversible GATHER New Troop navigation can be reconciled without input from a fresh matching world-map frame and full prior receipt, while pending March verification remains mandatory.
     authority: canonical
     status: implemented
     path: harness/mission_runner.py
@@ -876,7 +915,7 @@ nodes:
 
   - id: gather_job_coordinator
     kind: orchestration
-    responsibility: Selects a deterministic five-march job occurrence from durable VERIFIED progress, creates the nonnumeric first-slot marker only from fresh job-bound New Troop evidence, resumes a matching checkpoint, and invokes the canonical MissionRunner for at most one tick; an unverified reservation cannot open the next slot.
+    responsibility: Selects a deterministic five-march job occurrence from durable VERIFIED progress, validates optional sourced same-frame zero without adopting a numeric first-slot baseline, refreshes the nonnumeric first-slot marker from fresh job-bound New Troop evidence after navigation resume, resumes a matching checkpoint, and invokes the canonical MissionRunner for at most one tick; an unverified reservation cannot open the next slot.
     authority: canonical
     status: implemented
     path: harness/gather_job_coordinator.py
@@ -886,7 +925,7 @@ nodes:
 
   - id: gather_cli
     kind: composition
-    responsibility: Composes one GATHER tick with either historical B003 or the opt-in five-march job coordinator, canonical startup attestation revalidation and current-run host-trace preflight before planning/runner, guarded input, durable VERIFIED journal progress and per-tick evidence; job live arming remains blocked.
+    responsibility: Composes one GATHER tick with either historical B003 or the five-march job coordinator; live job input requires an explicit arm, a schema-v2 slot, pinned startup attestation and fresh current-run host trace before canonical guarded input and VERIFIED journal progress.
     authority: canonical
     status: implemented
     path: scripts/run_gather_tick.py
@@ -899,7 +938,7 @@ nodes:
 
   - id: gather_job_driver
     kind: adapter
-    responsibility: Pins one canonical startup attestation digest, revalidates it and obtains a fresh passive host trace for each deterministic run before a bounded GATHER tick, checks the durable prior attempt chain, records append-only attempt starts/results, and automatically consumes the FIRST DONE audit verdict or recovers a completed terminal report; live arming remains disabled.
+    responsibility: Pins canonical startup attestation and immutable schedule; derives each tick from VERIFIED progress, validates passive host trace and attempt chain, forwards live arm only for traced schema-v2 ticks, and records starts/results. Failed subprocess diagnostics preserve bounded typed errors without trusting unbound progress. A latest open start can be reused only under active authority and full chain admission with unchanged journal progress or exact pending proof; an orphan never grants input authority. Journal-write reconciliation is input-free and must bind exact durable proof and original tick through an append-only recovery receipt before another attempt can open.
     authority: canonical
     status: implemented
     path: scripts/run_gather_job.py
@@ -920,12 +959,30 @@ nodes:
 
   - id: first_done_job_audit
     kind: verification
-    responsibility: Validates the ordered append-only attempt chain with one pinned startup attestation digest across resume, rejects unaccounted or temporally foreign VERIFIED slots before another tick, and compares five durable journal/checkpoint/per-tick proofs for one offline closeout verdict without claiming live completion.
+    responsibility: Validates the ordered attempt chain and pinned attestation across resume, admits only exact reservation-bound pending March proof for observation before selection, and treats strictly shaped terminal diagnostics or empty callback-exception reports as zero-authority failure evidence without changing verified progress or claiming zero input. Rejects unaccounted or temporally foreign slots and compares five journal/checkpoint/tick proofs for an offline verdict. A failed journal append can be reconciled only through a bound input-free recovery receipt; the original failed tick remains immutable and never becomes a successful append by assertion.
     authority: canonical
     status: implemented
     path: scripts/audit_first_done_job.py
     evidence:
       - tests/test_audit_first_done_job.py
+
+  - id: gather_job_continuation
+    kind: authorization
+    responsibility: Validates one explicit immutable parent-bound continuation execution window for an already delegated FIRST DONE job, preserving original artifact/startup/ledger identity and five-slot quota; pins current-window provenance and rejects the expired gap, revocation, foreign scope or altered admission prefix.
+    authority: canonical
+    status: deferred
+    path: harness/gather_job_continuation.py
+    evidence:
+      - workspace/agents/f6o-session-continuation/nghien_cuu/HANDOFF.md
+
+  - id: gather_job_continuation_issuer
+    kind: adapter
+    responsibility: Exclusively publishes a bounded continuation receipt from the existing same-user FIRST DONE delegation, a fresh same-client native capture and validated durable prefix; never changes the original job or issues additional March quota or input itself.
+    authority: canonical
+    status: deferred
+    path: scripts/create_gather_job_continuation.py
+    evidence:
+      - docs/SESSION_AUTHORITY.md
 
   - id: live_replay_evidence
     kind: evidence
@@ -986,6 +1043,13 @@ nodes:
     blocker: A001
 
 edges:
+  - {from: observation_projection, to: farm_search_visual, relation: supplies_hashed_current_frame_and_client_layout}
+  - {from: farm_search_visual_profile, to: farm_search_visual, relation: calibrates_visible_farm_control_images}
+  - {from: gather_job_store, to: farm_search_visual, relation: supplies_canonical_full_native_client_binding_comparison}
+  - {from: farm_search_visual, to: state_classifier, relation: establishes_farm_search_surface_without_unrelated_text}
+  - {from: farm_search_visual, to: city_world_visual_detector, relation: suppresses_background_state_when_farm_surface_visible}
+  - {from: farm_search_visual, to: map_coordinate_detector, relation: suppresses_background_coordinate_state_when_farm_surface_visible}
+  - {from: farm_search_visual, to: gather_cli, relation: constructed_in_canonical_live_observation_chain}
   - {from: viewport_change_detector, to: degradation_ladder, relation: signals_scarcity}
   - {from: degradation_ladder, to: autorok_mission_layer, relation: selects_active_goal}
   - {from: windows_ocr_direct, to: observation_projection, relation: supplies_ocr_elements}
@@ -1043,6 +1107,11 @@ edges:
   - {from: live_capture, to: rapidocr_fixed_roi_backend, relation: supplies_bound_frame}
   - {from: windows_ocr, to: rapidocr_fixed_roi_backend, relation: supplies_base_ocr_overlay}
   - {from: live_capture, to: observation_projection, relation: proves_frame}
+  - {from: live_capture, to: windows_live_observation, relation: supplies_native_current_cursor_excluded_pixels_hash_and_client_binding}
+  - {from: windows_ocr_direct, to: windows_live_observation, relation: supplies_same_frame_in_process_ocr_payload_with_measured_new_troop_units_roi}
+  - {from: windows_ocr, to: windows_live_observation, relation: supplies_explicit_replay_backend_ocr_payload}
+  - {from: windows_live_observation, to: observation_projection, relation: supplies_immutable_per_observation_artifacts_for_provenance_checks}
+  - {from: windows_live_observation, to: gather_cli, relation: returns_passive_frame_bound_bundle_for_canonical_provider_chain}
   - {from: live_capture, to: gather_client_binding, relation: supplies_capture_target_and_post_binding}
   - {from: live_capture, to: gather_fact_extractor, relation: supplies_hashed_current_new_troop_pixels}
   - {from: live_capture, to: city_world_visual_detector, relation: supplies_current_frame}
@@ -1069,6 +1138,7 @@ edges:
   - {from: troop_selection_policy_approval, to: troop_selection_policy, relation: explicitly_authorizes}
   - {from: troop_selection_policy, to: policy_overlay, relation: supplies_bounded_approval}
   - {from: mission_contract, to: gather_job_authority, relation: declares_gather_scope}
+  - {from: autorok_mission_layer, to: gather_job_authority, relation: supplies_deterministic_default_ratio_schedule}
   - {from: mission_compiler, to: gather_job_authority, relation: supplies_compiled_catalog_identity}
   - {from: gather_job_authority, to: policy_overlay, relation: supplies_bounded_job_precondition}
   - {from: gather_job_authority, to: gather_job_store, relation: validates_operator_job_scope}
@@ -1081,6 +1151,8 @@ edges:
   - {from: march_queue_indicator, to: gather_job_verification, relation: supplies_first_post_1_of_5_and_later_numeric_queue_reads}
   - {from: gather_job_store, to: startup_character_attestation, relation: supplies_revocation_and_client_binding}
   - {from: startup_character_attestation, to: gather_job_driver, relation: pins_and_revalidates_canonical_startup_record}
+  - {from: gather_job_driver, to: gather_cli, relation: supplies_next_verified_slot_resource_pinned_attestation_and_explicit_traced_live_arm}
+  - {from: mission_compiler, to: gather_cli, relation: supplies_per_slot_compiled_resource_catalog}
   - {from: startup_character_attestation, to: gather_cli, relation: preflights_direct_job_tick}
   - {from: gather_job_authority, to: gather_job_coordinator, relation: defines_five_march_scope}
   - {from: gather_job_authority, to: gather_client_binding, relation: scopes_startup_client_binding}
@@ -1090,7 +1162,7 @@ edges:
   - {from: gather_job_store, to: policy_overlay, relation: supplies_durable_reservation_progress}
   - {from: gather_job_store, to: gather_job_input_guard, relation: supplies_client_binding_and_reserves_march_attempt}
   - {from: gather_job_store, to: gather_cli, relation: loaded_by}
-  - {from: gather_job_store, to: gather_job_coordinator, relation: supplies_durable_verified_progress}
+  - {from: gather_job_store, to: gather_job_coordinator, relation: supplies_durable_verified_progress_and_captured_client_binding_after_first_observation}
   - {from: gather_job_store, to: gather_runtime_evidence, relation: supplies_verified_job_progress}
   - {from: policy_overlay, to: state_adapter, relation: feeds}
   - {from: state_classifier, to: state_adapter, relation: feeds}
@@ -1124,21 +1196,38 @@ edges:
   - {from: post_action_verification, to: mission_engine, relation: verifies}
   - {from: post_action_verification, to: gather_job_verification, relation: supplies_verified_queue_transition}
   - {from: mission_engine, to: mission_store, relation: checkpoints}
-  - {from: mission_store, to: mission_runner, relation: resumes}
+  - {from: mission_store, to: mission_runner, relation: resumes_exact_pending_receipts_with_observation_only_reversible_new_troop_navigation_reconciliation_and_mandatory_march_verification}
+  - {from: gather_job_store, to: mission_runner, relation: supplies_canonical_native_client_binding_comparison_for_reversible_navigation_recovery}
   - {from: mission_store, to: gather_job_coordinator, relation: supplies_occurrence_checkpoint}
   - {from: mission_engine, to: mission_runner, relation: driven_by}
   - {from: mission_runner, to: gather_job_verification, relation: supplies_completed_tick_and_receipt}
-  - {from: mission_runner, to: gather_job_coordinator, relation: executes_one_bounded_tick}
+  - {from: mission_runner, to: gather_job_coordinator, relation: executes_one_bounded_tick_and_supplies_single_numeric_drawer_baseline_factory}
   - {from: gather_job_verification, to: gather_job_store, relation: appends_verified_transition}
   - {from: gather_job_verification, to: gather_job_coordinator, relation: confirms_slot_before_next_occurrence}
   - {from: gather_job_coordinator, to: gather_cli, relation: composed_by_canonical_job_tick}
   - {from: mission_runner, to: gather_cli, relation: composed_by}
   - {from: gather_cli, to: gather_runtime_evidence, relation: emits}
-  - {from: gather_cli, to: gather_job_driver, relation: supplies_canonical_one_tick_result}
-  - {from: gather_job_driver, to: first_done_job_audit, relation: supplies_ordered_attempt_chain_for_preflight_and_closeout}
+  - {from: gather_cli, to: gather_job_driver, relation: supplies_canonical_tick_result_or_untrusted_bounded_failure_diagnostics}
+  - {from: gather_job_verification, to: first_done_job_audit, relation: validates_optional_same_frame_first_slot_zero_without_numeric_baseline}
+  - {from: gather_job_verification, to: gather_job_input_guard, relation: validates_optional_first_slot_zero_provenance_before_freshness_gated_input}
+  - {from: gather_job_coordinator, to: mission_runner, relation: preserves_first_ordinal_and_carries_validated_numeric_drawer_baseline_into_same_tick_new_troop_post_observation}
+  - {from: gather_job_driver, to: first_done_job_audit, relation: supplies_ordered_attempt_chain_and_bound_no_input_recovery_receipts_for_preflight_and_closeout}
+  - {from: mission_store, to: gather_job_driver, relation: supplies_exact_durable_verified_proof_for_no_input_reconciliation}
+  - {from: gather_runtime_evidence, to: gather_job_driver, relation: supplies_immutable_original_tick_for_bound_journal_write_recovery}
+  - {from: gather_job_store, to: gather_job_driver, relation: supplies_reservation_client_and_journal_state_for_no_input_reconciliation}
   - {from: first_done_job_audit, to: gather_job_driver, relation: blocks_next_tick_or_returns_offline_closeout_verdict}
   - {from: gather_job_store, to: first_done_job_audit, relation: supplies_ordered_verified_journal}
   - {from: mission_store, to: first_done_job_audit, relation: supplies_durable_engine_proof}
+  - {from: mission_store, to: first_done_job_audit, relation: supplies_exact_pending_march_proof_for_input_free_resume_admission}
+  - {from: gather_job_authority, to: gather_job_continuation, relation: supplies_immutable_parent_identity_catalog_schedule_and_original_window}
+  - {from: startup_character_attestation, to: gather_job_continuation, relation: supplies_original_operator_assertion_and_pinned_client_source}
+  - {from: gather_job_store, to: gather_job_continuation, relation: supplies_validated_admission_prefix_without_new_quota}
+  - {from: live_capture, to: gather_job_continuation_issuer, relation: supplies_fresh_same_client_native_frame_for_time_continuation}
+  - {from: gather_job_continuation_issuer, to: gather_job_continuation, relation: publishes_explicit_parent_bound_execution_receipt_exclusively}
+  - {from: gather_job_continuation, to: gather_job_input_guard, relation: supplies_explicit_pinned_active_execution_window_without_scope_expansion}
+  - {from: gather_job_continuation, to: gather_cli, relation: loaded_only_from_explicit_parent_bound_receipt_and_digest}
+  - {from: gather_job_continuation, to: gather_job_driver, relation: pins_execution_window_on_continued_attempts}
+  - {from: gather_job_continuation, to: first_done_job_audit, relation: attributes_new_events_to_the_explicit_window_and_rejects_the_expiry_gap}
   - {from: gather_runtime_evidence, to: first_done_job_audit, relation: supplies_frame_bound_tick_records}
   - {from: first_done_job_audit, to: completion_audit, relation: supplies_offline_closeout_verdict}
   - {from: troop_selection_policy_approval, to: live_replay_evidence, relation: supplies_policy_provenance}

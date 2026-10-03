@@ -253,26 +253,16 @@ nhãn tiến độ thứ hai có thể lệch khỏi bằng chứng.
 
 ---
 
-## 4. Bảng truy vết — cái gì còn thiếu
+## 4. Truy vết yêu cầu và bằng chứng
 
-| Nhóm | Tổng | ĐÃ KIỂM | CHƯA KIỂM | CHƯA XÂY | KHOÁ / chờ |
-|---|---|---|---|---|---|
-| CAP thu hình | 6 | 6 | — | — | — |
-| OCR | 8 | 8 | — | — | — |
-| STA trạng thái | 7 | 7 | — | — | — |
-| MIS order/đội hình + FIRST DONE | 22 | 12 | — | 10 | — |
-| LAD suy giảm | 11 | 11 | — | — | — |
-| LLM biên quyết định | 10 | 9 | 1 | — | — |
-| ONB onboarding | 5 | 4 | — | 1 | — |
-| ACT actuation | 6 | 6 | — | — | — |
-| EVI bằng chứng | 4 | 4 | — | — | — |
-| SAF an toàn | 6 | 4 | — | 2 | — |
-| DEL giao hàng | 15 | 8 | — | 4 | 3 |
-| **Tổng** | **100** | **79** | **1** | **17** | **3** |
-
-**Đọc bảng này:** 79/100 yêu cầu có test hoặc artifact kiểm tra trong phạm vi đã ghi;
-17 mục còn `CHƯA XÂY` và 1 mục còn `CHƯA KIỂM`. Sáu mã `MIS-FD-*` là các hợp đồng
-FIRST DONE mới, chưa có bằng chứng runtime, nên được tính vào phần chưa xây.
+Các mã ở §3 xác định mệnh đề và tiêu chí; test/artifact được dẫn chỉ chứng
+minh phạm vi đã ghi. Không cộng nhãn test thành phần trăm hoàn thành sản
+phẩm, và không coi hợp đồng chưa có live proof là chưa có code. Mức hiện
+hành của capability được ghi duy nhất ở [runtime-status](../runtime-status.yaml);
+[COMPLETION_AUDIT](COMPLETION_AUDIT.md) nối từng cạnh nghiệm thu với bằng
+chứng, còn [ROOT](ROOT.md) chọn gói tiếp theo. Sáu mã `MIS-FD-*` vẫn giữ
+nguyên tiêu chí ngay cả khi code đã được nối offline hoặc một cạnh navigation
+đã chạy live; chúng chỉ đóng khi đủ chuỗi hậu kiểm của cùng job.
 
 | Cần client | Làm được không cần game |
 |---|---|

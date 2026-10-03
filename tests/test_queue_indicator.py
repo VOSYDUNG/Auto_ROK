@@ -5,6 +5,8 @@ shows "Trade Deal (5/5) Make 5 purchases at the Courier Station", so anything
 that searches the frame for an n/5 pattern reads quest progress as a full
 queue - and then declines to dispatch while four slots sit empty, silently.
 """
+from dataclasses import replace
+import hashlib
 import json
 from pathlib import Path
 
@@ -22,6 +24,22 @@ from harness.queue_indicator import (
 ROOT = Path(__file__).resolve().parents[1]
 PROFILE_PATH = ROOT / "config" / "queue_indicator_profile.json"
 LIVE_FRAME = ROOT / "workspace" / "runs" / "p3-observe-20260920" / "frame-01.png"
+FIRST_POST_FRAME = ROOT / "workspace" / "runs" / "f6-first-postcheck-blocker-20260927-05" / "current.png"
+FIRST_POST_SHA256 = "c53e3a1301ea8d05ee0184025b0a3003a68a629aeaa82144b3ffe27b798aa5aa"
+MEASURED_FIVE = ("####.", "#....", "##...", "####.", "...##", "...##", "####.", ".##..")
+SECOND_POST_FRAME = (ROOT / "workspace" / "runtime" / "gather_resource-65256b73ad7ed58a"
+                    / "observation-a6d1372389a74a01a8f565905b659b36" / "current.png")
+SECOND_POST_SHA256 = "43cc31fec61cbd79016681b6878cead3bddef4ec2a22b6d535132823f6cd80d9"
+MEASURED_TWO = ("####", "...#", "...#", "..##", "..#.", ".##.", "###.", "####")
+SECOND_MEASURED_FIVE = ("####", "#...", "##..", "####", "...#", "...#", "#.##", ".##.")
+THIRD_POST_FRAME = (ROOT / "workspace" / "runtime" / "gather_resource-08997d0c79631279"
+                    / "observation-7cd2684846734f60bf6677952cdf7a31" / "current.png")
+THIRD_POST_SHA256 = "fd7ee1763c6e87ccf025d59de4f3fed986646433334601049118825b2c6d55c7"
+MEASURED_THREE = ("..#...", "#####.", "....#.", "...##.", "..##..", "....#.", "....##", "##.##.", ".###..")
+FOURTH_POST_FRAME = (ROOT / "workspace" / "runtime" / "gather_resource-d445aecd201f29bc"
+                     / "observation-9dfd764b29e64036a168684562d8e570" / "current.png")
+FOURTH_POST_SHA256 = "e068105fe5274166fa6a55afbf3aa6f63b61d2b1501055afb0ac66bd03c4efb4"
+MEASURED_FOUR = ("..###.", "..###.", ".##.#.", "##..#.", "######", ".#####", "...##.")
 
 
 @pytest.fixture
@@ -97,7 +115,7 @@ def test_the_quest_decoy_elsewhere_in_the_frame_is_ignored(profile):
     decoy_x, decoy_y = 40, 400
     cursor = decoy_x
     for label in ("5", "/", "5"):
-        _paint(frame, profile.glyphs[label], cursor, decoy_y)
+        _paint(frame, profile.glyphs[label][0], cursor, decoy_y)
         cursor += len(profile.glyphs[label][0]) + 2
 
     reading = QueueIndicatorReader(profile).read(frame)
@@ -243,3 +261,200 @@ def test_the_threshold_is_not_back_on_the_cliff_edge():
         "widening the glyph distance to paper over a threshold problem would "
         "make 1 and 4 confusable; fix the threshold instead"
     )
+
+
+def test_measured_five_variant_retains_capture_provenance_and_limits(profile):
+    raw = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
+    assert MEASURED_FIVE in profile.glyphs["5"]
+    source = raw["training_sources"]["1/5"]
+    assert source["frame_id"] == "rok-20260927T024044381473Z-c53e3a1301ea"
+    assert source["frame_sha256"] == FIRST_POST_SHA256
+    assert Path(source["frame_path"]).name == "current.png"
+    assert Path(source["manifest_path"]).name == "capture.json"
+    assert source["archived_frame_path"] == str(FIRST_POST_FRAME.relative_to(ROOT)).replace("\\", "/")
+    assert "ROOT inspection" in source["visual_label_source"]
+    assert profile.roi == (1310, 113, 40, 15)
+    assert profile.threshold == 180 and profile.max_glyph_distance == 1
+    assert set(profile.glyphs) == {"1", "2", "3", "4", "5", "/"}
+
+
+@pytest.mark.skipif(not FIRST_POST_FRAME.exists(), reason="immutable first-March postframe not present")
+def test_exact_saved_first_march_postframe_reads_one_of_five(profile):
+    import cv2
+
+    assert hashlib.sha256(FIRST_POST_FRAME.read_bytes()).hexdigest() == FIRST_POST_SHA256
+    raw = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
+    source = raw["training_sources"]["1/5"]
+    manifest = json.loads((ROOT / source["archived_manifest_path"]).read_text(encoding="utf-8"))
+    assert manifest["frame"]["id"] == source["frame_id"]
+    assert manifest["frame"]["image_sha256"] == source["frame_sha256"]
+    assert manifest["png"] == source["frame_path"]
+    gray = cv2.cvtColor(cv2.imread(str(FIRST_POST_FRAME)), cv2.COLOR_BGR2GRAY)
+    old_glyphs = dict(profile.glyphs)
+    old_glyphs["5"] = tuple(pattern for pattern in old_glyphs["5"] if pattern != MEASURED_FIVE)
+    before = QueueIndicatorReader(replace(profile, glyphs=old_glyphs)).read(gray)
+    assert before.status is QueueReadStatus.UNKNOWN_GLYPH
+    assert before.used is None and before.capacity is None
+    after = QueueIndicatorReader(profile).read(gray)
+    assert after.status is QueueReadStatus.READ
+    assert (after.used, after.capacity, after.free_slots) == (1, 5, 4)
+    assert after.glyphs[-1].pattern == MEASURED_FIVE
+    assert all(1310 <= box.x < 1350 and 113 <= box.y < 128 for box in after.glyphs)
+
+
+@pytest.mark.parametrize("used", range(1, 6))
+def test_archived_real_queue_values_survive_added_five_variant(profile, used):
+    import cv2
+
+    name = "queue-1of5-live.png" if used == 1 else f"queue-{used}of5.png"
+    frame = ROOT / "workspace" / "runs" / "m7-live-20260920" / name
+    if not frame.exists():
+        pytest.skip("archived queue frame not present")
+    gray = cv2.cvtColor(cv2.imread(str(frame)), cv2.COLOR_BGR2GRAY)
+    reading = QueueIndicatorReader(profile).read(gray)
+    assert reading.status is QueueReadStatus.READ
+    assert (reading.used, reading.capacity) == (used, 5)
+
+
+def test_conflicting_label_for_measured_five_is_ambiguous_not_numeric(profile):
+    # Fault injection into a test-only profile checks the reader's ambiguity gate.
+    glyphs = dict(profile.glyphs)
+    glyphs["2"] = glyphs["2"] + (MEASURED_FIVE,)
+    ambiguous = replace(profile, glyphs=glyphs)
+    frame = _render(profile, ["1", "/"])
+    x, y, _, _ = profile.roi
+    cursor = x + 12 + sum(len(profile.glyphs[label][0][0]) + 2 for label in ["1", "/"])
+    _paint(frame, MEASURED_FIVE, cursor, y + 3)
+    reading = QueueIndicatorReader(ambiguous).read(frame)
+    assert reading.status is QueueReadStatus.AMBIGUOUS_GLYPH
+    assert reading.used is None and reading.capacity is None
+
+
+def test_second_march_samples_have_native_capture_provenance_and_unchanged_limits(profile):
+    raw = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
+    source = raw["training_sources"]["2/5"]
+    assert source["frame_id"] == "rok-20260927T032011022422Z-43cc31fec61c"
+    assert source["frame_sha256"] == SECOND_POST_SHA256
+    assert Path(source["frame_path"]) == SECOND_POST_FRAME
+    assert Path(source["manifest_path"]) == SECOND_POST_FRAME.with_name("capture.json")
+    assert MEASURED_TWO in profile.glyphs["2"]
+    assert SECOND_MEASURED_FIVE in profile.glyphs["5"]
+    assert profile.roi == (1310, 113, 40, 15)
+    assert profile.threshold == 180 and profile.max_glyph_distance == 1
+    assert set(profile.glyphs) == {"1", "2", "3", "4", "5", "/"}
+
+
+@pytest.mark.skipif(not SECOND_POST_FRAME.exists(), reason="immutable second-March postframe not present")
+def test_exact_second_march_capture_reads_two_with_both_measured_variants(profile):
+    import cv2
+
+    assert hashlib.sha256(SECOND_POST_FRAME.read_bytes()).hexdigest() == SECOND_POST_SHA256
+    manifest = json.loads(SECOND_POST_FRAME.with_name("capture.json").read_text())
+    assert manifest["frame"]["image_sha256"] == SECOND_POST_SHA256
+    assert manifest["frame"]["id"] == "rok-20260927T032011022422Z-43cc31fec61c"
+    assert Path(manifest["png"]) == SECOND_POST_FRAME
+    gray = cv2.cvtColor(cv2.imread(str(SECOND_POST_FRAME)), cv2.COLOR_BGR2GRAY)
+    for label, sample in (("2", MEASURED_TWO), ("5", SECOND_MEASURED_FIVE)):
+        old_glyphs = dict(profile.glyphs)
+        old_glyphs[label] = tuple(pattern for pattern in old_glyphs[label] if pattern != sample)
+        before = QueueIndicatorReader(replace(profile, glyphs=old_glyphs)).read(gray)
+        assert before.status is QueueReadStatus.UNKNOWN_GLYPH
+        assert before.used is None and before.capacity is None
+    after = QueueIndicatorReader(profile).read(gray)
+    assert after.status is QueueReadStatus.READ
+    assert (after.used, after.capacity, after.free_slots) == (2, 5, 3)
+    assert after.glyphs[0].pattern == MEASURED_TWO
+    assert after.glyphs[-1].pattern == SECOND_MEASURED_FIVE
+
+
+def test_conflicting_label_for_measured_two_is_ambiguous_without_numeric_progress(profile):
+    glyphs = dict(profile.glyphs)
+    glyphs["4"] = glyphs["4"] + (MEASURED_TWO,)
+    ambiguous = replace(profile, glyphs=glyphs)
+    frame = _blank()
+    x, y, _, _ = profile.roi
+    cursor = x + 12
+    for pattern in (MEASURED_TWO, profile.glyphs["/"][0], SECOND_MEASURED_FIVE):
+        _paint(frame, pattern, cursor, y + 3)
+        cursor += len(pattern[0]) + 2
+    reading = QueueIndicatorReader(ambiguous).read(frame)
+    assert reading.status is QueueReadStatus.AMBIGUOUS_GLYPH
+    assert reading.used is None and reading.capacity is None and reading.free_slots is None
+
+
+@pytest.mark.skipif(not THIRD_POST_FRAME.exists(), reason="immutable third-March postframe not present")
+def test_exact_third_march_capture_requires_measured_three_variant(profile):
+    """The native 3/5 frame is refused until its measured 3 glyph is present."""
+    import cv2
+
+    assert hashlib.sha256(THIRD_POST_FRAME.read_bytes()).hexdigest() == THIRD_POST_SHA256
+    raw = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
+    source = raw["training_sources"]["3/5"]
+    assert source["frame_id"] == "rok-20260927T080529556776Z-fd7ee1763c6e"
+    assert source["frame_sha256"] == THIRD_POST_SHA256
+    assert source["visual_label_source"].startswith("ROOT inspection")
+    manifest = json.loads(Path(source["manifest_path"]).read_text(encoding="utf-8"))
+    assert manifest["frame"]["image_sha256"] == THIRD_POST_SHA256
+    assert manifest["backend"]["cursor_capture"] is False
+
+    gray = cv2.cvtColor(cv2.imread(str(THIRD_POST_FRAME)), cv2.COLOR_BGR2GRAY)
+    old_glyphs = dict(profile.glyphs)
+    old_glyphs["3"] = tuple(pattern for pattern in old_glyphs["3"] if pattern != MEASURED_THREE)
+    before = QueueIndicatorReader(replace(profile, glyphs=old_glyphs)).read(gray)
+    assert before.status is QueueReadStatus.UNKNOWN_GLYPH
+    assert before.used is None and before.capacity is None
+    after = QueueIndicatorReader(profile).read(gray)
+    assert after.status is QueueReadStatus.READ
+    assert (after.used, after.capacity, after.free_slots) == (3, 5, 2)
+    assert after.glyphs[0].pattern == MEASURED_THREE
+
+
+@pytest.mark.skipif(not THIRD_POST_FRAME.exists(), reason="immutable third-March postframe not present")
+def test_conflicting_label_for_measured_three_cannot_publish_numeric_progress(profile):
+    import cv2
+
+    glyphs = dict(profile.glyphs)
+    glyphs["4"] = glyphs["4"] + (MEASURED_THREE,)
+    gray = cv2.cvtColor(cv2.imread(str(THIRD_POST_FRAME)), cv2.COLOR_BGR2GRAY)
+    reading = QueueIndicatorReader(replace(profile, glyphs=glyphs)).read(gray)
+    assert reading.status is QueueReadStatus.AMBIGUOUS_GLYPH
+    assert reading.used is None and reading.capacity is None and reading.free_slots is None
+
+
+@pytest.mark.skipif(not FOURTH_POST_FRAME.exists(), reason="immutable fourth-March postframe not present")
+def test_exact_fourth_march_capture_requires_measured_four_variant(profile):
+    """The native 4/5 frame is refused until its measured 4 glyph is present."""
+    import cv2
+
+    assert hashlib.sha256(FOURTH_POST_FRAME.read_bytes()).hexdigest() == FOURTH_POST_SHA256
+    raw = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
+    source = raw["training_sources"]["4/5"]
+    assert source["frame_id"] == "rok-20260927T081135834446Z-e068105fe527"
+    assert source["frame_sha256"] == FOURTH_POST_SHA256
+    assert source["visual_label_source"].startswith("ROOT inspection")
+    manifest = json.loads(Path(source["manifest_path"]).read_text(encoding="utf-8"))
+    assert manifest["frame"]["image_sha256"] == FOURTH_POST_SHA256
+    assert manifest["backend"]["cursor_capture"] is False
+
+    gray = cv2.cvtColor(cv2.imread(str(FOURTH_POST_FRAME)), cv2.COLOR_BGR2GRAY)
+    old_glyphs = dict(profile.glyphs)
+    old_glyphs["4"] = tuple(pattern for pattern in old_glyphs["4"] if pattern != MEASURED_FOUR)
+    before = QueueIndicatorReader(replace(profile, glyphs=old_glyphs)).read(gray)
+    assert before.status is QueueReadStatus.UNKNOWN_GLYPH
+    assert before.used is None and before.capacity is None
+    after = QueueIndicatorReader(profile).read(gray)
+    assert after.status is QueueReadStatus.READ
+    assert (after.used, after.capacity, after.free_slots) == (4, 5, 1)
+    assert after.glyphs[0].pattern == MEASURED_FOUR
+
+
+@pytest.mark.skipif(not FOURTH_POST_FRAME.exists(), reason="immutable fourth-March postframe not present")
+def test_conflicting_label_for_measured_four_cannot_publish_numeric_progress(profile):
+    import cv2
+
+    glyphs = dict(profile.glyphs)
+    glyphs["3"] = glyphs["3"] + (MEASURED_FOUR,)
+    gray = cv2.cvtColor(cv2.imread(str(FOURTH_POST_FRAME)), cv2.COLOR_BGR2GRAY)
+    reading = QueueIndicatorReader(replace(profile, glyphs=glyphs)).read(gray)
+    assert reading.status is QueueReadStatus.AMBIGUOUS_GLYPH
+    assert reading.used is None and reading.capacity is None and reading.free_slots is None

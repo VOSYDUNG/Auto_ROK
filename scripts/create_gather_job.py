@@ -16,28 +16,35 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from harness.gather_job_authority import GatherJobAuthority, compiled_gather_catalog  # noqa: E402
+from harness.gather_job_authority import GatherJobAuthority, compiled_gather_catalog, schedule_digest  # noqa: E402
 from harness.gather_job_store import GatherJobStoreError, load_gather_job_authority  # noqa: E402
 from harness.mission_loader import compile_mission  # noqa: E402
+from autorok.mission.allocation import allocate_by_ratio  # noqa: E402
 
 
 def build_artifact(
     *, job_id: str, task_id: str, character_id: str,
-    resource_type: str, resource_level: int | None,
+    resource_type: str | None = None, resource_level: int | None = None,
     starts_at: datetime, expires_at: datetime,
 ) -> dict[str, object]:
-    compiled = compile_mission(
+    resources = tuple(kind.value for kind in allocate_by_ratio(5)) if resource_type is None else (resource_type,)
+    catalogs = tuple(compiled_gather_catalog(compile_mission(
         ROOT / "config" / "mission_flows.yaml",
         ROOT / "config" / "ui_states.yaml",
         "GATHER_RESOURCE",
-        {"resource_type": resource_type, "resource_level": resource_level},
-    )
-    catalog = compiled_gather_catalog(compiled)
+        {"resource_type": resource, "resource_level": resource_level},
+    )) for resource in resources)
+    catalog = catalogs[0]
     job = GatherJobAuthority(
         job_id, task_id, character_id, catalog.digest, starts_at, expires_at,
-        catalog.actions,
+        catalog.actions, schema_version=2 if resource_type is None else 1,
+        resource_schedule=resources if resource_type is None else (),
+        slot_catalog_digests=tuple(item.digest for item in catalogs) if resource_type is None else (),
+        resource_level=resource_level if resource_type is None else None,
+        schedule_digest=schedule_digest(resources, tuple(item.digest for item in catalogs), resource_level)
+            if resource_type is None else None,
     )
-    return {
+    artifact = {
         "schema_version": job.schema_version,
         "job_id": job.job_id,
         "mission_id": job.mission_id,
@@ -49,6 +56,14 @@ def build_artifact(
         "allowed_actions": sorted(job.allowed_actions),
         "max_marches": job.max_marches,
     }
+    if job.schema_version == 2:
+        artifact.update({
+            "resource_schedule": list(job.resource_schedule),
+            "slot_catalog_digests": list(job.slot_catalog_digests),
+            "resource_level": job.resource_level,
+            "schedule_digest": job.schedule_digest,
+        })
+    return artifact
 
 
 def _artifact_payload(artifact: dict[str, object]) -> bytes:
@@ -78,7 +93,7 @@ def write_artifact(path: Path, workspace_root: Path, artifact: dict[str, object]
 
 def write_launch_spec(
     path: Path, workspace_root: Path, artifact_path: Path, *,
-    resource_type: str, resource_level: int | None,
+    resource_type: str | None = None, resource_level: int | None = None,
     artifact_payload: bytes | None = None,
 ) -> Path:
     """Record replayable launch parameters without granting extra authority."""
@@ -98,9 +113,15 @@ def write_launch_spec(
         "task_id": artifact["task_id"],
         "character_id": artifact["character_id"],
         "catalog_digest": artifact["catalog_digest"],
-        "resource_type": resource_type,
         "resource_level": resource_level,
     }
+    if artifact["schema_version"] == 2:
+        if resource_type is not None or resource_level != artifact["resource_level"]:
+            raise ValueError("mixed GATHER launch cannot override the authority schedule")
+        spec.update({"schema_version": 2, "resource_schedule": artifact["resource_schedule"],
+                     "schedule_digest": artifact["schedule_digest"]})
+    else:
+        spec["resource_type"] = resource_type
     destination.parent.mkdir(parents=True, exist_ok=True)
     with destination.open("x", encoding="utf-8", newline="\n") as handle:
         json.dump(spec, handle, ensure_ascii=False, sort_keys=True, indent=2)
@@ -115,7 +136,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--job-id", required=True)
     parser.add_argument("--task-id", required=True)
     parser.add_argument("--character-id", required=True)
-    parser.add_argument("--resource-type", required=True, choices=("FOOD", "WOOD", "STONE", "GOLD"))
+    parser.add_argument("--resource-type", choices=("FOOD", "WOOD", "STONE", "GOLD"),
+                        help="legacy single-resource offline fixture; omit for default five-slot mix")
     parser.add_argument("--resource-level", type=int)
     parser.add_argument("--expires-at", required=True,
                         help="timezone-aware ISO 8601 timestamp; one five-march job expires then")
@@ -139,7 +161,8 @@ def main(argv: list[str] | None = None) -> int:
             ROOT / "config" / "mission_flows.yaml",
             ROOT / "config" / "ui_states.yaml",
             "GATHER_RESOURCE",
-            {"resource_type": args.resource_type, "resource_level": args.resource_level},
+            {"resource_type": artifact.get("resource_schedule", [args.resource_type])[0],
+             "resource_level": args.resource_level},
         )
         catalog = compiled_gather_catalog(compiled)
         destination = Path(args.output).resolve()

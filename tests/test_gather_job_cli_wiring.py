@@ -9,7 +9,7 @@ from tempfile import TemporaryDirectory
 from harness.action_surface import SemanticActionSurface
 from harness.gather_job_authority import compiled_gather_catalog
 from harness.gather_job_authority import GatherJobProgress
-from harness.gather_job_coordinator import GatherJobPlan, GatherJobTick
+from harness.gather_job_coordinator import GatherJobPlan, GatherJobTick, gather_slot_run_id
 from harness.host_input_isolation import HostInputIsolationEvidenceError
 from harness.gather_job_store import JsonGatherJobStore, load_gather_job_authority
 from harness.gather_client_binding import GatherClientBindingObservationProvider
@@ -139,11 +139,82 @@ def test_canonical_cli_constructs_job_overlay_and_pre_input_guard_without_game(
     )
 
 
-def test_job_mode_live_arm_is_blocked_before_any_capture(capsys):
+def test_job_mode_live_arm_requires_pinned_preflight_before_any_capture(capsys):
     result = run_gather_tick.main(BASE_ARGS + ["--gather-job", "missing.json", "--arm-live"])
     assert result == 2
     error = json.loads(capsys.readouterr().err)
-    assert "GATHER_JOB_LIVE_ARM_BLOCKED_PENDING_LIVE_EVIDENCE_AND_AUTHORITY" in error["error"]["message"]
+    assert "pinned startup attestation" in error["error"]["message"]
+
+
+@pytest.mark.parametrize("failure", [
+    "missing_attestation", "missing_record", "mismatch_attestation", "wrong_run",
+    "missing_trace", "mismatch_trace", "stale_trace", "legacy_schema",
+])
+def test_live_job_preflight_denies_before_runner_or_actuator(monkeypatch, capsys, failure):
+    monkeypatch.setattr(run_gather_tick, "MissionRunner",
+                        lambda *a, **k: pytest.fail("runner must not start"))
+    monkeypatch.setattr(run_gather_tick, "WindowsHumanInputActuator",
+                        lambda: pytest.fail("actuator must not be constructed"))
+    with TemporaryDirectory(dir=ROOT / "workspace") as folder:
+        root = Path(folder)
+        now = datetime.now(timezone.utc)
+        scope = build_artifact(
+            job_id=f"live-preflight-{failure}", task_id="task-1",
+            character_id="character-1",
+            resource_type="FOOD" if failure == "legacy_schema" else None,
+            resource_level=5,
+            starts_at=now - timedelta(minutes=1), expires_at=now + timedelta(minutes=20),
+        )
+        artifact = write_artifact(root / "job.json", ROOT / "workspace", scope)
+        catalog = compiled_gather_catalog(compile_mission(
+            ROOT / "config" / "mission_flows.yaml", ROOT / "config" / "ui_states.yaml",
+            "GATHER_RESOURCE", {"resource_type": "FOOD" if failure == "legacy_schema" else "GOLD",
+                                "resource_level": 5},
+        ))
+        job = load_gather_job_authority(
+            artifact, canonical_actions=catalog.actions,
+            expected_catalog_digest=catalog.digest,
+        )
+        expected_sha = "a" * 64
+        args = [
+            "--gather-job", str(artifact), "--task-id", "task-1",
+            "--character-id", "character-1", "--resource-type",
+            "FOOD" if failure == "legacy_schema" else "GOLD",
+            "--resource-level", "5", "--checkpoint-root", str(root / "checkpoints"),
+            "--run-id", "wrong-run" if failure == "wrong_run" else gather_slot_run_id(job, 1),
+            "--arm-live",
+        ]
+        if failure != "missing_attestation":
+            args += ["--startup-attestation-sha256", "b" * 64 if failure == "mismatch_attestation" else expected_sha]
+        if failure != "missing_trace":
+            args += ["--input-isolation-evidence", str(root / "trace.json")]
+        if failure not in {"missing_attestation", "missing_record", "missing_trace", "legacy_schema"}:
+            def validate_attestation(*_args, **kwargs):
+                if kwargs["expected_sha256"] != expected_sha:
+                    raise ValueError("startup attestation digest changed")
+                return expected_sha
+            monkeypatch.setattr(run_gather_tick, "validate_canonical_startup_attestation",
+                                validate_attestation)
+        monkeypatch.setattr(run_gather_tick, "GATHER_JOB_STORE_ROOT", root / "ledger")
+        monkeypatch.setattr(run_gather_tick, "_attested_job_client", lambda *a: object())
+        trace_error = ("trace run_id does not match expected run"
+                       if failure == "mismatch_trace" else "trace is stale")
+        monkeypatch.setattr(run_gather_tick, "validate_gather_job_host_trace",
+                            lambda *a, **k: (_ for _ in ()).throw(
+                                HostInputIsolationEvidenceError(trace_error)))
+        assert run_gather_tick.main(args) == 2
+    error = capsys.readouterr().err
+    expected = {
+        "missing_attestation": "pinned startup attestation",
+        "missing_record": "canonical startup attestation is missing",
+        "mismatch_attestation": "startup attestation digest changed",
+        "wrong_run": "current deterministic slot",
+        "missing_trace": "fresh host trace",
+        "mismatch_trace": "trace run_id does not match expected run",
+        "stale_trace": "trace is stale",
+        "legacy_schema": "schema-v2",
+    }
+    assert expected[failure] in error
 
 
 def test_direct_job_tick_requires_canonical_attestation_before_runner(monkeypatch, capsys):
@@ -245,15 +316,16 @@ def test_cli_does_not_offer_a_second_ledger_root_for_the_same_job():
 
 
 @pytest.mark.parametrize("journal_failure", [False, True])
+@pytest.mark.parametrize("live_armed", [False, True])
 def test_canonical_runner_consumes_job_guard_with_synthetic_frames_only(
-    monkeypatch, capsys, journal_failure,
+    monkeypatch, capsys, journal_failure, live_armed,
 ):
     """No capture, Win32 input, endpoint, or live game is used by this fixture."""
     monkeypatch.setattr(run_gather_tick, "validate_canonical_startup_attestation",
                         lambda *a, **k: "a" * 64)
     compiled = compile_mission(
         ROOT / "config" / "mission_flows.yaml", ROOT / "config" / "ui_states.yaml",
-        "GATHER_RESOURCE", {"resource_type": "FOOD", "resource_level": 5},
+        "GATHER_RESOURCE", {"resource_type": "GOLD" if live_armed else "FOOD", "resource_level": 5},
     )
     catalog = compiled_gather_catalog(compiled)
     now = datetime.now(timezone.utc)
@@ -337,9 +409,11 @@ def test_canonical_runner_consumes_job_guard_with_synthetic_frames_only(
         def perform(self, action):
             self.actions.append(action)
 
+    host_arms = []
+
     class FakeHostGuard:
         def __init__(self, **kwargs):
-            pass
+            host_arms.append(kwargs["armed"])
 
         def check(self, context, before, choice, scene, resolved):
             return InterferenceCheck(True, "SYNTHETIC_HOST_OK")
@@ -368,23 +442,40 @@ def test_canonical_runner_consumes_job_guard_with_synthetic_frames_only(
         capture_root = folder_path / "capture"
         capture_root.mkdir()
         monkeypatch.setattr(run_gather_tick, "GATHER_JOB_STORE_ROOT", folder_path / "job-ledger")
-        artifact = folder_path / "job.json"
-        artifact.write_text(json.dumps({
-            "schema_version": 1, "job_id": "synthetic-job", "task_id": "task-1",
-            "character_id": "character-1", "catalog_digest": catalog.digest,
-            "starts_at": (now - timedelta(minutes=1)).isoformat(),
-            "expires_at": (now + timedelta(minutes=20)).isoformat(),
-            "allowed_actions": sorted(catalog.actions), "max_marches": 5,
-            "mission_id": "GATHER_RESOURCE",
-        }), encoding="utf-8")
-        result = run_gather_tick.main(BASE_ARGS[2:] + [
-            "--gather-job", str(artifact), "--checkpoint-root", str(folder_path / "checkpoints"),
-        ])
+        scope = build_artifact(
+            job_id="synthetic-job", task_id="task-1", character_id="character-1",
+            resource_type=None if live_armed else "FOOD", resource_level=5,
+            starts_at=now - timedelta(minutes=1), expires_at=now + timedelta(minutes=20),
+        )
+        artifact = write_artifact(folder_path / "job.json", ROOT / "workspace", scope)
+        run_args = [
+            "--gather-job", str(artifact), "--task-id", "task-1",
+            "--character-id", "character-1", "--resource-type",
+            "GOLD" if live_armed else "FOOD", "--resource-level", "5",
+            "--checkpoint-root", str(folder_path / "checkpoints"),
+        ]
+        if live_armed:
+            job = load_gather_job_authority(
+                artifact, canonical_actions=catalog.actions,
+                expected_catalog_digest=catalog.digest,
+            )
+            run_args += [
+                "--run-id", gather_slot_run_id(job, 1),
+                "--startup-attestation-sha256", "a" * 64,
+                "--input-isolation-evidence", str(folder_path / "host-trace.json"),
+                "--arm-live",
+            ]
+            monkeypatch.setattr(run_gather_tick, "_attested_job_client", lambda *a: object())
+            monkeypatch.setattr(run_gather_tick, "validate_gather_job_host_trace",
+                                lambda *a, **k: {"ready": True, "run_id": k["expected_run_id"]})
+        result = run_gather_tick.main(run_args)
         payload = json.loads(capsys.readouterr().out)
         assert len(actuator.actions) == 1, (
             payload.get("reason"), payload.get("selection"), payload.get("choice"),
         )
         assert payload["gather_job_id"] == "synthetic-job"
+        assert payload["live_armed"] is live_armed
+        assert host_arms == [live_armed]
         assert payload["status"] == "complete"
         assert payload["gather_job_verified_marches"] == (0 if journal_failure else 1)
         assert payload["gather_job_journaled_this_tick"] is (not journal_failure)

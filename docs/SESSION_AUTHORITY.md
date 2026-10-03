@@ -1,11 +1,11 @@
 # Quyền công việc GATHER cho FIRST DONE
 
-Trạng thái: **hợp đồng quyền, client binding, recovery journal và bộ điều phối
-năm lượt đã nối offline**. CLI có nhánh opt-in đọc job, lưu client đầu phiên,
-reservation, VERIFIED riêng và guard trước input. Driver năm lượt chạy
-replay synthetic qua CLI và hai lỗi review đã được sửa, kiểm lại offline. CLI vẫn từ
-chối `--gather-job` cùng `--arm-live` vì chưa có preflight cấp job và bằng chứng
-khởi đầu về nhân vật/queue dưới đây.
+Trạng thái: **hợp đồng quyền, lịch tài nguyên năm slot, client binding,
+startup attestation, host trace, recovery journal và bộ điều phối đã nối
+offline**. CLI đọc job, lưu client đầu phiên, reservation, VERIFIED riêng và
+guard trước input. Driver năm lượt đã chạy replay synthetic qua CLI. Cổng
+live được đánh giá riêng; trạng thái chạy thật nằm trong
+[runtime-status](../runtime-status.yaml), không suy từ replay.
 [GOAL](GOAL.md) sở hữu mốc FIRST DONE; [PRD §3.4](PRD.md) sở hữu nghiệm thu
 sản phẩm. Tài liệu này chỉ định biên quyền cho một công việc.
 
@@ -24,15 +24,32 @@ Nó không phải điều kiện duyệt từng lượt của FIRST DONE, và c�
 không được đọc B003 cũ làm quyền. Local LLM cũng không phát hành hay mở rộng
 quyền; nó chỉ có thể chọn ứng viên semantic hợp lệ ở điểm bất định thật.
 
+## Can thiệp hỗ trợ trong quá trình xây dựng
+
+Người dùng đã ủy quyền ROOT dùng Computer Use để tự xử lý các thao tác giao
+diện ít rủi ro phục vụ xây dựng/phục hồi, như đóng modal cũ hoặc đưa đúng cửa
+sổ về foreground; không cần xin lại quyền cho từng thao tác đó. Đây là quyền
+của ROOT trong phiên phát triển, không mở rộng catalog hoặc quota của job.
+ROOT quan sát mới trước khi thao tác và ghi actor, thời điểm/nguồn thời điểm,
+frame/client, lý do và tác động vào hồ sơ workspace. Thao tác hỗ trợ không
+thay formation fact, receipt hoặc hậu kiểm, và không được ghi thành hành động
+tự chủ của harness. Nếu có can thiệp giữa các March, vòng ấy là bằng chứng
+chạy có hỗ trợ theo [PRD §3.4](PRD.md), chưa chứng minh FIRST DONE tự chủ.
+
 ## Dữ liệu tối thiểu cần ràng buộc
 
-Artifact schema v1 hiện có đúng các khóa `schema_version`, `job_id`,
-`mission_id=GATHER_RESOURCE`, `task_id`, `character_id`, `catalog_digest`,
-`starts_at`, `expires_at`, `allowed_actions`, `max_marches=5`. Operator đưa
-đường dẫn artifact khi khởi tạo job; loader kiểm catalog từ flow GATHER đã
-biên dịch. `scripts/create_gather_job.py` tạo artifact offline đúng một lần từ
-task/nhân vật/tài nguyên/hạn do operator nhập và digest/action do compiler
-tính; file cũ không bị ghi đè. Lệnh này không quan sát game hay cấp live arm.
+Artifact FIRST DONE schema v2 cố định `job_id`, `mission_id=GATHER_RESOURCE`,
+`task_id`, `character_id`, hạn, `allowed_actions`, `max_marches=5`, resource
+level, lịch năm slot, digest lịch và digest catalog đã biên dịch cho từng slot.
+Theo `DEFAULT_FARM` ở [PRD §3.2](PRD.md), lịch là
+`GOLD,GOLD,WOOD,STONE,FOOD` (FOOD:WOOD:STONE:GOLD = 1:1:1:2). Driver lấy
+slot tiếp theo từ số `VERIFIED` bền; tick và input guard đối chiếu đúng
+resource/catalog của slot. Schema v1 một tài nguyên còn đọc được cho fixture
+offline, không đại diện vòng farm hỗn hợp này. Operator đưa đường dẫn artifact
+khi khởi tạo job; loader kiểm các catalog từ flow GATHER đã biên dịch.
+`scripts/create_gather_job.py` tạo artifact offline đúng một lần từ
+task/nhân vật/level/hạn, còn lịch và digest do allocator/compiler tính; file
+cũ không bị ghi đè. Lệnh này không quan sát game hay tự cấp live arm.
 Ledger cố định dưới `workspace/checkpoints/gather-jobs` lưu client
 binding HWND/PID/process path, reservation và revoke, tránh cấp lại quota
 hoặc đổi client chỉ bằng đổi tham số CLI. Hạn công
@@ -47,11 +64,18 @@ từ chối. Người vận hành xác nhận nhân vật đang mở **một l�
 preflight phải lưu job/nhân vật/frame/hash/client/thời điểm của xác nhận đó.
 FIRST DONE không đòi OCR tên nhân vật từ UI. `character_id` hiện do CLI cấu
 hình với nguồn `configured_single_character_scope`; riêng giá trị cấu hình
-chưa phải bằng chứng xác nhận khởi đầu. Để mở live, còn thiếu artifact xác
-nhận từ frame thật được driver tiêu thụ và chuỗi hậu kiểm live mới. Theo xác
-nhận của người vận hành, UI queue bên phải **chưa xuất hiện trước đạo đầu**:
-không đòi ảnh 0/5 và không suy OCR trống thành số 0 quan sát. Đạo đầu chỉ
+chưa phải bằng chứng xác nhận khởi đầu. Artifact xác nhận từ frame thật phải
+được driver tiêu thụ; chuỗi hậu kiểm live vẫn là nghiệm thu riêng. Theo xác
+nhận của người vận hành, bare world có thể chưa hiện queue trước đạo đầu.
+Không đòi ảnh 0/5 và không suy OCR trống thành số 0 quan sát. Drawer thực đã
+cho thấy `Queue 0/5`: zero có nguồn cùng frame/client được giữ như observation
+tùy chọn, không thành numeric completion baseline hoặc điều kiện bắt buộc.
+Marker đạo đầu vẫn là ordinal job không có `counter_value`. Đạo đầu chỉ
 được `VERIFIED` khi frame hậu kiểm mới đọc đúng 1/5; sai/thiếu thì dừng.
+Startup attestation canonical đã ghi job/nhân vật/frame/hash/client/thời
+điểm và được driver lẫn tick tiêu thụ. [Occurrence hiện hành](../workspace/agents/f6-live-gate/root/LIVE_OCCURRENCE.md)
+đã tiêu thụ record trước guarded navigation. Bằng chứng March và vòng năm đạo
+hiện hành thuộc [runtime-status](../runtime-status.yaml); không suy từ replay.
 
 Trace cô lập input của đường live cũ gắn với một `run_id`; job FIRST DONE có
 năm `run_id` xác định từ cùng một quyền khởi đầu. F4-B đã nối offline trace
@@ -59,10 +83,10 @@ thụ động mới cho từng tick còn mở, ràng đúng `run_id` và client 
 được driver/CLI kiểm trước runner. Một xác nhận input quiescence ở đầu drive
 không biến thành năm lần người vận hành duyệt March. Recorder hiện tự khai
 `unexpected_input_events=0` và chỉ lấy foreground trước/sau capture, nên
-chưa chứng minh độc lập rằng host không bị can thiệp xuyên suốt. Cho đến khi
-có nguồn thực cho preflight và các blocker live được giải quyết,
-`--gather-job --arm-live` vẫn bị
-chặn.
+chưa chứng minh độc lập rằng host không bị can thiệp xuyên suốt. Khi có opt-in
+live, trace này chỉ là một guard theo những tín hiệu nó thực sự đo; không được
+diễn giải thành phép chứng minh vắng toàn bộ input ngoài luồng. Một occurrence
+live vẫn cần job/attestation/trace mới và guard cửa sổ, frame, quota mỗi tick.
 
 Một dispatcher chỉ dùng action thuộc catalog GATHER đã biên dịch. Chuỗi lạ
 trong artifact không tạo action mới. Store cục bộ lưu reservation bền; cùng
@@ -119,7 +143,7 @@ trước tick và tự gọi auditor đóng vòng ở mức `WIRED` offline
 Artifact xác nhận ban đầu F4-A1 nay được driver và tick trực tiếp tiêu thụ,
 kiểm trước attempt/tick và ghim cùng digest khi resume ở mức offline F4-A2
 ([kiểm chứng](../workspace/agents/f4a-attestation-wiring/root/VALIDATION.md)).
-Preflight host cho cả job còn thiếu. Những bước này tiêu thụ `gather_runtime_evidence`;
+F4-B đã nối trace host theo từng run ở mức offline. Những bước này tiêu thụ `gather_runtime_evidence`;
 không tạo đường input song song với canonical
 `gather_cli`/`mission_engine`.
 

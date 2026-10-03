@@ -91,3 +91,10 @@ def test_the_header_strip_stops_short_of_the_plus_button():
         "the strip must keep full glyph height; clipping it to 30px dropped "
         "the read to zero elements"
     )
+
+
+def test_new_troop_units_roi_is_measured_and_isolates_load_field():
+    profile = CpuRoiProfile.load(PROFILE)
+    resolved = profile.resolve("new_troop_units", (1366, 768))
+    assert resolved.rect.as_list() == [660, 480, 165, 25]
+    assert resolved.ocr_scale == 2.0

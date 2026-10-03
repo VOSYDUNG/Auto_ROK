@@ -5,7 +5,7 @@ import pytest
 
 from harness.action_surface import SemanticActionSurface
 from harness.contracts import BoundingBox
-from harness.gather_job_authority import GatherCatalogIdentity, GatherJobAuthority
+from harness.gather_job_authority import GatherCatalogIdentity, GatherJobAuthority, schedule_digest
 from harness.gather_job_store import JsonGatherJobStore
 from harness.mission_runtime import ActionChoice, AllowedAction, MissionContext, ToolSnapshot
 from harness.mission_tool import HumanInterfaceActionProvider, InterferenceCheck
@@ -119,6 +119,59 @@ def test_reserved_march_reaches_input_once_and_duplicate_run_is_denied(tmp_path)
     assert len(recorder.actions) == 1
     assert ledger.progress(job()).dispatched_marches == 1
 
+
+@pytest.mark.parametrize("age_seconds", [1, 11])
+def test_optional_first_zero_keeps_live_freshness_gate(tmp_path, age_seconds):
+    action_provider, ledger, recorder = provider(tmp_path)
+    captured = NOW - timedelta(seconds=age_seconds)
+    before, scene = current_frame(
+        march_queue_used=0, march_queue_capacity=5,
+        march_queue_source="visible_ocr_queue_anchor", image_sha256="a" * 64,
+        captured_at=captured.isoformat(),
+    )
+    baseline = dict(before.facts["completion_baseline"]) | {"source_timestamp": captured.timestamp()}
+    facts = dict(before.facts) | {"completion_baseline": baseline}
+    before = replace(before, facts=facts, observed_at=captured.timestamp())
+    scene = replace(scene, facts=facts)
+    receipt = dispatch(action_provider, before, scene)
+    assert receipt.dispatched is (age_seconds == 1)
+    assert len(recorder.actions) == int(age_seconds == 1)
+    assert ledger.progress(job()).dispatched_marches == int(age_seconds == 1)
+    if age_seconds == 11:
+        assert receipt.code == "GATHER_JOB_SCOPE_OR_FRAME_MISMATCH"
+
+
+def test_optional_first_zero_with_unsourced_or_positive_reading_cannot_reserve(tmp_path):
+    for index, damage in enumerate(({"march_queue_source": "generic_ratio"}, {"march_queue_used": 1})):
+        action_provider, ledger, recorder = provider(tmp_path / str(index))
+        before, scene = current_frame(
+            **({"march_queue_used": 0, "march_queue_capacity": 5,
+                "march_queue_source": "visible_ocr_queue_anchor", "image_sha256": "a" * 64,
+                "captured_at": (NOW - timedelta(seconds=1)).isoformat()} | damage))
+        assert dispatch(action_provider, before, scene).code == "GATHER_JOB_QUEUE_BASELINE_INVALID"
+        assert not recorder.actions and ledger.progress(job()).dispatched_marches == 0
+
+
+def test_mixed_job_guard_uses_current_slot_catalog_before_input(tmp_path):
+    resources = ("GOLD", "GOLD", "WOOD", "STONE", "FOOD")
+    catalogs = (CATALOG.digest, CATALOG.digest, "wood-digest", "stone-digest", "food-digest")
+    authority = replace(job(), schema_version=2, resource_schedule=resources,
+                        slot_catalog_digests=catalogs,
+                        schedule_digest=schedule_digest(resources, catalogs, None))
+    action_provider, ledger, recorder = provider(tmp_path / "matching", authority=authority)
+    before, scene = current_frame()
+    assert dispatch(action_provider, before, scene).dispatched is True
+    assert len(recorder.actions) == 1
+
+    wrong = ("other-digest",) + catalogs[1:]
+    wrong_authority = replace(authority, catalog_digest=wrong[0],
+                              slot_catalog_digests=wrong,
+                              schedule_digest=schedule_digest(resources, wrong, None))
+    action_provider, ledger, recorder = provider(tmp_path / "wrong", authority=wrong_authority)
+    receipt = dispatch(action_provider, before, scene)
+    assert receipt.dispatched is False
+    assert len(recorder.actions) == 0
+    assert ledger.progress(wrong_authority).dispatched_marches == 0
 
 def test_next_run_requires_verified_count_and_matching_fresh_baseline(tmp_path):
     action_provider, ledger, recorder = provider(tmp_path)

@@ -1,10 +1,10 @@
 """Is the world-map coordinate readout on screen?
 
 The client draws "#1296 X:1065 Y:587" in the top-left corner, and only there,
-and only on the bare world map. Open the search panel and the widget is
-replaced by a back arrow. Switch to the city and it is gone. So its presence
-means more than "this is the world map": it means "the world map, with
-nothing on top of it".
+on the world map. Search replaces it with a back arrow and city hides it,
+but the resource-detail card can leave it visible in the background. The
+canonical provider suppresses this sensor when a foreground marker is read;
+widget presence alone cannot establish that no panel is open.
 
 WHY THIS EXISTS. ``main_view_detector`` decides CITY_VIEW vs WORLD_MAP_VIEW by
 comparing a low-resolution signature of the whole canvas against a trained

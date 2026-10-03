@@ -17,7 +17,7 @@ from typing import Any
 import cv2
 import numpy as np
 
-from harness.gather_job_authority import compiled_gather_catalog
+from harness.gather_job_authority import compiled_gather_catalog, validate_schedule_catalog
 from harness.gather_job_store import GatherClientBinding, JsonGatherJobStore, load_gather_job_authority
 from harness.mission_loader import compile_mission
 
@@ -112,6 +112,10 @@ def build_startup_attestation(
         job_artifact, canonical_actions=catalog.actions,
         expected_catalog_digest=catalog.digest,
     )
+    if job.schema_version == 2:
+        if resource_type != job.resource_for_slot(1) or resource_level != job.resource_level:
+            raise StartupAttestationError("startup resource differs from first scheduled slot")
+        validate_schedule_catalog(job, mission_flows, ui_states)
     if affirmative_character_id != job.character_id:
         raise StartupAttestationError("operator character assertion differs from job")
     if not job.starts_at <= instant < job.expires_at:
@@ -206,7 +210,7 @@ def build_startup_attestation(
     if image is None or image.shape != (size[1], size[0]):
         raise StartupAttestationError("capture PNG cannot be decoded at client dimensions")
     # The operator assertion is deliberately distinct from observed UI facts.
-    return {
+    record = {
         "schema_version": 2, "status": "startup_attested_offline",
         "authority": "operator_assertion_only_no_input_authority",
         "job_id": job.job_id, "task_id": job.task_id,
@@ -230,6 +234,11 @@ def build_startup_attestation(
             "source": "native_first_frame_no_queue_assertion",
         },
     }
+    if job.schema_version == 2:
+        record["resource_schedule"] = list(job.resource_schedule)
+        record["slot_catalog_digests"] = list(job.slot_catalog_digests)
+        record["schedule_digest"] = job.schedule_digest
+    return record
 
 
 def write_startup_attestation(path: Path, workspace_root: Path, record: dict[str, Any]) -> Path:

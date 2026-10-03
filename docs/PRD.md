@@ -96,7 +96,9 @@ client. Nhận mốc này chỉ khi đồng thời:
    đúng nhân vật đang mở; xác nhận một lần lúc cấp job được ràng với frame,
    client và thời điểm khởi đầu. Giá trị `character_id` từ cấu hình đơn lẻ
    không thay bằng chứng đó. Harness tự đi năm đạo trong phạm vi đó, không hỏi duyệt từng
-   march. Quyền công việc không mở tài khoản, mật khẩu, xóa tài khoản, chuyển
+   march. Năm slot theo `DEFAULT_FARM` ở §3.2; lịch loại tài nguyên được gắn
+   bất biến vào quyền job và kiểm đúng slot trước mỗi lượt. Quyền công việc
+   không mở tài khoản, mật khẩu, xóa tài khoản, chuyển
    tài sản, gem hay item tiêu hao; các hành động rủi ro/ngoài GATHER cần quyết
    định riêng. Mỗi dispatch được kiểm scope, đúng cửa sổ và quan sát tươi.
 2. Trên **mỗi** màn New Troop mở mới, game tự điền cặp chỉ huy theo gợi ý của

@@ -61,14 +61,21 @@ _STATE_RULES: Mapping[str, tuple[tuple[str, ...], ...]] = {
             "bottom-right primary navigation is visible",
         ),
         # One phrase, and that is deliberate. The widget is drawn ONLY on the
-        # bare world map: the city hides it and every open panel replaces it
-        # with a back arrow, measured across the stored frames. So its
-        # presence already carries "world map, nothing on top", and padding
-        # this set with HUD phrases this sensor never looked at would be a
-        # lie that happened to be true.
+        # world map. It can remain behind a resource-detail card; canonical
+        # foreground suppression in the coordinate provider prevents that
+        # background observation from reaching this rule. The sensor did not
+        # inspect HUD phrases, so this requirement names only its evidence.
         (COORDINATE_EVIDENCE,),
     ),
-    "RESOURCE_SEARCH_PANEL": (("SEARCH", "Barbarians", "Cropland"),),
+    "RESOURCE_SEARCH_PANEL": (
+        ("farm resource search controls",),
+        ("SEARCH", "Cropland", "Stone Deposit"),
+        ("SEARCH", "Cropland", "Gold Deposit"),
+        ("SEARCH", "Logging Camp", "Stone Deposit"),
+        ("SEARCH", "Logging Camp", "Gold Deposit"),
+        ("SEARCH", "Stone Deposit", "Gold Deposit"),
+        ("SEARCH", "Cropland", "Logging Camp"),
+    ),
     "RESOURCE_POINT_DETAIL": (("Resource Point", "GATHER"),),
     "TROOP_DISPATCH_DRAWER": (
         (

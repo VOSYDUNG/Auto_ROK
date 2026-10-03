@@ -7,6 +7,7 @@ import pytest
 from harness.gather_job_store import (
     GatherJobRevokedError, GatherJobStoreError, JsonGatherJobStore, load_gather_job_authority,
 )
+from harness.gather_job_authority import schedule_digest
 
 
 NOW = datetime(2026, 9, 23, 8, tzinfo=timezone.utc)
@@ -77,6 +78,50 @@ def test_strict_artifact_load_and_malformed_scope(tmp_path):
         path.write_text('{"job_id":"a","job_id":"b"}', encoding="utf-8")
         load_gather_job_authority(path, canonical_actions=ACTIONS,
                                   expected_catalog_digest="compiled-catalog-1")
+
+
+@pytest.mark.parametrize('change', ['catalog', 'level'])
+def test_mixed_schedule_cannot_adopt_existing_reservation(tmp_path, change):
+    legacy = load(tmp_path)
+    resources = ('GOLD', 'GOLD', 'WOOD', 'STONE', 'FOOD')
+    catalogs = (legacy.catalog_digest,) * 5
+    job = replace(legacy, schema_version=2, resource_schedule=resources,
+        slot_catalog_digests=catalogs, resource_level=6,
+        schedule_digest=schedule_digest(resources, catalogs, 6))
+    store = JsonGatherJobStore(tmp_path / 'ledger')
+    store.bind_client(job, WINDOW)
+    store.reserve_dispatch(job, run_id='run-1', frame_id='frame-1',
+        action='MARCH_WITH_CURRENT_SELECTION', now=NOW)
+    ledger_path = store._path(job)
+    before = ledger_path.read_bytes()
+    changed_catalogs = catalogs if change == 'level' else catalogs[:1] + ('changed',) + catalogs[2:]
+    changed_level = 7 if change == 'level' else 6
+    changed = replace(job, slot_catalog_digests=changed_catalogs, resource_level=changed_level,
+        schedule_digest=schedule_digest(resources, changed_catalogs, changed_level))
+    with pytest.raises(GatherJobStoreError, match='conflicting'):
+        JsonGatherJobStore(store.root).progress(changed)
+    assert ledger_path.read_bytes() == before
+    assert JsonGatherJobStore(store.root).progress(job).dispatched_marches == 1
+
+
+def test_mixed_ledger_with_unbound_schedule_fails_without_migration(tmp_path):
+    legacy = load(tmp_path)
+    resources = ('GOLD', 'GOLD', 'WOOD', 'STONE', 'FOOD')
+    catalogs = (legacy.catalog_digest,) * 5
+    job = replace(legacy, schema_version=2, resource_schedule=resources,
+        slot_catalog_digests=catalogs, resource_level=6,
+        schedule_digest=schedule_digest(resources, catalogs, 6))
+    store = JsonGatherJobStore(tmp_path / 'ledger')
+    store.bind_client(job, WINDOW)
+    ledger_path = store._path(job)
+    raw = json.loads(ledger_path.read_text(encoding='utf-8'))
+    for field in ('resource_schedule', 'slot_catalog_digests', 'resource_level', 'schedule_digest'):
+        raw['scope'].pop(field)
+    ledger_path.write_text(json.dumps(raw), encoding='utf-8')
+    before = ledger_path.read_bytes()
+    with pytest.raises(GatherJobStoreError, match='conflicting'):
+        store.progress(job)
+    assert ledger_path.read_bytes() == before
 
 
 def test_five_verified_reservations_are_durable_and_bounded(tmp_path):

@@ -26,6 +26,7 @@ _REPLAY_FACT_KEYS = (
     "character_id",
     "character_id_source",
     "image_sha256",
+    "captured_at",
     "window",
     "new_troop_formation_ready",
     "new_troop_formation_source",

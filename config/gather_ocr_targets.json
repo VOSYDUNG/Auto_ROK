@@ -4,42 +4,48 @@
     "labels": [
       "Cropland"
     ],
-    "allow_unscored_exact": true
+    "allow_unscored_exact": true,
+    "require_acquisition": "ocr_resource_category_cropland"
   },
   {
     "target_id": "SEARCH_CATEGORY_WOOD",
     "labels": [
       "Logging Camp"
     ],
-    "allow_unscored_exact": true
+    "allow_unscored_exact": true,
+    "require_acquisition": "ocr_resource_category_logging_camp"
   },
   {
     "target_id": "SEARCH_CATEGORY_STONE",
     "labels": [
       "Stone Deposit"
     ],
-    "allow_unscored_exact": true
+    "allow_unscored_exact": true,
+    "require_acquisition": "ocr_resource_category_stone_deposit"
   },
   {
     "target_id": "SEARCH_CATEGORY_GOLD",
     "labels": [
       "Gold Deposit"
     ],
-    "allow_unscored_exact": true
+    "allow_unscored_exact": true,
+    "require_acquisition": "ocr_resource_category_gold_deposit"
   },
   {
     "target_id": "SEARCH_EXECUTE",
     "labels": [
       "SEARCH"
     ],
-    "allow_unscored_exact": true
+    "allow_unscored_exact": true,
+    "require_acquisition": "ocr_search_execution_strip"
   },
   {
     "target_id": "RESOURCE_GATHER",
     "labels": [
       "GATHER"
     ],
-    "allow_unscored_exact": true
+    "allow_unscored_exact": true,
+    "require_acquisition": "ocr_resource_point_gather"
   },
   {
     "target_id": "NEW_TROOP",

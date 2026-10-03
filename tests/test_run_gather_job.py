@@ -1,8 +1,10 @@
 """The outer driver consumes canonical tick results without using game input."""
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 import json
+import hashlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -15,7 +17,7 @@ from harness.gather_job_store import JsonGatherJobStore
 from harness.gather_job_store import GatherClientBinding
 from harness.mission_runner import MissionTickResult
 from harness.mission_runtime import AllowedAction, ToolFeedback, ToolSnapshot
-from harness.mission_store import CheckpointStatus, MissionCheckpoint
+from harness.mission_store import CheckpointStatus, JsonMissionStore, MissionCheckpoint
 from scripts.create_gather_job import build_artifact, write_artifact, write_launch_spec
 from scripts import run_gather_job as driver
 from scripts import run_gather_tick
@@ -163,14 +165,99 @@ def test_need_decision_or_skipped_verified_count_stops():
     assert "skipped" in result["reason"]
 
 
-def test_live_arm_is_rejected_before_any_tick(monkeypatch, capsys):
-    monkeypatch.setattr(driver, "_subprocess_tick", lambda _: pytest.fail("tick must not run"))
-    code = driver.main([
-        "--gather-job", "workspace/jobs/not-read.json", "--task-id", "task",
-        "--character-id", "char", "--resource-type", "FOOD", "--arm-live",
+def test_subprocess_typed_error_survives_missing_job_metadata(monkeypatch):
+    error = {"type": "ValueError", "message": "first slot rejects numeric queue"}
+    envelope = {"status": "failed", "error": error}
+    # A fatal stderr envelope must also outrank earlier stdout tick output.
+    completed = SimpleNamespace(
+        returncode=2, stdout=json.dumps(tick_result("running", 1, 0)[1]),
+        stderr="diagnostic preamble\n" + json.dumps(envelope) + "\n",
+    )
+    monkeypatch.setattr(driver.subprocess, "run", lambda *_, **__: completed)
+    tick = driver._subprocess_tick(["offline-fixture"])
+    assert tick == (2, envelope)
+    result, sleeps = drive([tick])
+    assert result["status"] == "failed"
+    assert result["reason"] == (
+        "tick execution failed (exit code 2): ValueError: first slot rejects numeric queue"
+    )
+    assert result["verified_marches"] is None and result["closeout"] is None
+    assert result["history"] == [{"status": "failed", "exit_code": 2, "error": error}]
+    assert sleeps == []
+
+
+@pytest.mark.parametrize("stdout,stderr", [
+    ("{malformed JSON" + "x" * 5000, "traceback" + "y" * 5000),
+    ("", "native process failed"),
+    ("[]\n42\nnull\n", ""),
+])
+def test_subprocess_without_json_preserves_bounded_failure_output(monkeypatch, stdout, stderr):
+    completed = SimpleNamespace(returncode=7, stdout=stdout, stderr=stderr)
+    monkeypatch.setattr(driver.subprocess, "run", lambda *_, **__: completed)
+    tick = driver._subprocess_tick(["offline-fixture"])
+    result, sleeps = drive([tick])
+    assert result["status"] == "failed"
+    assert result["reason"] == "tick execution failed (exit code 7): tick emitted no JSON result"
+    record = result["history"][0]
+    assert record["exit_code"] == 7
+    for stream, source in (("stdout", stdout), ("stderr", stderr)):
+        assert record[stream] == source[-4096:]
+        assert len(record[stream]) <= 4096
+        assert record[stream + "_truncated"] is (len(source) > 4096)
+    assert result["verified_marches"] is None and sleeps == []
+
+
+@pytest.mark.parametrize("status,error", [("running", None), ("failed", {"type": "ValueError", "message": "bad"})])
+def test_normal_payload_wrong_job_remains_rejected(status, error):
+    code, payload = tick_result(status, 1, 0, gather_job_id="other-job", error=error)
+    result, sleeps = drive([(code, payload)])
+    assert result["status"] == "failed"
+    assert result["reason"] == "tick job identity changed"
+    assert result["verified_marches"] is None and sleeps == []
+
+
+def test_unbound_error_cannot_mint_run_progress_or_closeout():
+    error = {"type": "RuntimeError", "message": "write failed"}
+    forged = tick_result("complete", 5, 5,
+                         gather_job_closed_at_five=True, gather_job_closeout=closeout())[1]
+    forged.pop("gather_job_id")
+    forged.update(status="failed", error=error)
+    result, sleeps = drive([tick_result("running", 2, 1), (2, forged)])
+    assert result["status"] == "failed" and result["verified_marches"] == 1
+    assert result["closeout"] is None
+    assert result["history"][-1] == {"status": "failed", "exit_code": 2, "error": error}
+    assert sleeps == []
+
+
+def test_live_arm_reaches_only_traced_tick_and_legacy_job_is_denied(monkeypatch, capsys):
+    unarmed = build_parser().parse_args([
+        "--gather-job", "workspace/jobs/job.json", "--task-id", "task",
+        "--character-id", "char", "--resource-type", "GOLD",
     ])
-    assert code == 2
-    assert "live evidence and separate authorization" in capsys.readouterr().err
+    armed = build_parser().parse_args([
+        "--gather-job", "workspace/jobs/job.json", "--task-id", "task",
+        "--character-id", "char", "--resource-type", "GOLD", "--arm-live",
+    ])
+    trace = Path("workspace/evidence/trace.json")
+    assert "--arm-live" not in _tick_command(unarmed, ATTESTATION_SHA, run_id="run", host_trace_path=trace)
+    assert "--arm-live" in _tick_command(armed, ATTESTATION_SHA, run_id="run", host_trace_path=trace)
+    assert "--arm-live" not in _tick_command(armed, ATTESTATION_SHA)
+    with TemporaryDirectory(dir=driver.ROOT / "workspace") as folder:
+        root = Path(folder)
+        now = datetime.now(timezone.utc)
+        scope = build_artifact(
+            job_id="legacy-live-denied", task_id="task", character_id="char",
+            resource_type="FOOD", resource_level=5,
+            starts_at=now - timedelta(minutes=1), expires_at=now + timedelta(minutes=20),
+        )
+        artifact = write_artifact(root / "job.json", driver.ROOT / "workspace", scope)
+        monkeypatch.setattr(driver, "_subprocess_tick", lambda _: pytest.fail("tick must not run"))
+        assert driver.main([
+            "--gather-job", str(artifact), "--task-id", "task",
+            "--character-id", "char", "--resource-type", "FOOD",
+            "--resource-level", "5", "--arm-live",
+        ]) == 2
+    assert "schema-v2" in capsys.readouterr().err
 
 
 def test_job_host_recorder_runs_without_per_tick_prompt_and_validates_before_tick(tmp_path, monkeypatch):
@@ -383,9 +470,13 @@ def test_driver_consumes_canonical_cli_waiting_result_without_game(monkeypatch):
     assert [tick["run_id"] for tick in result["history"]] == [gather_slot_run_id(job, 1)] * 2
 
 
-@pytest.mark.parametrize("crash_phase", ["none", "before_result", "after_result"])
+@pytest.mark.parametrize("crash_phase,arm_live", [
+    ("none", False), ("before_result", False), ("after_result", False),
+    ("none", True),
+    ("journal_mid", False), ("journal_fifth", False),
+])
 def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(
-    monkeypatch, capsys, crash_phase,
+    monkeypatch, capsys, crash_phase, arm_live,
 ):
     """Only observation and actuation are synthetic; CLI, runner and journal are real."""
     window = {"hwnd": 1001, "pid": 2001, "process_path": r"C:\Game\MASS.exe"}
@@ -405,13 +496,13 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(
         now = datetime.now(timezone.utc)
         scope = build_artifact(
             job_id="five-cli-job", task_id="five-task", character_id="five-character",
-            resource_type="FOOD", resource_level=5,
+            resource_level=5,
             starts_at=now - timedelta(minutes=1), expires_at=now + timedelta(minutes=20),
         )
         artifact = write_artifact(root / "job.json", driver.ROOT / "workspace", scope)
         launch = write_launch_spec(
             root / "job.launch.json", driver.ROOT / "workspace", artifact,
-            resource_type="FOOD", resource_level=5,
+            resource_level=5,
         )
         job = load_gather_job_authority(
             artifact, canonical_actions=frozenset(scope["allowed_actions"]),
@@ -539,16 +630,30 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(
             return code, payload
 
         monkeypatch.setattr(driver, "_subprocess_tick", canonical_tick)
+        live_flag = ["--arm-live"] if arm_live else []
         first_code = driver.main([
             "--launch-spec", str(launch), "--report-root", str(root / "reports"),
             "--max-ticks", "2", "--idle-delay-seconds", "0", "--settle-seconds", "0",
-        ])
+        ] + live_flag)
         first = json.loads(capsys.readouterr().out)
         assert first_code == 3 and first["status"] == "suspended", (first_code, first)
         assert first["verified_marches"] == 2 and first["ticks"] == 2
         assert first["audit_status"] is None
         original_write = driver._write_report
         original_audit = driver._audit_closeout
+        if crash_phase in {"journal_mid", "journal_fifth"}:
+            import harness.gather_job_store as store_module
+            original_replace = store_module.os.replace
+            failed_append = []
+            def fail_one_journal_replace(source, destination):
+                if Path(destination) == ledger._path(job):
+                    state = json.loads(Path(source).read_text())
+                    target = 3 if crash_phase == "journal_mid" else 5
+                    if len(state["verifications"]) == target and not failed_append:
+                        failed_append.append(target)
+                        raise PermissionError(5, "one-shot Windows journal replace denial")
+                return original_replace(source, destination)
+            monkeypatch.setattr(store_module.os, "replace", fail_one_journal_replace)
         if crash_phase == "before_result":
             def interrupt_result(path, result):
                 if result.get("attempt_sequence") == 2:
@@ -564,22 +669,95 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(
         second_code = driver.main([
             "--launch-spec", str(launch), "--report-root", str(root / "reports"),
             "--max-ticks", "3", "--idle-delay-seconds", "0", "--settle-seconds", "0",
-        ])
+        ] + live_flag)
         second_output = capsys.readouterr()
         if crash_phase != "none":
-            assert second_code == 2 and "synthetic crash" in second_output.err
+            if crash_phase.startswith("journal_"):
+                assert second_code == 4
+                assert json.loads(second_output.out)["reason"] == "job verification failed"
+                assert failed_append
+            else:
+                assert second_code == 2 and "synthetic crash" in second_output.err
+            if crash_phase == "journal_mid":
+                old_count = ledger.progress(job).verified_marches
+                old_actions = list(actions)
+                with pytest.raises(ValueError, match="under workspace"):
+                    driver._reconcile_verified_journal(job, root.parent.parent / "external", ATTESTATION_SHA)
+                assert ledger.progress(job).verified_marches == old_count and actions == old_actions
+                ledger_bytes = ledger._path(job).read_bytes()
+                with monkeypatch.context() as clock_patch:
+                    class ExpiredClock:
+                        @staticmethod
+                        def now(_timezone):
+                            return job.expires_at
+                    clock_patch.setattr(driver, "datetime", ExpiredClock)
+                    with pytest.raises(ValueError, match="outside job time scope"):
+                        driver._reconcile_verified_journal(job, root / "reports", ATTESTATION_SHA)
+                assert ledger._path(job).read_bytes() == ledger_bytes and actions == old_actions
+                original_progress = JsonGatherJobStore.progress
+                with monkeypatch.context() as revoked_patch:
+                    def revoked_progress(store, authority):
+                        return replace(original_progress(store, authority), revoked=True)
+                    revoked_patch.setattr(JsonGatherJobStore, "progress", revoked_progress)
+                    with pytest.raises(ValueError, match="job revoked"):
+                        driver._reconcile_verified_journal(job, root / "reports", ATTESTATION_SHA)
+                assert ledger._path(job).read_bytes() == ledger_bytes and actions == old_actions
+                from harness.mission_runtime import MissionContext
+                context = MissionContext(job.mission_id, job.task_id, gather_slot_run_id(job, 3))
+                checkpoint_path = JsonMissionStore(checkpoint_root)._path(context)
+                checkpoint_bytes = checkpoint_path.read_bytes()
+                raw_checkpoint = json.loads(checkpoint_bytes)
+                raw_checkpoint["checkpoint"]["verified_transition"] = None
+                checkpoint_path.write_text(json.dumps(raw_checkpoint))
+                with pytest.raises((ValueError, TypeError)):
+                    driver._reconcile_verified_journal(job, root / "reports", ATTESTATION_SHA)
+                checkpoint_path.write_bytes(checkpoint_bytes)
+                assert ledger.progress(job).verified_marches == old_count and actions == old_actions
+                bad_client = GatherClientBinding.from_window({**window, "hwnd": 1002})
+                original_client_reader = driver._attested_client
+                monkeypatch.setattr(driver, "_attested_client", lambda *_: bad_client)
+                with pytest.raises(ValueError, match="client mismatch"):
+                    driver._reconcile_verified_journal(job, root / "reports", ATTESTATION_SHA)
+                monkeypatch.setattr(driver, "_attested_client", original_client_reader)
+                assert ledger.progress(job).verified_marches == old_count and actions == old_actions
+                original_receipt_writer = driver._write_recovery_record
+                def deny_intent(path, record):
+                    raise PermissionError(5, "ongoing recovery I/O denial")
+                monkeypatch.setattr(driver, "_write_recovery_record", deny_intent)
+                for _ in range(2):
+                    with pytest.raises(PermissionError, match="ongoing recovery I/O denial"):
+                        driver._reconcile_verified_journal(job, root / "reports", ATTESTATION_SHA)
+                    assert ledger.progress(job).verified_marches == old_count and actions == old_actions
+                monkeypatch.setattr(driver, "_write_recovery_record", original_receipt_writer)
+                def deny_commit(path, record):
+                    if record.get("kind") == "journal_recovery_commit":
+                        raise PermissionError(5, "receipt commit denied")
+                    original_receipt_writer(path, record)
+                monkeypatch.setattr(driver, "_write_recovery_record", deny_commit)
+                prior_actions = list(actions)
+                denied = driver.main(["--launch-spec", str(launch), "--report-root", str(root / "reports"),
+                                      "--max-ticks", "3", "--idle-delay-seconds", "0", "--settle-seconds", "0"])
+                assert denied == 2 and "receipt commit denied" in capsys.readouterr().err
+                assert actions == prior_actions
+                assert ledger.progress(job).verified_marches == 3
+                attempts = root / "reports" / hashlib.sha256(job.job_id.encode()).hexdigest()[:20]
+                assert not (attempts / "attempt-000003.start.json").exists()
+                monkeypatch.setattr(driver, "_write_recovery_record", original_receipt_writer)
             if crash_phase == "after_result":
                 monkeypatch.setattr(driver, "_audit_closeout", original_audit)
             code = driver.main([
                 "--launch-spec", str(launch), "--report-root", str(root / "reports"),
-                "--max-ticks", "1", "--idle-delay-seconds", "0", "--settle-seconds", "0",
-            ])
+                "--max-ticks", "3" if crash_phase == "journal_mid" else "1", "--idle-delay-seconds", "0", "--settle-seconds", "0",
+            ] + live_flag)
             recovered_output = capsys.readouterr()
             assert recovered_output.out, recovered_output.err
             result = json.loads(recovered_output.out)
-            if crash_phase == "before_result":
+            if crash_phase in {"before_result", "journal_fifth"}:
                 assert result["reason"] == "durable five-march closeout recovered"
                 assert result["ticks"] == 1
+            elif crash_phase == "journal_mid":
+                assert result["reason"] == "five VERIFIED marches closed"
+                assert result["ticks"] == 2
             else:
                 assert result["reason"] == "five VERIFIED marches closed"
                 assert result["ticks"] == 3
@@ -598,7 +776,7 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(
         assert [item["run_id"] for item in result["closeout"]] == run_ids
         assert [item["after_count"] for item in ledger.verifications(job)] == [1, 2, 3, 4, 5]
         assert actions == [(run_id, "MARCH_WITH_CURRENT_SELECTION") for run_id in run_ids]
-        assert attestation_checks.count(None) == (2 if crash_phase == "none" else 3)
+        assert attestation_checks.count(None) == (2 if crash_phase == "none" else 4 if crash_phase == "journal_mid" else 3)
         assert attestation_checks.count(ATTESTATION_SHA) >= len(tick_calls) * 2
         assert all(command[command.index("--startup-attestation-sha256") + 1]
                    == ATTESTATION_SHA for command in tick_calls)
@@ -607,6 +785,10 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(
         traced_commands = [command for command in tick_calls
                            if "--input-isolation-evidence" in command]
         assert len(traced_commands) == 5
+        assert all(("--arm-live" in command) is arm_live for command in traced_commands)
+        assert [command[command.index("--resource-type") + 1] for command in traced_commands] == list(job.resource_schedule)
+        if crash_phase == "none":
+            assert [item["resource_type"] for item in first["history"] + result["history"]] == list(job.resource_schedule)
         assert all(command[command.index("--input-isolation-evidence") + 1]
                    == str(host_traces[index][1])
                    for index, command in enumerate(traced_commands))
@@ -617,11 +799,53 @@ def test_driver_launch_spec_drives_five_real_canonical_ticks_and_journal(
         already_code = driver.main([
             "--launch-spec", str(launch), "--report-root", str(root / "reports"),
             "--max-ticks", "1", "--idle-delay-seconds", "0", "--settle-seconds", "0",
-        ])
+        ] + live_flag)
         assert already_code == 2
         assert "immutable FIRST DONE verdict" in capsys.readouterr().err
         assert ledger.progress(job).dispatched_marches == 5
         assert len(actions) == 5
+        if crash_phase.startswith("journal_"):
+            from scripts.audit_first_done_job import audit_first_done_job, _recovery_path
+            sequence = 3 if crash_phase == "journal_mid" else 5
+            recovery_path = _recovery_path(evidence_root, job, sequence)
+            original_receipt = json.loads(recovery_path.read_text())
+            report_path = Path(result["report_path"])
+            original_report = json.loads(report_path.read_text())
+            from scripts.audit_first_done_job import _recovery_origin
+            source_path = Path(original_receipt["source_path"])
+            source_record = json.loads(source_path.read_text())
+            wrong_origin = report_path.parent / "attempt-000001.start.json"
+            with pytest.raises(ValueError, match="different originating attempt"):
+                _recovery_origin(report_path.parent, source_record, job, source_path, sequence, wrong_origin)
+            def audit_recovery():
+                return audit_first_done_job(job, ledger, JsonMissionStore(checkpoint_root),
+                                            original_report, evidence_root, attempt_root=report_path.parent)
+            assert audit_recovery()["status"] == "OFFLINE_REPLAY_PASS"
+            recovery_path.unlink()
+            assert audit_recovery()["status"] == "BLOCKED"
+            for field, damaged in [("source_sha256", "0" * 64), ("checkpoint_sha256", "0" * 64),
+                                   ("startup_attestation_sha256", "0" * 64),
+                                   ("attempt_start_path", str(root / "unrelated.start.json")),
+                                   ("reservation", {}), ("journal_entry", {})]:
+                recovery_path.write_text(json.dumps({**original_receipt, field: damaged}))
+                assert audit_recovery()["status"] == "BLOCKED", field
+            recovery_path.write_text(json.dumps(original_receipt))
+            assert audit_recovery()["status"] == "OFFLINE_REPLAY_PASS"
+        if crash_phase == "none":
+            # The closeout must reject a persisted slot artifact that now claims
+            # a different resource, even though its 1/5..5/5 chain still exists.
+            from scripts.audit_first_done_job import audit_first_done_job
+            report_path = Path(result["report_path"])
+            recorded_report = json.loads(report_path.read_text(encoding="utf-8"))
+            slot_three = Path(result["history"][0]["evidence_path"])
+            recorded_tick = json.loads(slot_three.read_text(encoding="utf-8"))
+            recorded_tick["runtime"]["gather_job"]["resource_type"] = "FOOD"
+            slot_three.write_text(json.dumps(recorded_tick), encoding="utf-8")
+            tampered = audit_first_done_job(
+                job, ledger, JsonMissionStore(checkpoint_root), recorded_report,
+                evidence_root, attempt_root=report_path.parent,
+            )
+            assert tampered["status"] == "BLOCKED"
 
 
 def test_launch_spec_rejects_changed_artifact_before_tick(monkeypatch):
@@ -643,6 +867,40 @@ def test_launch_spec_rejects_changed_artifact_before_tick(monkeypatch):
         assert driver.main(["--launch-spec", str(launch)]) == 2
 
 
+def test_mixed_launch_rejects_changed_schedule_and_tick_refuses_wrong_slot(monkeypatch):
+    with TemporaryDirectory(dir=driver.ROOT / "workspace") as folder:
+        root = Path(folder)
+        now = datetime.now(timezone.utc)
+        scope = build_artifact(
+            job_id="mixed-refusal", task_id="task", character_id="character",
+            resource_level=5, starts_at=now - timedelta(minutes=1),
+            expires_at=now + timedelta(minutes=20),
+        )
+        artifact = write_artifact(root / "job.json", driver.ROOT / "workspace", scope)
+        launch = write_launch_spec(root / "job.launch.json", driver.ROOT / "workspace",
+                                   artifact, resource_level=5)
+        args, job = driver._validated_launch(build_parser().parse_args(["--launch-spec", str(launch)]))
+        assert job.resource_for_slot(1) == "GOLD"
+        assert job.resource_for_slot(3) == "WOOD"
+        spec = json.loads(launch.read_text(encoding="utf-8"))
+        spec["resource_schedule"][2] = "FOOD"
+        launch.write_text(json.dumps(spec), encoding="utf-8")
+        with pytest.raises(ValueError, match="schedule"):
+            driver._validated_launch(build_parser().parse_args(["--launch-spec", str(launch)]))
+        monkeypatch.setattr(run_gather_tick, "validate_canonical_startup_attestation",
+                            lambda *a, **k: ATTESTATION_SHA)
+        monkeypatch.setattr(run_gather_tick, "GATHER_JOB_STORE_ROOT", root / "ledger")
+        out = StringIO()
+        with redirect_stderr(out):
+            code = run_gather_tick.main([
+                "--gather-job", str(artifact), "--task-id", "task",
+                "--character-id", "character", "--resource-type", "WOOD",
+                "--resource-level", "5",
+            ])
+        assert code != 0
+        assert "scheduled slot" in out.getvalue()
+
+
 def test_launch_spec_rejects_resource_change_even_with_intact_artifact(monkeypatch):
     with TemporaryDirectory(dir=driver.ROOT / "workspace") as folder:
         root = Path(folder)
@@ -662,6 +920,77 @@ def test_launch_spec_rejects_resource_change_even_with_intact_artifact(monkeypat
         launch.write_text(json.dumps(spec), encoding="utf-8")
         monkeypatch.setattr(driver, "_subprocess_tick", lambda _: pytest.fail("no tick allowed"))
         assert driver.main(["--launch-spec", str(launch)]) == 2
+
+
+@pytest.mark.parametrize("deny", [False, True])
+@pytest.mark.parametrize("reserved", [0, 1])
+def test_pending_resume_reuses_open_start_only_after_preflight(monkeypatch, deny, reserved):
+    with TemporaryDirectory(dir=driver.ROOT / "workspace") as folder:
+        root = Path(folder)
+        now = datetime.now(timezone.utc)
+        scope = build_artifact(job_id="pending-open", task_id="task", character_id="character",
+            resource_type="FOOD", resource_level=5, starts_at=now - timedelta(minutes=1),
+            expires_at=now + timedelta(minutes=20))
+        artifact = write_artifact(root / "job.json", driver.ROOT / "workspace", scope)
+        job = load_gather_job_authority(artifact, canonical_actions=frozenset(scope["allowed_actions"]),
+                                       expected_catalog_digest=scope["catalog_digest"])
+        monkeypatch.setattr(driver, "GATHER_JOB_STORE_ROOT", root / "ledger")
+        monkeypatch.setattr(driver, "GATHER_CHECKPOINT_ROOT", root / "checkpoints")
+        monkeypatch.setattr(driver, "GATHER_EVIDENCE_ROOT", root / "evidence")
+        path, start = driver._write_attempt_start(root / "reports", job, ATTESTATION_SHA)
+        original = path.read_bytes()
+        from harness.gather_job_authority import GatherJobProgress
+        monkeypatch.setattr(JsonGatherJobStore, "progress",
+                            lambda *_: GatherJobProgress(job.job_id, reserved, verified_marches=0))
+        checks = []
+        def admission(checked_job, ledger, checkpoints, attempt_root, evidence_root):
+            checks.append((checked_job, attempt_root, evidence_root))
+            assert ledger.root == root / "ledger"
+            if deny:
+                raise ValueError("invalid pending proof")
+        monkeypatch.setattr(auditor, "preflight_attempt_chain", admission)
+        if deny:
+            with pytest.raises(ValueError, match="invalid pending proof"):
+                driver._write_attempt_start(root / "reports", job, ATTESTATION_SHA)
+        else:
+            resumed_path, resumed_start = driver._write_attempt_start(root / "reports", job, ATTESTATION_SHA)
+            assert resumed_path == path and resumed_start == start
+        assert checks == [(job, path.parent, root / "evidence")]
+        assert path.read_bytes() == original
+        assert list(path.parent.glob("attempt-*.json")) == [path]
+        with pytest.raises(ValueError, match="attestation differs"):
+            driver._write_attempt_start(root / "reports", job, "f" * 64)
+        assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("authority", ["expired", "revoked"])
+def test_open_unchanged_attempt_requires_active_authority(monkeypatch, tmp_path, authority):
+    with TemporaryDirectory(dir=driver.ROOT / "workspace") as folder:
+        root = Path(folder)
+        now = datetime.now(timezone.utc)
+        scope = build_artifact(job_id="open-authority", task_id="task", character_id="character",
+            resource_type="FOOD", resource_level=5, starts_at=now - timedelta(minutes=1),
+            expires_at=now + timedelta(minutes=20))
+        artifact = write_artifact(root / "job.json", driver.ROOT / "workspace", scope)
+        job = load_gather_job_authority(artifact, canonical_actions=frozenset(scope["allowed_actions"]),
+                                       expected_catalog_digest=scope["catalog_digest"])
+        monkeypatch.setattr(driver, "GATHER_JOB_STORE_ROOT", root / "ledger")
+        path, start = driver._write_attempt_start(root / "reports", job, ATTESTATION_SHA)
+        original = path.read_bytes()
+        from harness.gather_job_authority import GatherJobProgress
+        monkeypatch.setattr(JsonGatherJobStore, "progress", lambda *_: GatherJobProgress(
+            job.job_id, 0, revoked=authority == "revoked", verified_marches=0))
+        if authority == "expired":
+            class ExpiredClock(datetime):
+                @staticmethod
+                def now(_):
+                    return job.expires_at
+            monkeypatch.setattr(driver, "datetime", ExpiredClock)
+        monkeypatch.setattr(auditor, "preflight_attempt_chain", lambda *_: pytest.fail("inactive admission"))
+        with pytest.raises(ValueError, match="outside active job authority"):
+            driver._write_attempt_start(root / "reports", job, ATTESTATION_SHA)
+        assert path.read_bytes() == original
+        assert list(path.parent.glob("attempt-*.json")) == [path]
 
 
 def test_attempt_preflight_failure_never_launches_a_tick(monkeypatch, capsys):

@@ -41,9 +41,12 @@ def _hash(path: Path) -> str:
 
 def _template_artifact_path(value: Any) -> Path:
     path = Path(str(value)).resolve()
-    root = (Path(__file__).resolve().parents[1] / "workspace" / "runs").resolve()
-    if path == root or not path.is_relative_to(root):
-        raise TemplateAnchorError("template path must be a file below workspace/runs")
+    repo = Path(__file__).resolve().parents[1]
+    roots = ((repo / "workspace" / "runs").resolve(),
+             (repo / "config" / "assets" / "farm_search").resolve())
+    if not any(path != root and path.is_relative_to(root) for root in roots):
+        raise TemplateAnchorError(
+            "template path must be a file below workspace/runs or config/assets/farm_search")
     return path
 
 

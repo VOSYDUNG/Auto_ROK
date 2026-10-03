@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import json
 import math
 from typing import Any, Mapping, Protocol, Sequence
 
@@ -10,6 +11,7 @@ from harness.mission_loader import CompiledMission
 from harness.mission_runtime import ActionChoice, MissionContext, MissionTool, ToolFeedback, ToolSnapshot
 from harness.mission_selector import DeterministicMissionSelector, SelectionDecision, SelectionResult
 from harness.mission_store import CheckpointStatus, JsonMissionStore, MissionCheckpoint
+from harness.gather_job_store import GatherClientBinding, GatherJobStoreError
 
 
 class BoundedDecisionProvider(Protocol):
@@ -30,6 +32,26 @@ class MissionTickResult:
     selection: SelectionResult | None = None
     engine_result: EngineStepResult | None = None
     reason: str | None = None
+
+
+def gather_queue_completion_baseline(snapshot: ToolSnapshot) -> dict[str, object] | None:
+    """One factory for an actual Drawer queue measurement and its provenance."""
+    facts = snapshot.facts
+    if (snapshot.state != "TROOP_DISPATCH_DRAWER"
+            or facts.get("gather_job_first_slot_queue_optional") is True
+            or type(facts.get("march_queue_used")) is not int
+            or type(facts.get("march_queue_capacity")) is not int
+            or facts.get("march_queue_source") not in {
+                "visible_ocr_queue_anchor", "visible_ocr_march_queue_region"}
+            or not isinstance(facts.get("character_id"), str)
+            or not isinstance(snapshot.observed_at, (int, float))
+            or isinstance(snapshot.observed_at, bool)
+            or not math.isfinite(snapshot.observed_at)):
+        return None
+    return {"predicate_id": "march_queue_used_increased", "counter_fact": "march_queue_used",
+            "counter_value": facts["march_queue_used"], "capacity": facts["march_queue_capacity"],
+            "source_frame_id": snapshot.frame_id, "source_timestamp": snapshot.observed_at,
+            "source": facts["march_queue_source"], "character_id": facts["character_id"]}
 
 
 class MissionRunner:
@@ -74,20 +96,18 @@ class MissionRunner:
 
         snapshot = self.tool.observe(context)
         baseline = existing.completion_baseline if existing is not None else None
-        if context.mission_id == "GATHER_RESOURCE" and snapshot.state == "TROOP_DISPATCH_DRAWER":
-            facts = snapshot.facts
-            if (type(facts.get("march_queue_used")) is int and type(facts.get("march_queue_capacity")) is int
-                    and facts.get("march_queue_source") in {"visible_ocr_queue_anchor", "visible_ocr_march_queue_region"}
-                    and isinstance(facts.get("character_id"), str)
-                    and isinstance(snapshot.observed_at, (int, float))
-                    and not isinstance(snapshot.observed_at, bool)
-                    and math.isfinite(snapshot.observed_at)):
-                baseline = {"predicate_id": "march_queue_used_increased", "counter_fact": "march_queue_used",
-                            "counter_value": facts["march_queue_used"], "capacity": facts["march_queue_capacity"],
-                            "source_frame_id": snapshot.frame_id,
-                            "source_timestamp": snapshot.observed_at,
-                            "source": facts["march_queue_source"],
-                            "character_id": facts["character_id"]}
+        current_marker = snapshot.facts.get("completion_baseline")
+        if (context.mission_id == "GATHER_RESOURCE" and isinstance(current_marker, Mapping)
+                and current_marker.get("predicate_id") == "first_march_queue_appeared_at_one"
+                and current_marker.get("source") == "job_initial_slot_ordinal"
+                and "counter_value" not in current_marker):
+            # Coordinator refreshed the ordinal from this New Troop frame.
+            # A navigation checkpoint's older marker must not replace it.
+            baseline = dict(current_marker)
+        if context.mission_id == "GATHER_RESOURCE":
+            measured = gather_queue_completion_baseline(snapshot)
+            if measured is not None:
+                baseline = measured
         if baseline is not None:
             enriched = dict(snapshot.facts)
             enriched["completion_baseline"] = baseline
@@ -97,6 +117,31 @@ class MissionRunner:
         # Resume verification before consulting the selector so a delayed frame
         # can never cause the same input to be selected a second time.
         if existing is not None and existing.pending_verification is not None:
+            recovery_reason = _reversible_navigation_recovery_reason(
+                context, existing.pending_verification, snapshot,
+            )
+            if recovery_reason is not None:
+                # CREATE_NEW_TROOP is reversible navigation. A fresh grounded
+                # world-map frame proves that the stale drawer navigation is
+                # no longer open; retire only that pending marker and return
+                # without executing anything. The receipt summary remains in
+                # last_reason for auditability; it is not VERIFIED evidence.
+                saved = self._save(
+                    context,
+                    expected_revision,
+                    engine,
+                    snapshot,
+                    CheckpointStatus.REOBSERVE,
+                    "reconcile_pending_navigation",
+                    recovery_reason,
+                    completion_baseline=baseline,
+                )
+                return MissionTickResult(
+                    CheckpointStatus.REOBSERVE,
+                    saved,
+                    snapshot,
+                    reason=recovery_reason,
+                )
             pending_result, pending = self._resume_pending_verification(
                 context,
                 engine,
@@ -423,6 +468,89 @@ def _feedback_from_pending(pending: Mapping[str, Any]) -> ToolFeedback:
         completed=raw.get("completed") is True,
         reobserve_required=raw.get("reobserve_required") is True,
         message=raw.get("message"),
+    )
+
+
+def _reversible_navigation_recovery_reason(
+    context: MissionContext,
+    pending: Mapping[str, Any],
+    after: ToolSnapshot,
+) -> str | None:
+    """Recognize one safe stale drawer-navigation marker.
+
+    This is intentionally narrower than generic pending recovery: a March,
+    malformed receipt, unknown state, changed context, or changed client must
+    continue through the normal fail-closed verification path.
+    """
+    if context.mission_id != "GATHER_RESOURCE" or after.state != "WORLD_MAP_VIEW":
+        return None
+    try:
+        before = _snapshot_from_pending(pending, context)
+        choice = _choice_from_pending(pending)
+        feedback = _feedback_from_pending(pending)
+    except (TypeError, ValueError, KeyError):
+        return None
+    if (before.mission_id != context.mission_id
+            or before.task_id != context.task_id
+            or after.mission_id != context.mission_id
+            or after.task_id != context.task_id
+            or not isinstance(before.frame_id, str) or not before.frame_id
+            or not isinstance(pending.get("last_observed_frame_id"), str)
+            or not pending.get("last_observed_frame_id")
+            or not isinstance(after.frame_id, str) or not after.frame_id
+            or before.frame_id == after.frame_id
+            or after.frame_id == pending.get("last_observed_frame_id")
+            or before.state != "TROOP_DISPATCH_DRAWER"
+            or choice.action_id != "CREATE_NEW_TROOP"
+            or choice.target_id != "NEW_TROOP"
+            or choice.arguments != {}
+            or feedback.success is not True
+            or feedback.code not in {"DISPATCHED", "VERIFIED"}):
+        return None
+    before_character = before.facts.get("character_id")
+    after_character = after.facts.get("character_id")
+    if (not isinstance(before_character, str) or not before_character
+            or after_character != before_character):
+        return None
+    before_bounds = before.facts.get("client_bounds")
+    after_bounds = after.facts.get("client_bounds")
+    if (before_bounds != [0, 0, 1366, 768]
+            or after_bounds != [0, 0, 1366, 768]
+            or before_bounds != after_bounds):
+        return None
+    try:
+        if (GatherClientBinding.from_window(before.facts.get("window"))
+                != GatherClientBinding.from_window(after.facts.get("window"))):
+            return None
+    except GatherJobStoreError:
+        return None
+    if (not isinstance(before.observed_at, (int, float))
+            or isinstance(before.observed_at, bool)
+            or not math.isfinite(before.observed_at)
+            or not isinstance(after.observed_at, (int, float))
+            or isinstance(after.observed_at, bool)
+            or not math.isfinite(after.observed_at)
+            or after.observed_at <= before.observed_at):
+        return None
+    receipt = feedback.facts.get("receipt")
+    if (not isinstance(receipt, Mapping)
+            or receipt.get("before_frame_id") != before.frame_id
+            or receipt.get("action_id") != choice.action_id
+            or receipt.get("target_id") != choice.target_id
+            or receipt.get("bounded_arguments") != {}
+            or receipt.get("after_frame_id") != pending.get("last_observed_frame_id")
+            or receipt.get("character_id") != before_character
+            or receipt.get("non_interference_confirmed") is not True):
+        return None
+    return (
+        "retired stale reversible CREATE_NEW_TROOP navigation after fresh "
+        f"WORLD_MAP_VIEW frame {after.frame_id}; pending receipt preserved "
+        "for audit: " + json.dumps({
+            "source": "pending_verification",
+            "schema_version": pending.get("schema_version"),
+            "last_observed_frame_id": pending.get("last_observed_frame_id"),
+            "receipt": dict(receipt),
+        }, sort_keys=True)
     )
 
 

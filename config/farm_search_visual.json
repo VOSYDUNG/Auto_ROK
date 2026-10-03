@@ -1,0 +1,271 @@
+{
+  "schema_version": 1,
+  "policy": {
+    "schema_version": 1,
+    "anchors": [
+      {
+        "id": "SEARCH_COMPACT",
+        "label": "SEARCH_COMPACT",
+        "algorithm": "opencv.TM_CCOEFF_NORMED",
+        "representation": "grayscale_laplacian_abs_v1",
+        "match_threshold": 0.82,
+        "minimum_runner_up_margin": 0.04
+      },
+      {
+        "id": "SEARCH_WIDE",
+        "label": "SEARCH_WIDE",
+        "algorithm": "opencv.TM_CCOEFF_NORMED",
+        "representation": "grayscale_laplacian_abs_v1",
+        "match_threshold": 0.88,
+        "minimum_runner_up_margin": 0.04
+      },
+      {
+        "id": "FOOD",
+        "label": "FOOD",
+        "algorithm": "opencv.TM_CCOEFF_NORMED",
+        "representation": "grayscale_laplacian_abs_v1",
+        "match_threshold": 0.88,
+        "minimum_runner_up_margin": 0.04
+      },
+      {
+        "id": "WOOD",
+        "label": "WOOD",
+        "algorithm": "opencv.TM_CCOEFF_NORMED",
+        "representation": "grayscale_laplacian_abs_v1",
+        "match_threshold": 0.88,
+        "minimum_runner_up_margin": 0.04
+      },
+      {
+        "id": "STONE",
+        "label": "STONE",
+        "algorithm": "opencv.TM_CCOEFF_NORMED",
+        "representation": "grayscale_laplacian_abs_v1",
+        "match_threshold": 0.88,
+        "minimum_runner_up_margin": 0.04
+      },
+      {
+        "id": "GOLD",
+        "label": "GOLD",
+        "algorithm": "opencv.TM_CCOEFF_NORMED",
+        "representation": "grayscale_laplacian_abs_v1",
+        "match_threshold": 0.88,
+        "minimum_runner_up_margin": 0.04
+      }
+    ]
+  },
+  "policy_sha256": "be1b45a4bd7f2dab3fc828da85f0d69b778f10bd152396a55c8aea277451f141",
+  "calibrations": {
+    "SEARCH_COMPACT": {
+      "schema_version": 1,
+      "calibration_id": "search_compact-5e576291a3fc",
+      "anchor_id": "SEARCH_COMPACT",
+      "label": "SEARCH_COMPACT",
+      "algorithm": "opencv.TM_CCOEFF_NORMED",
+      "representation": "grayscale_laplacian_abs_v1",
+      "match_threshold": 0.82,
+      "minimum_runner_up_margin": 0.04,
+      "config_sha256": "be1b45a4bd7f2dab3fc828da85f0d69b778f10bd152396a55c8aea277451f141",
+      "template_path": "config/assets/farm_search/search_compact.png",
+      "template_sha256": "5e576291a3fc4cd38ebd8f203384fc339b7081eb134002f333c9bf1a898e58dd",
+      "template_size": [
+        94,
+        34
+      ],
+      "source_frame_id": "rok-20260927T084308096646Z-369ee30fd2b0",
+      "source_frame_sha256": "369ee30fd2b0a000f8d1622ce099d6f2269fd077074bbd333e32e99527986719",
+      "source_bbox_for_audit_only": [
+        919,
+        580,
+        94,
+        34
+      ],
+      "layout_profile": {
+        "width": 1366,
+        "height": 768,
+        "dpi_scale": 1.0
+      },
+      "score_semantics": "TM_CCOEFF_NORMED normalized correlation; not a calibrated probability"
+    },
+    "SEARCH_WIDE": {
+      "schema_version": 1,
+      "calibration_id": "search_wide-4382fde8483c",
+      "anchor_id": "SEARCH_WIDE",
+      "label": "SEARCH_WIDE",
+      "algorithm": "opencv.TM_CCOEFF_NORMED",
+      "representation": "grayscale_laplacian_abs_v1",
+      "match_threshold": 0.88,
+      "minimum_runner_up_margin": 0.04,
+      "config_sha256": "be1b45a4bd7f2dab3fc828da85f0d69b778f10bd152396a55c8aea277451f141",
+      "template_path": "config/assets/farm_search/search_wide.png",
+      "template_sha256": "4382fde8483cb4875ae46c5686c44dabcef2d557160a1c157e27e070a68e0426",
+      "template_size": [
+        117,
+        38
+      ],
+      "source_frame_id": "rok-20260927T084303367721Z-2b860d667720",
+      "source_frame_sha256": "2b860d6677200c40cdef427f925d816a9db82ead4b23656a1b888248f1e93710",
+      "source_bbox_for_audit_only": [
+        351,
+        568,
+        117,
+        38
+      ],
+      "layout_profile": {
+        "width": 1366,
+        "height": 768,
+        "dpi_scale": 1.0
+      },
+      "score_semantics": "TM_CCOEFF_NORMED normalized correlation; not a calibrated probability"
+    },
+    "FOOD": {
+      "schema_version": 1,
+      "calibration_id": "food-a0e3ae821530",
+      "anchor_id": "FOOD",
+      "label": "FOOD",
+      "algorithm": "opencv.TM_CCOEFF_NORMED",
+      "representation": "grayscale_laplacian_abs_v1",
+      "match_threshold": 0.88,
+      "minimum_runner_up_margin": 0.04,
+      "config_sha256": "be1b45a4bd7f2dab3fc828da85f0d69b778f10bd152396a55c8aea277451f141",
+      "template_path": "config/assets/farm_search/food.png",
+      "template_sha256": "a0e3ae82153095afb83803d7c70ddf7c1cc89394af9a57cfb482b8021270b0fe",
+      "template_size": [
+        65,
+        64
+      ],
+      "source_frame_id": "rok-20260927T084308096646Z-369ee30fd2b0",
+      "source_frame_sha256": "369ee30fd2b0a000f8d1622ce099d6f2269fd077074bbd333e32e99527986719",
+      "source_bbox_for_audit_only": [
+        507,
+        667,
+        65,
+        64
+      ],
+      "layout_profile": {
+        "width": 1366,
+        "height": 768,
+        "dpi_scale": 1.0
+      },
+      "score_semantics": "TM_CCOEFF_NORMED normalized correlation; not a calibrated probability"
+    },
+    "WOOD": {
+      "schema_version": 1,
+      "calibration_id": "wood-343bef898160",
+      "anchor_id": "WOOD",
+      "label": "WOOD",
+      "algorithm": "opencv.TM_CCOEFF_NORMED",
+      "representation": "grayscale_laplacian_abs_v1",
+      "match_threshold": 0.88,
+      "minimum_runner_up_margin": 0.04,
+      "config_sha256": "be1b45a4bd7f2dab3fc828da85f0d69b778f10bd152396a55c8aea277451f141",
+      "template_path": "config/assets/farm_search/wood.png",
+      "template_sha256": "343bef8981602a999038b1670203e3bf710a0c43489ecadded964ac6db3875e8",
+      "template_size": [
+        70,
+        62
+      ],
+      "source_frame_id": "rok-20260927T084308096646Z-369ee30fd2b0",
+      "source_frame_sha256": "369ee30fd2b0a000f8d1622ce099d6f2269fd077074bbd333e32e99527986719",
+      "source_bbox_for_audit_only": [
+        647,
+        672,
+        70,
+        62
+      ],
+      "layout_profile": {
+        "width": 1366,
+        "height": 768,
+        "dpi_scale": 1.0
+      },
+      "score_semantics": "TM_CCOEFF_NORMED normalized correlation; not a calibrated probability"
+    },
+    "STONE": {
+      "schema_version": 1,
+      "calibration_id": "stone-6ad1c82c0455",
+      "anchor_id": "STONE",
+      "label": "STONE",
+      "algorithm": "opencv.TM_CCOEFF_NORMED",
+      "representation": "grayscale_laplacian_abs_v1",
+      "match_threshold": 0.88,
+      "minimum_runner_up_margin": 0.04,
+      "config_sha256": "be1b45a4bd7f2dab3fc828da85f0d69b778f10bd152396a55c8aea277451f141",
+      "template_path": "config/assets/farm_search/stone.png",
+      "template_sha256": "6ad1c82c0455f85f68deee9034a349e21e65d0126a6a556e4c41bd9875a20a45",
+      "template_size": [
+        68,
+        61
+      ],
+      "source_frame_id": "rok-20260927T084308096646Z-369ee30fd2b0",
+      "source_frame_sha256": "369ee30fd2b0a000f8d1622ce099d6f2269fd077074bbd333e32e99527986719",
+      "source_bbox_for_audit_only": [
+        789,
+        672,
+        68,
+        61
+      ],
+      "layout_profile": {
+        "width": 1366,
+        "height": 768,
+        "dpi_scale": 1.0
+      },
+      "score_semantics": "TM_CCOEFF_NORMED normalized correlation; not a calibrated probability"
+    },
+    "GOLD": {
+      "schema_version": 1,
+      "calibration_id": "gold-6b9cc628f23b",
+      "anchor_id": "GOLD",
+      "label": "GOLD",
+      "algorithm": "opencv.TM_CCOEFF_NORMED",
+      "representation": "grayscale_laplacian_abs_v1",
+      "match_threshold": 0.88,
+      "minimum_runner_up_margin": 0.04,
+      "config_sha256": "be1b45a4bd7f2dab3fc828da85f0d69b778f10bd152396a55c8aea277451f141",
+      "template_path": "config/assets/farm_search/gold.png",
+      "template_sha256": "6b9cc628f23b5e0953133d6f9fea79f06633a7ca4bca02fc1f9a354205c31bc5",
+      "template_size": [
+        65,
+        61
+      ],
+      "source_frame_id": "rok-20260927T084308096646Z-369ee30fd2b0",
+      "source_frame_sha256": "369ee30fd2b0a000f8d1622ce099d6f2269fd077074bbd333e32e99527986719",
+      "source_bbox_for_audit_only": [
+        933,
+        671,
+        65,
+        61
+      ],
+      "layout_profile": {
+        "width": 1366,
+        "height": 768,
+        "dpi_scale": 1.0
+      },
+      "score_semantics": "TM_CCOEFF_NORMED normalized correlation; not a calibrated probability"
+    }
+  },
+  "layout": {
+    "client_size": [
+      1366,
+      768
+    ],
+    "category_centres": {
+      "FOOD": [
+        539,
+        699
+      ],
+      "WOOD": [
+        682,
+        703
+      ],
+      "STONE": [
+        823,
+        702
+      ],
+      "GOLD": [
+        965,
+        701
+      ]
+    },
+    "maximum_category_offset_px": 12
+  },
+  "scope": "Farm search surface evidence only; no Barbarians image/text/target and no input authority"
+}

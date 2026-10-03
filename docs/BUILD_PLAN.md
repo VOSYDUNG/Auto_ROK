@@ -50,7 +50,8 @@ F1-B đã thêm artifact loader, ledger reservation/revoke và
 `gather_job_input_guard`, rồi nối opt-in vào CLI. Test synthetic dùng runner
 thật và actuator giả để chứng minh đường job được tiêu thụ; no-game guard tests
 từ chối stale/wrong/expired/revoked/duplicate trước actuator. Đây là wiring
-offline, không phải live proof. CLI cố ý chặn `--gather-job --arm-live`.
+offline, không phải live proof. Ở giai đoạn F1, CLI còn chặn
+`--gather-job --arm-live`; cổng hiện hành được xử lý tại F6-B.
 
 **F1-C1/C2 đã nối offline:** job lưu HWND/PID/process path từ capture đầu và
 kiểm ở các frame tiếp theo lẫn ranh giới input. `gather_fact_extractor` tạo
@@ -62,11 +63,12 @@ actuator giả đã tiêu thụ fact và guard; toàn bộ pytest, graph, NNC va
 PASS. Revoke hoặc frame/job hết hạn trong lúc đọc ledger đều chặn trước input.
 Đó là `WIRED` offline, chưa chứng minh live. Không gửi input đổi chỉ huy.
 
-**F1-C còn thiếu trước live:** `character_id` của CLI vẫn chỉ là cấu hình.
+**F1-C provenance:** `character_id` của CLI vẫn chỉ là cấu hình.
 [F4-A1 attestation](../workspace/agents/f4a-startup-attestation/root/VALIDATION.md)
 đã triển khai artifact xác nhận một lần ràng job/frame/client/thời điểm ở mức
 offline; [F4-A2](../workspace/agents/f4a-attestation-wiring/root/VALIDATION.md)
-đã nối driver/tick tiêu thụ offline, chưa có artifact trên frame thật. Ảnh âm
+đã nối driver/tick tiêu thụ; F6 đã có artifact từ frame thật trước navigation
+([occurrence](../workspace/agents/f6-live-gate/root/LIVE_OCCURRENCE.md)). Ảnh âm
 New Troop thật chưa có. Reader
 queue đã đọc đúng các snapshot 1/5–5/5. Người vận hành xác nhận UI queue bên phải
 chỉ xuất hiện sau đạo đầu. Bản chỉnh hợp đồng khởi đầu bỏ yêu cầu 0/5,
@@ -142,13 +144,127 @@ không lấy dữ liệu quest panel hoặc fixture tổng hợp làm
 baseline. Recorder
 host vẫn tự khai zero input ngoài luồng, nên cần nguồn telemetry độc lập trước
 khi dùng nó làm bằng chứng không có can thiệp. Hai công tắc
-`--arm-live` giữ chặn trong các gói offline.
+`--arm-live` được giữ chặn trong các gói offline F4; F6-B đánh giá riêng
+điều kiện mở cổng qua đường canonical.
 
 F4-C đã khảo sát API Windows ở mức tài liệu, không lắp hook. Low-level hook
 có thể mất mà không báo, nên chưa có thiết kế đo liên tục chứng minh được
 vắng input; [ROOT review](../workspace/agents/f4c-host-telemetry/root/VALIDATION.md)
-giữ giới hạn đó. Bước F5 là kiểm kê offline từng artifact và cổng của một
-job thật để chuẩn bị một scope live riêng, không giả định F4-C đã tháo chốt.
+giữ giới hạn đó. F5 đã kiểm kê offline từng artifact và cổng của một job thật
+([ROOT validation](../workspace/agents/f5-live-readiness/root/VALIDATION.md));
+không giả định F4-C đã tháo chốt.
+
+## F6 — Lịch tài nguyên và occurrence FIRST DONE
+
+Người vận hành đã chọn `DEFAULT_FARM` trong [PRD §3.2](PRD.md) cho năm đạo.
+F6-A đã nối lịch năm slot bất biến do bộ phân bổ hiện hành sinh ra vào quyền
+job, attestation, driver, CLI canonical và audit ở mức **WIRED offline**
+([ROOT validation](../workspace/agents/f6-resource-schedule/root/VALIDATION.md)).
+Không thể dùng launch spec một `resource_type` cho cả năm lượt để nhận nghiệm
+thu này. **Owned nodes:**
+`farm_work_process`, `gather_job_authority`, `startup_character_attestation`,
+`gather_job_driver`, `gather_cli`. **Upstream:** allocator, compiler, job store.
+**Downstream:** runner và audit. **Nghiệm thu:** test mix, sai slot/resource,
+resume, digest/attestation, evidence tamper và graph PASS; code được ROOT
+review. Mức chứng minh hiện hành đọc từ runtime-status; kết quả gói offline
+không tự nâng nghiệm thu live.
+
+F6-B đã nối opt-in `--arm-live` từ driver tới tick job schema v2, vẫn bắt buộc
+attestation, trace đúng run/client và mới, foreground/current frame, guard,
+quota và hậu kiểm trước khi tiến slot ([ROOT validation](../workspace/agents/f6-live-gate/root/VALIDATION.md)).
+Không thêm quyền tài khoản hoặc duyệt từng march. ROOT đã thử job mới trên
+nhân vật xác nhận bằng frame/attestation mới: city-to-map navigation qua guard,
+Search đã được hậu kiểm bằng frame mới, rồi GOLD và SEARCH được chọn tự động;
+detail classification hiện dừng với zero March.
+
+F6-C đã nối vùng OCR Search vào producer canonical và target nguồn riêng;
+ROOT kiểm replay thật, 73 focused tests, graph/NNC và pending live hậu kiểm
+PASS ([validation](../workspace/agents/f6c-search-regions/root/VALIDATION.md)).
+F6-D hiệu chỉnh Resource Point/GATHER trên frame detail thật; reviewer kiểm
+world-map coordinate còn hiện sau panel có cạnh tranh classifier không.
+Chỉ sau ROOT kiểm mới nối cùng occurrence đang mở; không reset checkpoint
+hoặc gửi lại input đã phát. Mỗi claim nâng theo artifact thật. Trace hiện chỉ tự khai zero input;
+bằng chứng này không được diễn giải thành phép đo độc lập về mọi can thiệp
+của host. F6-D đã qua replay thật, 119 focused test ROOT và một live observation
+hậu kiểm detail; không phát lại Search.
+
+F6-E nối phục hồi journal-write vào driver/audit canonical từ [diagnostic](../workspace/agents/f6-driver-flake/nguoi_thu/HANDOFF.md).
+Owned: driver/coordinator/verification/audit recovery. Upstream: reservation,
+client, proof VERIFIED và failed-write tick bất biến cùng attestation/attempt.
+Downstream: journal, audit và eligibility slot tiếp. Nghiệm thu: injection giữa
+vòng/lượt năm, receipt gắn proof, recovery không input, ca âm tamper/missing,
+ongoing I/O/expiry/revocation vẫn chặn và focused tests/graph PASS. Graph nối
+producer proof/tick/ledger tới driver và bound receipt tới audit; không xem
+failed append là thành công và không sửa evidence lịch sử. ROOT đã nhận
+F6-E với301 tests/23file, graph/NNC và review exact-origin PASS, WIRED offline.
+
+F6-F sửa contract từ Drawer0/5 thật: optional sourced zero không thành numeric
+baseline; coordinator/runner/verifier/guard/evidence/audit cùng dùng ordinal
+đầu và hậu kiểm1/5. F6-G giữ typed tick error, không trust metadata thiếu hoặc
+progress giả. ROOT94 integration và28 guard tests, graph/NNC PASS; review
+read-only PASS. Broader run có native I/O denial và lỗi thiếu captured_at đã
+sửa; không nhận broad suite PASS. [Validation](../workspace/agents/f6f-optional-zero/root/VALIDATION.md)
+đóng hai gói WIRED offline; live năm đạo vẫn là bước nghiệm thu tiếp.
+
+F6-H110 focused tests và replay captured-client handoff, review/graph PASS:
+coordinator đọc binding bền sau observation đầu. F6-I111 tests và review/graph
+PASS nối refresh ordinal đầu qua resume New Troop; detector formation không
+cần sửa. [F6-I validation](../workspace/agents/f6i-navigation-ordinal/root/VALIDATION.md)
+ghi exact checkpoint cause và test navigation/pending/March, WIRED offline.
+Job05 đã phát March1 một lần và giữ pending: ảnh thật hiện1/5 nhưng reader
+chưa biết variant denominator5. F6-J train offline từ native capture/hash thật
+bằng trainer canonical, giữ ROI/distance/unknown refusal; nghiệm thu ảnh thật,
+archive1..5 và negatives trước frame live mới. Không replay March hoặc mở
+slot2 khi chưa VERIFIED1. F6-K nối admission cho đúng một pending March bằng
+reservation/checkpoint/original dispatch artifact/attempt chain; driver tái dùng
+latest open start nguyên bytes, pending verifier chạy trước selector. ROOT24
+focused tests/review/graph/NNC PASS; integrated172 tests có1 native I/O denial,
+không nhận broad PASS. Same-job observation-only resume đã hậu kiểm/journal1;
+bốn slot tiếp và audit closeout là nghiệm thu còn lại. Các kết quả occurrence
+đọc từ runtime-status.
+
+F6-L thuộc producer observation: mỗi capture/OCR/projection đi vào một fresh
+exclusive directory, downstream đọc exact image_path. Test phải chứng minh
+old artifact không đổi, held old destination không bị replace, publication
+failure không trả bundle/advance timestamp, provenance và guards giữ nguyên.
+F6-M nối failure-diagnostic contract của F6-G vào attempt audit: terminal
+diagnostic của failed report mang zero authority; không được tạo tiến độ hoặc
+proof. Latest unchanged open start chỉ reuse sau active authority/full preflight;
+exact pending March và advanced COMPLETE recovery giữ contract riêng. Không
+retry I/O hoặc xóa failed history để mở đường live. Acceptance records nằm dưới
+workspace/agents của từng gói; ROOT chọn bước theo bằng chứng và hạn job thật.
+
+F6-P tiếp tục theo trạng thái game mới; job05 đã hết hạn và UI đạo không còn
+hiện nên không ghép proof cũ với vòng mới. Source/schedule/job pins cũ giữ
+nguyên. Job06 dùng cùng pipeline và quyền FIRST DONE hiện hành; Search ROI
+3x được đo từ native frame thay2x thất bại,37 tests PASS. Auditor nhận đúng
+empty callback-exception report với null progress,33 negatives/new +3 original
+diagnostic tests PASS. Numeric Drawer baseline được wrapper canonical truyền
+sang New Troop post-observation trong cùng tick;99 coordinator/guard/verifier
+tests trước khi gom factory; bản cuối13 critical PASS, broader105 có1 native
+journal denial; không nới tuổi frame/baseline. F6-Q bỏ cursor khỏi capture,
+23 ROOT capture/wiring tests PASS. F6-R/S thêm đúng glyph3/4 từ native manifest,
+ROOT54/56 queue/trainer/provider tests PASS. Mức native, closeout và giới hạn
+vòng có hỗ trợ được cập nhật tại runtime-status/ROOT; kế hoạch không sở hữu
+bản tiến độ thứ hai. F6-O continuation tạm hoãn sau
+quota failure, không có module/issuer/receipt đã được nhận.
+
+F6-T là nghiệm thu vòng mới với runtime/profile cố định. F6-U xử lý một
+variant New Troop qua ảnh native có provenance: đọc riêng nhãn Units và kiểm
+quân game tự điền có slider ít fill, giữ các refusals rỗng/zero/disabled/stale.
+Sở hữu windows_ocr_direct/gather_fact_extractor; upstream capture/hash/client
+thật, downstream classifier→formation→job guard. Nghiệm thu offline yêu cầu
+default acquisition được wiring, exact-frame positive, archived positives và
+meaningful negatives, focused tests/graph/review. Sửa giữa vòng chỉ là hỗ trợ;
+nghiệm thu tự chủ cần một job mới cố định nguồn. Tiến độ và mức chứng minh
+vẫn chỉ ở runtime-status cùng ROOT.
+
+F6-W thay điều kiện Search phụ thuộc nhãn ngoài farm bằng image landmarks của
+nút tìm kiếm và biểu tượng tài nguyên, kiểm bố cục/current frame. Sở hữu leaf
+perception→classifier/foreground suppression; dùng matcher canonical, giữ
+grounding/input authority riêng. Nghiệm thu gồm exact blocked Search không OCR,
+farm-category positives và city/modal/stale/hash/layout/ambiguity negatives.
+Live dùng job mới, nguồn cố định; không giao agent hoặc duyệt từng nút trong vòng.
 
 ## Sau FIRST DONE — farm hằng ngày
 

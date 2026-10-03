@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 
 from harness.action_surface import TRAINED_NATIVE_SHORTCUTS  # noqa: E402
 from harness.gather_facts import GatherFactObservationProvider  # noqa: E402
-from harness.gather_job_authority import compiled_gather_catalog  # noqa: E402
+from harness.gather_job_authority import compiled_gather_catalog, validate_schedule_catalog  # noqa: E402
 from harness.gather_job_startup_attestation import (  # noqa: E402
     canonical_startup_attestation_path, validate_canonical_startup_attestation,
 )
@@ -38,6 +38,7 @@ from harness.gather_replay_evidence import (  # noqa: E402
 )
 from harness.local_llm_selector import OpenAICompatibleDecisionProvider  # noqa: E402
 from harness.main_view_detector import MainViewProfile, MainViewVisualObservationProvider  # noqa: E402
+from harness.farm_search_visual import FarmSearchVisualObservationProvider  # noqa: E402
 from harness.map_coordinate_provider import MapCoordinateObservationProvider  # noqa: E402
 from harness.queue_indicator_provider import QueueIndicatorObservationProvider  # noqa: E402
 from harness.mission_loader import compile_mission  # noqa: E402
@@ -295,8 +296,10 @@ def main(argv: list[str] | None = None) -> int:
             or args.r3_repetition
         ):
             raise ValueError("GATHER_JOB_CANNOT_MIX_LEGACY_B003_OR_R3")
-        if args.gather_job and args.arm_live:
-            raise ValueError("GATHER_JOB_LIVE_ARM_BLOCKED_PENDING_LIVE_EVIDENCE_AND_AUTHORITY")
+        if args.gather_job and args.arm_live and not all((
+            args.startup_attestation_sha256, args.run_id, args.input_isolation_evidence,
+        )):
+            raise ValueError("GATHER job live arm requires pinned startup attestation, current run ID and fresh host trace")
         if args.startup_attestation_sha256 and not args.gather_job:
             raise ValueError("startup attestation digest requires --gather-job")
         if args.r3_repetition and not args.arm_live:
@@ -335,11 +338,17 @@ def main(argv: list[str] | None = None) -> int:
                 canonical_actions=gather_catalog.actions,
                 expected_catalog_digest=gather_catalog.digest,
             )
+            if args.arm_live and gather_job.schema_version != 2:
+                raise ValueError("GATHER job live arm requires a schema-v2 five-slot schedule")
+            validate_schedule_catalog(gather_job, ROOT / "config" / "mission_flows.yaml",
+                                      ROOT / "config" / "ui_states.yaml")
             if gather_job.task_id != context.task_id or gather_job.character_id != args.character_id:
                 raise ValueError("GATHER job task or character does not match this tick")
             startup_attestation_sha256 = validate_canonical_startup_attestation(
                 job_path, gather_job.job_id,
-                resource_type=args.resource_type, resource_level=args.resource_level,
+                resource_type=gather_job.resource_for_slot(1)
+                    if gather_job.schema_version == 2 else args.resource_type,
+                resource_level=args.resource_level,
                 workspace_root=workspace_root, ledger_root=GATHER_JOB_STORE_ROOT,
                 mission_flows=ROOT / "config" / "mission_flows.yaml",
                 ui_states=ROOT / "config" / "ui_states.yaml",
@@ -348,6 +357,14 @@ def main(argv: list[str] | None = None) -> int:
             gather_job_store = JsonGatherJobStore(GATHER_JOB_STORE_ROOT)
             job_coordinator = GatherJobCoordinator(gather_job, gather_job_store, checkpoint_store)
             job_plan = job_coordinator.plan()
+            if gather_job.schema_version == 2:
+                expected_resource = (gather_job.resource_for_slot(job_plan.sequence)
+                                     if job_plan.sequence is not None else gather_job.resource_for_slot(1))
+                if (args.resource_type != expected_resource
+                        or args.resource_level != gather_job.resource_level
+                        or gather_catalog.digest != (gather_job.catalog_for_slot(job_plan.sequence)
+                            if job_plan.sequence is not None else gather_job.catalog_for_slot(1))):
+                    raise ValueError("GATHER tick resource differs from durable scheduled slot")
             if args.run_id and args.run_id != job_plan.run_id:
                 raise ValueError("GATHER job run_id must match the current deterministic slot")
             if job_plan.closed:
@@ -427,6 +444,7 @@ def main(argv: list[str] | None = None) -> int:
         observations = QueueIndicatorObservationProvider(
             observations, ROOT / "config" / "queue_indicator_profile.json"
         )
+        observations = FarmSearchVisualObservationProvider(observations)
         observations = MainViewVisualObservationProvider(observations, main_view_profile)
         # Second, independent route to WORLD_MAP_VIEW.  The visual signature
         # above cannot carry that state - open terrain looks different
@@ -535,6 +553,12 @@ def main(argv: list[str] | None = None) -> int:
                 "closeout": post_job_plan.closeout if job_closed_at_five else None,
                 "closeout_path": str(closeout_path) if closeout_path is not None else None,
             }
+            if gather_job.schema_version == 2:
+                evidence_record["runtime"]["gather_job"].update({
+                    "resource_type": args.resource_type,
+                    "slot_catalog_digest": gather_catalog.digest,
+                    "schedule_digest": gather_job.schedule_digest,
+                })
         evidence_path = save_gather_tick_evidence(args.evidence_root, evidence_record)
 
         payload = {
@@ -563,6 +587,9 @@ def main(argv: list[str] | None = None) -> int:
         }
         if gather_job is not None:
             payload["startup_attestation_sha256"] = startup_attestation_sha256
+            if gather_job.schema_version == 2:
+                payload["gather_job_resource_type"] = args.resource_type
+                payload["gather_job_slot_catalog_digest"] = gather_catalog.digest
             payload["gather_job_verified_marches"] = job_progress.verified_marches
             payload["gather_job_closed_at_five"] = job_closed_at_five
             payload["gather_job_journaled_this_tick"] = journaled_this_tick

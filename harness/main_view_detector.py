@@ -26,6 +26,7 @@ _SUPPORTED = {CITY_VIEW, WORLD_MAP_VIEW}
 # "Territory" because they can appear in the normal HUD. The alliance phrases
 # below are specific to the trained modal surfaces in ui_states.yaml.
 _FOREGROUND_MARKERS = {
+    "farm resource search controls",
     "search",
     "resource point",
     "dispatch a new troop from your city",
