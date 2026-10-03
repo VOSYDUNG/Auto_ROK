@@ -13,9 +13,12 @@ Người vận hành muốn một client Rise of Kingdoms duy trì năng suất 
 tục 24/24 mà không phải ngồi canh, và muốn phần *quyết định* nằm ở một mô hình chạy cục
 bộ chứ không phải ở một chuỗi toạ độ viết cứng.
 
-Đường cũ (`Mouse_key.py`) đã chứng minh cách làm sai: toạ độ cứng, `time.sleep`, không đo,
-không xác minh. Nó không thể tự biết mình đúng hay sai, nên không thể giao cho nó chạy
-không người trông.
+Đường cũ (`Mouse_key.py`) giữ một chuỗi nghiệp vụ rõ trong `Find_pit`: mở tìm,
+chọn tài nguyên, tìm mỏ, Gather, New Troop rồi March. Người vận hành báo script
+đã chạy nhiều tài khoản/nhân vật; so sánh tốc độ và độ ổn định chưa được đo lại
+ở checkpoint này. Tọa độ và chờ cố định phụ thuộc layout; code cũ thiếu hậu
+kiểm trạng thái/quota có nguồn. Dự án dùng lại thứ tự nghiệp vụ và kiến thức
+layout hữu ích, đưa chúng qua grounding, guard và verification của harness.
 
 ## 2. Người dùng
 

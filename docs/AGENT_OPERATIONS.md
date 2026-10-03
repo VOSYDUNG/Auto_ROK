@@ -1,51 +1,86 @@
 # Vận hành đội agent Auto_ROK
 
-Đọc [ROOT](ROOT.md) và nguồn chuyên môn được giao. Repo giữ vai trò, quyền và giới
-hạn song song trong [team.json](../.codex/team.json); ROOT giữ đầu mối điều phối.
-Model ROOT là lựa chọn của người dùng trong phiên Codex. Repo dùng profile
-`inherit`: không lưu tên model hay mức effort cố định trong team và role files.
-Trước **mỗi gói**, ROOT chọn vai trò, model, effort, context và autonomy từ
-model thực có và tính chất việc; hỏi người dùng khi một quyết định sản phẩm hoặc
-cơ cấu bền vững còn thiếu. Lựa chọn model ROOT thuộc người dùng trong phiên;
-không biến menu của một ngày thành chính sách bền hoặc đổi model mặc định toàn máy.
+[ROOT](ROOT.md) chọn một đầu ra đang thiếu; [BUILD_PLAN](BUILD_PLAN.md) giữ thứ tự
+phụ thuộc, [runtime-status](../runtime-status.yaml) giữ kết quả đã chứng minh.
+Phương thức được chỉnh từ audit 2026-10-03, không cấp thêm quyền gameplay.
 
-## Cấu trúc trách nhiệm
+## Chọn đội theo việc
 
-- ROOT xác định mục tiêu/gói từ [GOAL](GOAL.md), [PRD](PRD.md), [graph](../config/engineering_graph.yaml)
-  và bằng chứng; giữ một [báo cáo hiện hành](ROOT.md), kiểm kết quả và quyết định tích hợp.
-- Vai `nghien_cuu` khảo sát nguồn và giả định; `tho_dung` sửa phần đã được giao;
-  `nguoi_thu` kiểm đầu ra; `kiem_luat` review độc lập khi thay đổi có rủi ro.
-  Danh mục vai không bắt phải chạy đủ ghế. Tối đa hai child đồng thời, và không
-  vượt slot host. Gói nhỏ hoặc phụ thuộc nối tiếp có thể do ROOT làm trực tiếp.
-- Role TOML không tự cấp quyền lên game hay hệ thống ngoài. ROOT giao phạm vi
-  node/file rời nhau cho writer; role chỉ đọc không ghi dù tool cho phép. Model
-  và effort được chọn cho lần giao đó; thiếu dữ liệu khả dụng thì ghi chưa biết.
+Model ROOT do người dùng chọn trong phiên. Trước mỗi gói, ROOT chọn
+**vai trò × model × effort × context × autonomy** từ tool thực có và chỉ định
+của người dùng; ghi lựa chọn vào brief gói, không ghim model trong chính sách
+repo hoặc đổi mặc định toàn máy. Có tên model trong menu không chứng minh quota.
+Model chỉ định không chạy được thì báo blocker; không thay bằng model bị loại trừ.
+ROOT có thể làm phần độc lập bằng model hiện hành theo fallback đã có.
 
-Mỗi đề bài có `owned_nodes`, upstream, downstream, acceptance evidence, blocker,
-expected graph delta; mục tiêu/lý do, nguồn và commit, file sở hữu, điều loại trừ,
-model/effort/context/autonomy của **gói hiện tại**, giới hạn thử và side effect.
-Dùng context ngắn tự đủ. Không tạo task Codex của người dùng thay cho subagent.
+[team.json](../.codex/team.json) giới hạn tối đa hai child, không vượt slot host.
+Người nghiên cứu làm rõ giả định; builder sửa một phạm vi nối được; tester kiểm
+đầu ra; reviewer kiểm thay đổi authority/proof/recovery hoặc rủi ro đáng kể.
+Không gọi đủ ghế theo nghi thức. Một lỗi nhỏ đã có source/reproducer thì ROOT
+sửa trực tiếp; chỉ tách agent khi có phần độc lập có ích.
 
-## Sự kiện, hồ sơ và nghiệm thu
+Writer có file/node sở hữu rời nhau. Reviewer chỉ đọc và trả kết quả để ROOT
+lưu; child không sửa orchestration state, commit/push hoặc tự mở child.
 
-Giao gói khi đủ đầu vào, làm phần độc lập, rồi nhận completion/blocker để mở phần
-phụ thuộc. Không polling trạng thái hay sleep-retry; nếu hết việc độc lập thì dùng
-một event wait/yield. Timeout không tự cho phép vòng chờ mới.
+## Nhịp coding để giao được một chu kỳ
 
-Hồ sơ gói ở `workspace/agents/<package>/<role>/`, handoff khoảng 40 dòng: source,
-đầu ra, file/nodes/edges đổi, check thực chạy, đường dẫn bằng chứng, claim cao nhất,
-blocker và bước tiếp. ROOT lưu báo cáo của role chỉ đọc khi cần. Không tạo bản
-v1/v2/final hoặc trạng thái điều phối song song; sửa [ROOT](ROOT.md) tại chỗ.
+Một gói runtime đang hoạt động trên đường FIRST DONE; phần độc lập có thể
+chạy song song. Đơn vị giao hàng là **chu kỳ nghiệp vụ**, không phải mỗi nút,
+mỗi detector hoặc số test/commit. Không mở lại nhân vật, tỷ lệ, cặp game tự
+điền hay quyền từng March khi người dùng đã chốt và scope chưa đổi.
 
-ROOT so bằng chứng với acceptance và commit, chạy kiểm tập trung khi có lý do,
-rồi ghi rõ agent báo, ROOT đã xác minh, và phần chưa biết. Test offline chỉ chứng
-minh code/contract được test; không tự nâng lên WIRED, live, REPEATABLE hay STABLE.
-Không sửa dữ liệu đo gốc, xoá archive hoặc biến kế hoạch thành bằng chứng.
+1. Đọc ROOT và source slice của blocker; không nạp lại toàn bộ hồ sơ cũ.
+2. Tái hiện lỗi rẻ nhất từ artifact/code trước khi sửa. Chỉ ra bước trước,
+   bước bị chặn, consumer và postcondition cần đạt; phân biệt thực đo/suy luận.
+3. Sửa canonical path nhỏ nhất và nối luôn test consumer. Test route phải bắt
+   đầu từ trạng thái đầu thực tế, không chỉ dựng sẵn COMPLETE hoặc New Troop.
+4. Kiểm focused sau patch; kiểm tích hợp tại biên gói. Một bộ rộng cho checkpoint
+   thay đổi nhiều phần hoặc publication khi cần; không chạy lại vì đổi câu chữ.
+   Giữ failure; rerun chỉ khi sửa, có lỗi mới hoặc cần chẩn đoán riêng có câu hỏi.
+5. Review độc lập theo rủi ro, rồi ROOT kiểm bằng chứng và tích hợp một lần.
+   Thiếu asset/wiring không được nhận WIRED; test tổng hợp không thành live.
+6. Đóng gói đủ code/profile/assets rồi ghim nguồn trước live. Một driver chạy
+   cả job; không mở cuộc hội ý hoặc giao agent giữa các click đã rõ.
+7. Khi driver dừng, lưu cause và fact mới. Nếu cần sửa/calibration/UI hỗ trợ,
+   dừng nghiệm thu tự chủ của occurrence; sửa offline rồi cấp job mới phù hợp.
+   Không replay March mơ hồ, nối quota hoặc nâng vòng có hỗ trợ thành tự chủ.
 
-Cấu hình đội không tự cho phép capture/input, mission tick, gọi endpoint model,
-thay model server, thao tác tài khoản, gửi tin, publish hay thanh toán. Một lần
-live cần quyền công việc GATHER của người vận hành và các chốt được chứng minh
-theo đúng job/occurrence. [SESSION_AUTHORITY](SESSION_AUTHORITY.md) định nghĩa
-quyền khởi đầu cho FIRST DONE; B003 từng occurrence là đường benchmark lịch sử,
-không phải yêu cầu duyệt từng march. Mức chứng minh của từng gói chỉ lấy từ
-[runtime-status](../runtime-status.yaml) và bằng chứng ROOT đã kiểm.
+Gói ghi giới hạn thử/effort phù hợp. Hai lần cùng hướng thất bại mà không có
+bằng chứng mới phải đổi giả thuyết hoặc cách tiếp cận; không tiếp tục mò bằng
+cùng thao tác. Đây là trigger xem lại phương pháp, không tự tạo retry hoặc deadline.
+Đo time-to-first-March, whole-job time, can thiệp và tỷ lệ trọn vòng trên cùng
+ranh giới; chưa có baseline thì ghi unknown, không hứa nhanh hơn script.
+
+## Brief và kiểm chứng
+
+Mỗi brief tự đủ: mục tiêu/lý do, commit/source, `owned_nodes`,
+`upstream_dependencies`, `downstream_consumers`, `acceptance_evidence`,
+`known_blockers`, `graph_delta_expected`, file sở hữu/loại trừ,
+model/effort/context/autonomy, giới hạn thử và side effect. Các field này phục
+vụ đúng gói, không biến thành thêm một hệ gate hoặc tài liệu tiến độ.
+
+Khởi chạy agent khi đủ đầu vào, ROOT làm phần độc lập và nhận completion/blocker.
+Không polling/list/read loop/sleep-retry. Nếu hết phần độc lập, dùng một event
+wait/yield; timeout không mở vòng chờ mới. Không tạo task sidebar thay child.
+
+Hồ sơ ở `workspace/agents/<package>/<role>/`; handoff khoảng 40 dòng nêu node,
+edge/file đổi, checks thực chạy, evidence, claim cao nhất, blocker và consumer.
+ROOT kiểm scope/source/acceptance rồi viết lại ROOT tại chỗ. Không cộng các
+suite chồng nhau hoặc lấy số test tăng làm tiến độ sản phẩm. Lưu elapsed/tách
+setup, OCR, capture, input, verification khi tối ưu, không trộn boundary đo.
+
+## Tài liệu và quyền
+
+AGENTS/team/role files sở hữu phương thức và giới hạn đội; AGENT_OPERATIONS
+sở hữu nhịp coding. PRD sở hữu nghiệm thu; SRS là chi tiết kỹ thuật; GOAL và
+PROJECT_DECLARATION giữ mục tiêu/biên. Graph giữ dependency/authority, không
+chứa claim live. BUILD_PLAN chỉ giữ việc còn lại; lịch sử ở Git/workspace.
+ROOT chỉ giữ quyết định, evidence index và gói kế tiếp. Audit/coverage/reference
+có ngày không được ghi đè lên nguồn hiện hành; không tạo v1/v2/final.
+
+[SESSION_AUTHORITY](SESSION_AUTHORITY.md) sở hữu quyền job và hỗ trợ ROOT.
+Cấu hình đội không cấp capture/input/model endpoint/server/account action,
+publish hay thanh toán. Dùng quyền người dùng đã cấp đúng scope; kiểm focus,
+frame, client, quota trước hành động là guard kỹ thuật. B003/R3 là benchmark
+lịch sử riêng, không phải duyệt mỗi March của FIRST DONE. Local LLM chỉ nhận
+bất định có nghĩa; không thêm model call cho một bước xác định.

@@ -6,6 +6,11 @@ authority are in [GOAL](GOAL.md), [PRD](PRD.md) and
 R3 counts below are historical; they do not impose per-march approval on the
 startup-authorized five-march job.
 
+The table retains the dated corpus evidence. Current farm Search recognition
+uses `harness/farm_search_visual.py` and the canonical classifier; the historical
+Barbarians anchor below is not a requirement for FIRST DONE. Runtime status and
+the current build plan own the remaining proof, not this snapshot.
+
 This is the bounded knowledge map for the trained state/mission paths. It records what
 the harness is allowed to claim from observed frames and trained mission
 contracts; it is not a claim that every Rise of Kingdoms screen or mission has

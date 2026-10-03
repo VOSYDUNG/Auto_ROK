@@ -239,7 +239,8 @@ Kết luận không phải "dọn đi là xong", mà là: **một luật không 
   điều khoản cấm. Ai nới lỏng tuyên bố thì test đỏ, biến việc nới lỏng thành một quyết định
   nhìn thấy được thay vì một thay đổi lặng lẽ.
 - **Không dùng CI.** Dịch vụ CI chạy trên máy ảo đi thuê. Toàn bộ kiểm tra chạy trên chính
-  máy của người vận hành bằng `python scripts/check_local.py`, mất khoảng 10 giây.
+  máy của người vận hành bằng `python scripts/check_local.py`. Thời gian phụ thuộc
+  bộ kiểm và checkpoint; dùng elapsed thực đo, không coi 10 giây là cam kết.
 
 Quy tắc phân biệt: *sản phẩm chạy ở đâu* là điều khoản cấm; *code được soát ở đâu* cũng vậy,
 vì máy đi thuê vẫn là máy ảo.
@@ -316,7 +317,7 @@ Chúng sẽ được huấn luyện dần bằng kiểm nghiệm thực địa t
 | `docs/SRS.md` | hợp đồng kỹ thuật kiểm chứng được và truy vết yêu cầu |
 | `docs/DESIGN_BRIEF.md` | nghiên cứu và lý do chọn kiến trúc |
 | `docs/LLM_GAMEPLAY_SPEC.md` | hợp đồng gameplay của LLM local |
-| `docs/SESSION_AUTHORITY.md` | hợp đồng quyền phiên GATHER đề xuất, chưa cấp quyền live |
+| `docs/SESSION_AUTHORITY.md` | hợp đồng quyền job GATHER và hỗ trợ ROOT; quyền cụ thể lấy từ chỉ định người vận hành và artifact đúng scope |
 | `docs/BUILD_PLAN.md` | thứ tự xây dựng và phụ thuộc công việc |
 | `docs/COMPLETION_AUDIT.md` | đối chiếu bằng chứng với G1–G6 và FIRST DONE |
 | `runtime-status.yaml` | mức chứng minh đã kiểm của từng capability |

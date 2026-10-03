@@ -146,16 +146,15 @@ Cross-subgraph work is allowed only when the integration edge is named in advanc
 - **integration covered**: producer/consumer edges are exercised together;
 - **live covered**: real game evidence satisfies the end-to-end acceptance path.
 
-The current GATHER_RESOURCE branch has broad code/integration coverage but is **not live-complete**. The authoritative missing nodes are recorded in the graph:
-
-- `city_world_visual_detector`;
-- `resource_level_control`;
-- `troop_selection_policy` decision;
-- `live_replay_evidence`.
+The remaining acceptance path is owned by `docs/BUILD_PLAN.md`, and evidenced
+capability levels by `runtime-status.yaml`. The graph records responsibility
+and dependency, not a second current list of missing capabilities. Validate
+the composed consumer path from the actual starting state; a unit replay that
+starts at New Troop cannot establish the city-to-five-march route.
 
 Shared harness infrastructure also does not imply end-to-end coverage of `SWITCH_CHARACTER`, `CLAIM_ALLIANCE_TERRITORY_RSS`, `BARBARIAN_FORT_RALLY`, event coordination, scheduler, or GPT-OSS decision-provider branches.
 
-## CI gate
+## Local graph check
 
 Run:
 
@@ -163,4 +162,7 @@ Run:
 python scripts/validate_engineering_graph.py
 ```
 
-The validator checks node/edge/blocker referential integrity, canonical statuses, repository paths for implemented nodes, evidence paths, and declared coverage values. CI runs this check alongside focused runtime tests.
+The validator checks node/edge/blocker referential integrity, canonical statuses,
+repository paths for implemented nodes, evidence paths, and declared coverage
+values. Run locally with the relevant integration checks, as required by the
+project boundary. A valid graph does not prove its runtime path or live outcome.

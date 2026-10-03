@@ -14,7 +14,9 @@ This is the provenance index for the canonical Auto_ROK harness checkpoint.
 DeepSeek source tree and GGUF weights remain local evidence/external runtime
 dependencies. They are intentionally excluded from the canonical Git history.
 
-## Canonical checkpoint
+## Historical consolidation checkpoint
 
-The consolidation is recorded locally by commit `6d1bff8` and generated-artifact
-hygiene by `7fd0c2a`. No remote push or branch deletion has been performed.
+The consolidation at that occurrence was recorded locally by commit `6d1bff8`
+and generated-artifact hygiene by `7fd0c2a`; no remote push or branch deletion
+had been performed at that time. Current Git/coordination information belongs
+to `docs/ROOT.md`, not this historical provenance record.

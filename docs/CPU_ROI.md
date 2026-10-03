@@ -24,9 +24,11 @@ The acceptance radius was widened only to cover the observed lighting shift;
 foreground panels and unknown crops still fail closed.
 
 For the fixed search panel, Windows OCR may miss the stylized `SEARCH`
-button and small bottom category labels. `scripts/windows_ocr.ps1` therefore
-requires the in-panel `Barbarians` + `Level:` anchor before running bounded
-panel/category-row crops. Malformed crop tokens remain in the audit stream but
+button and small bottom category labels. The PowerShell fallback uses panel
+keywords or its historical `Barbarians`/`Level:` anchor for bounded crops; the
+canonical live default is `windows_direct`. Farm surface recognition also uses
+the current control images in `config/farm_search_visual.json`, without requiring
+an unrelated game-category label. Malformed crop tokens remain in the audit stream but
 are marked `semantic_excluded`; only missing labels receive explicitly marked
 `compiled_ui_layout` fallback anchors. These are layout-derived grounding aids,
 not raw OCR accuracy claims.
